@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDuration,
   DEFAULT_PRINT_SETTINGS,
+  eardrumSvg,
   followUpDate,
   formatDateDmy,
   formatInstructionParts,
@@ -153,5 +154,30 @@ describe("renderPrescriptionHtml", () => {
     const html = render({ notes: ["H/O PNA"] }, { ageYears: undefined, ageMonths: 1, birthWeightKg: 1.7, gestationalAgeWeeks: 30 });
     expect(html).toContain("<h3>Note</h3><ul><li>Birth wt: 1.7 kg</li><li>Born at 30 weeks (preterm)</li><li>H/O PNA</li></ul>");
     expect(render({}, { ageYears: 5, birthWeightKg: 1.7 })).not.toContain("Birth wt");
+  });
+});
+
+describe("TM map always printed", () => {
+  const always = { ...DEFAULT_PRINT_SETTINGS, tmMapAlways: true };
+  const drums = (html: string) => html.match(/<figcaption>(Right|Left) TM<\/figcaption>/g) ?? [];
+
+  it("prints blank drums when nothing was marked, only when the setting is on", () => {
+    expect(drums(render({ diagrams: [] }))).toHaveLength(0);
+    const html = render({ diagrams: [] }, {}, always);
+    expect(drums(html)).toHaveLength(2);
+    expect(html).toContain("scale(-1,1)"); // left drum mirrored
+  });
+
+  it("doesn't add a second pair when drums were marked (new or old prescriptions)", () => {
+    const tm = [{ title: "Right TM", svg: eardrumSvg({ perforation: ["ai"], retraction: [] }, "right"), kind: "tm" as const }, { title: "Left TM", svg: eardrumSvg(undefined, "left"), kind: "tm" as const }];
+    expect(drums(render({ diagrams: tm }, {}, always))).toHaveLength(2);
+    const old = tm.map(({ title, svg }) => ({ title, svg }));
+    expect(drums(render({ diagrams: old }, {}, always))).toHaveLength(2);
+  });
+
+  it("prints them on a pre-printed pad too, and sizes the key separately", () => {
+    expect(drums(render({ diagrams: [] }, {}, { ...always, mode: "pad" }))).toHaveLength(2);
+    const html = render({ diagrams: [{ title: "Key", svg: "<svg></svg>", kind: "tm-legend" }] });
+    expect(html).toContain(`<figure class="diagram legend">`);
   });
 });

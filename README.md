@@ -45,7 +45,8 @@ cd apps/web && pnpm build && pnpm e2e   # Playwright against a production build 
 
 The e2e suite covers: bilingual prescription + PDF + QR verification, offline write → reconnect →
 sync, assistant restrictions (server rejects tampered uploads), CSV import dry-run/commit, ENT exam
-with eardrum map and audiogram printed as diagrams, interaction/allergy alerts, serial booking →
+with eardrum (TM) map — quadrants, symbols, free-hand drawing, optional blank drums — and audiogram
+printed as diagrams, interaction/allergy alerts, serial booking →
 check-in → waiting-room display → fees/reports, SMS credit charging, FHIR export, bKash payment recording.
 
 ## Key design points
@@ -71,7 +72,7 @@ check-in → waiting-room display → fees/reports, SMS credit charging, FHIR ex
 | **Medicine data** | The Kaggle dev seed is scraped from MedEx and **must not ship**. The seed script refuses non-local hosts. Licence MedEx/DIMS data or obtain a DGDA export, then load it via Admin → Import CSV. |
 | Interactions | Engine and admin editor work; the table is empty except test data. Needs a licensed set or pharmacist-curated pairs. |
 | Paediatric dose limits | Engine works when `paed max mg/kg/day` is set per generic; values must be entered by a clinician. |
-| Specialty templates & lists | ENT, eye and vascular are built from standard practice; **a consultant in each specialty must review** them. |
+| Specialty templates & lists | ENT, eye and vascular are built from standard practice; **a consultant in each specialty must review** them, including the TM map symbols (grommet, cholesteatoma, tympanosclerosis, fluid level, granulation, graft, bulging). |
 | SSLCommerz online payment | Code path written, **not verified**: needs sandbox store credentials. Manual bKash/Nagad/bank recording is verified. |
 | SMS gateway | Verified with the `console` provider only. Configure a BTRC-authorised gateway (`SMS_HTTP_URL`) and test with a real number. |
 | Voice input | Web Speech API (Chrome; online only). Not covered by automated tests. |

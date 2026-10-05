@@ -4,6 +4,7 @@ import { formatSlot } from "./chamber";
 import { followUpDate, formatDateDmy } from "./dates";
 import { bmi, formatDuration, formatInstructionParts, type Lang } from "./dose";
 import { safeImageDataUrl, sanitizeSvg } from "./sanitize";
+import { eardrumSvg } from "./specialty";
 import type { ChamberHeader, DoctorHeader, PatientInfo, PrescriptionDoc, RxItem } from "./types";
 
 export type PaperSize = "A4" | "A5" | "Letter" | { widthMm: number; heightMm: number };
@@ -37,6 +38,8 @@ export interface PrintSettings {
   showBarcode: boolean;
   /** Letterhead: list all of the doctor's chambers under the header instead of the current one in the footer. */
   chambersInHeader: boolean;
+  /** ENT: print blank right/left eardrums when nothing was marked, for marking by pen. */
+  tmMapAlways: boolean;
 }
 
 /** Printable sections whose heading can be renamed or hidden. */
@@ -73,6 +76,7 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   hiddenSections: [],
   showBarcode: false,
   chambersInHeader: false,
+  tmMapAlways: false,
 };
 
 export interface RenderInput {
@@ -250,9 +254,14 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     )
     .join("");
 
-  const diagrams = (doc.diagrams ?? [])
+  // Older prescriptions have no `kind`; their drums are titled "Right TM" / "Left TM".
+  const hasTm = (doc.diagrams ?? []).some((d) => d.kind === "tm" || /^(Right|Left) TM$/.test(d.title));
+  const blankTm = s.tmMapAlways && !hasTm
+    ? [{ title: "Right TM", svg: eardrumSvg(undefined, "right"), kind: "tm" as const }, { title: "Left TM", svg: eardrumSvg(undefined, "left"), kind: "tm" as const }]
+    : [];
+  const diagrams = [...blankTm, ...(doc.diagrams ?? [])]
     // Diagrams come from the client-writable prescription doc: sanitise before embedding.
-    .map((d) => `<figure class="diagram"><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`)
+    .map((d) => `<figure class="diagram${d.kind === "tm-legend" ? " legend" : ""}"><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`)
     .join("");
 
   const barcodeSvg = s.showBarcode && patient.patientCode ? code39Svg(patient.patientCode) : null;
@@ -353,6 +362,8 @@ ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .rx-item .note { font-size: 0.9em; }
 .diagram { display: inline-block; margin: 0 2mm 2mm 0; text-align: center; font-size: 0.8em; }
 .diagram .svg svg { width: 28mm; height: auto; }
+.diagram.legend { vertical-align: top; text-align: left; }
+.diagram.legend .svg svg { width: 32mm; }
 .bottom { display: flex; justify-content: space-between; align-items: flex-end; padding-top: 2mm; break-inside: avoid; }
 .qr svg { width: 18mm; height: 18mm; }
 .sign { text-align: center; min-width: 45mm; margin-left: auto; }

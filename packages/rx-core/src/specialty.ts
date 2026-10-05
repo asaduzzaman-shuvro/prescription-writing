@@ -39,10 +39,33 @@ export type LateralValue<T> = Partial<Record<Side2, T>>;
 /** Eardrum quadrants: AS, AI, PS, PI plus pars flaccida (attic). */
 export const EARDRUM_ZONES = ["attic", "as", "ai", "ps", "pi"] as const;
 export type EardrumZone = (typeof EARDRUM_ZONES)[number];
+/** Findings placed on the drum as symbols (each printed with a legend). */
+export const EARDRUM_MARKS = ["grommet", "cholesteatoma", "tympanosclerosis", "fluid", "granulation", "graft"] as const;
+export type EardrumMarkKind = (typeof EARDRUM_MARKS)[number];
+export const EARDRUM_MARK_LABEL: Record<EardrumMarkKind, string> = {
+  grommet: "Grommet",
+  cholesteatoma: "Cholesteatoma",
+  tympanosclerosis: "Tympanosclerosis",
+  fluid: "Fluid level",
+  granulation: "Granulation",
+  graft: "Graft",
+};
+/** Drum coordinates run 0–100 (the drum is a circle at 50,50 with radius 38). */
+export interface EardrumMark {
+  kind: EardrumMarkKind;
+  x: number;
+  y: number;
+}
 export interface EardrumValue {
   perforation: EardrumZone[];
   retraction: EardrumZone[];
+  marks?: EardrumMark[];
+  bulging?: boolean;
+  /** Free-hand strokes, each "x,y x,y …" in drum coordinates (left drum: inside the mirrored group). */
+  strokes?: string[];
 }
+/** Per ear, so a drawing can't grow without bound inside the prescription. */
+export const EARDRUM_LIMITS = { marks: 20, strokes: 40, points: 2000 } as const;
 
 export const AUDIO_FREQS = [250, 500, 1000, 2000, 4000, 8000] as const;
 /** dB HL thresholds keyed by frequency, for air (ac) and bone (bc) conduction. */
@@ -137,14 +160,122 @@ export function eardrumZonePath(zone: EardrumZone): string {
   return ZONE_PATHS[zone];
 }
 
+/** Fill patterns shared by the drum, the legend and the editor (identical everywhere, so repeated ids are harmless). */
+export const EARDRUM_DEFS =
+  `<pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#333" stroke-width="1"/></pattern>` +
+  `<pattern id="stipple" width="2.5" height="2.5" patternUnits="userSpaceOnUse"><circle cx="1.25" cy="1.25" r="0.55" fill="#111"/></pattern>`;
+
+const r1 = (n: number) => Math.round(n * 10) / 10;
+const coord = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? r1(Math.min(100, Math.max(0, v))) : null);
+
+function parseStroke(s: unknown): [number, number][] {
+  if (typeof s !== "string") return [];
+  const pts: [number, number][] = [];
+  for (const pair of s.trim().split(/\s+/)) {
+    const [x, y] = pair.split(",").map((n) => coord(Number(n)));
+    if (x !== null && x !== undefined && y !== null && y !== undefined) pts.push([x, y]);
+  }
+  return pts;
+}
+
+/** Clean an eardrum value from the (client-writable) findings: known zones/kinds only, coordinates clamped, limits applied. */
+export function normalizeEardrum(v: unknown): Required<EardrumValue> {
+  const o = (v && typeof v === "object" ? v : {}) as Partial<EardrumValue>;
+  const zones = (a: unknown) => (Array.isArray(a) ? a.filter((z): z is EardrumZone => (EARDRUM_ZONES as readonly string[]).includes(z)) : []);
+  const marks = (Array.isArray(o.marks) ? o.marks : [])
+    .flatMap((m) => {
+      const x = coord(m?.x), y = coord(m?.y);
+      return m && (EARDRUM_MARKS as readonly string[]).includes(m.kind) && x !== null && y !== null ? [{ kind: m.kind, x, y }] : [];
+    })
+    .slice(0, EARDRUM_LIMITS.marks);
+  const strokes: string[] = [];
+  let budget: number = EARDRUM_LIMITS.points;
+  for (const s of Array.isArray(o.strokes) ? o.strokes : []) {
+    if (strokes.length >= EARDRUM_LIMITS.strokes || budget < 2) break;
+    const pts = parseStroke(s).slice(0, budget);
+    if (pts.length < 2) continue;
+    budget -= pts.length;
+    strokes.push(pts.map((p) => p.join(",")).join(" "));
+  }
+  return { perforation: zones(o.perforation), retraction: zones(o.retraction), marks, bulging: o.bulging === true, strokes };
+}
+
+/** One symbol, centred on x,y. Shapes only (no text), so it reads the same on the mirrored left drum. */
+export function eardrumMarkSvg(kind: EardrumMarkKind, x: number, y: number): string {
+  switch (kind) {
+    case "grommet":
+      return `<circle cx="${x}" cy="${y}" r="4" fill="#fff" stroke="#111" stroke-width="1"/><circle cx="${x}" cy="${y}" r="1.6" fill="none" stroke="#111" stroke-width="0.8"/><line x1="${r1(x - 6)}" y1="${y}" x2="${r1(x - 4)}" y2="${y}" stroke="#111" stroke-width="1"/><line x1="${r1(x + 4)}" y1="${y}" x2="${r1(x + 6)}" y2="${y}" stroke="#111" stroke-width="1"/>`;
+    case "cholesteatoma":
+      return `<ellipse cx="${x}" cy="${y}" rx="5.5" ry="4" fill="#fff" stroke="#111" stroke-width="0.9" stroke-dasharray="1 0.8"/>`;
+    case "tympanosclerosis":
+      return `<ellipse cx="${x}" cy="${y}" rx="6" ry="4.5" fill="url(#stipple)" stroke="#111" stroke-width="0.5"/>`;
+    case "fluid": {
+      // A dashed chord across the drum at this height, with two bubbles above it.
+      const cy = Math.min(84, Math.max(16, y));
+      const w = r1(Math.sqrt(38 * 38 - (cy - 50) * (cy - 50)) - 1);
+      return `<line x1="${r1(50 - w)}" y1="${cy}" x2="${r1(50 + w)}" y2="${cy}" stroke="#111" stroke-width="1" stroke-dasharray="2.5 1.5"/><circle cx="${r1(50 - w / 3)}" cy="${r1(cy - 3.5)}" r="1.4" fill="none" stroke="#111" stroke-width="0.6"/><circle cx="${r1(50 + w / 4)}" cy="${r1(cy - 5)}" r="1" fill="none" stroke="#111" stroke-width="0.6"/>`;
+    }
+    case "granulation":
+      return `<circle cx="${r1(x - 1.8)}" cy="${r1(y + 1)}" r="1.7" fill="#777" stroke="#111" stroke-width="0.4"/><circle cx="${r1(x + 1.8)}" cy="${r1(y + 1)}" r="1.7" fill="#777" stroke="#111" stroke-width="0.4"/><circle cx="${x}" cy="${r1(y - 1.8)}" r="1.7" fill="#777" stroke="#111" stroke-width="0.4"/>`;
+    case "graft":
+      return `<circle cx="${x}" cy="${y}" r="7" fill="none" stroke="#111" stroke-width="0.9" stroke-dasharray="2 1.2"/>`;
+  }
+}
+
+/** Short ticks pointing out from the rim. */
+const BULGING_SVG = Array.from({ length: 12 }, (_, i) => {
+  const a = (i * Math.PI) / 6;
+  return `<line x1="${r1(50 + 40 * Math.cos(a))}" y1="${r1(50 + 40 * Math.sin(a))}" x2="${r1(50 + 44 * Math.cos(a))}" y2="${r1(50 + 44 * Math.sin(a))}" stroke="#111" stroke-width="1"/>`;
+}).join("");
+
+function strokeSvg(s: string): string {
+  return `<polyline points="${s}" fill="none" stroke="#111" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+
+/** Bulging ticks, marks and free-hand strokes; drawn over the zones (shared with the editor). */
+export function eardrumOverlaySvg(value: unknown): string {
+  const v = normalizeEardrum(value);
+  return (v.bulging ? BULGING_SVG : "") + v.marks.map((m) => eardrumMarkSvg(m.kind, m.x, m.y)).join("") + v.strokes.map(strokeSvg).join("");
+}
+
 export function eardrumSvg(value: EardrumValue | undefined, side: Side2): string {
-  const v = value ?? { perforation: [], retraction: [] };
+  const v = normalizeEardrum(value);
   const mirror = side === "left" ? ` transform="translate(100,0) scale(-1,1)"` : "";
   const zones = EARDRUM_ZONES.map((z) => {
     const fill = v.perforation.includes(z) ? "#111" : v.retraction.includes(z) ? "url(#hatch)" : "none";
     return `<path d="${ZONE_PATHS[z]}" fill="${fill}" stroke="#555" stroke-width="0.8"/>`;
   }).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 108"><defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#333" stroke-width="1"/></pattern></defs><g${mirror}><circle cx="50" cy="50" r="38" fill="none" stroke="#111" stroke-width="1.5"/>${zones}<line x1="50" y1="26" x2="54" y2="56" stroke="#111" stroke-width="2"/></g><text x="50" y="106" font-size="9" text-anchor="middle" font-family="sans-serif">${side === "right" ? "R" : "L"}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 108"><defs>${EARDRUM_DEFS}</defs><g${mirror}><circle cx="50" cy="50" r="38" fill="none" stroke="#111" stroke-width="1.5"/>${zones}<line x1="50" y1="26" x2="54" y2="56" stroke="#111" stroke-width="2"/>${eardrumOverlaySvg(v)}</g><text x="50" y="106" font-size="9" text-anchor="middle" font-family="sans-serif">${side === "right" ? "R" : "L"}</text></svg>`;
+}
+
+export type EardrumLegendKey = "perforation" | "retraction" | "bulging" | EardrumMarkKind;
+const LEGEND_ORDER: EardrumLegendKey[] = ["perforation", "retraction", ...EARDRUM_MARKS, "bulging"];
+const LEGEND_LABEL: Record<EardrumLegendKey, string> = { perforation: "Perforation", retraction: "Retraction", bulging: "Bulging", ...EARDRUM_MARK_LABEL };
+
+/** Key to the symbols used, one row each. */
+export function eardrumLegendSvg(keys: EardrumLegendKey[]): string {
+  const used = LEGEND_ORDER.filter((k) => keys.includes(k));
+  const row = 11;
+  const rows = used.map((k, i) => {
+    const cy = 6 + i * row;
+    let sym: string;
+    if (k === "perforation" || k === "retraction") sym = `<rect x="2" y="${cy - 4}" width="9" height="8" fill="${k === "perforation" ? "#111" : "url(#hatch)"}" stroke="#555" stroke-width="0.6"/>`;
+    else if (k === "bulging") sym = `<circle cx="6.5" cy="${cy}" r="3" fill="none" stroke="#111" stroke-width="0.8"/><line x1="6.5" y1="${cy - 3.5}" x2="6.5" y2="${cy - 5.5}" stroke="#111" stroke-width="0.8"/><line x1="6.5" y1="${cy + 3.5}" x2="6.5" y2="${cy + 5.5}" stroke="#111" stroke-width="0.8"/><line x1="2.5" y1="${cy}" x2="0.5" y2="${cy}" stroke="#111" stroke-width="0.8"/><line x1="10.5" y1="${cy}" x2="12.5" y2="${cy}" stroke="#111" stroke-width="0.8"/>`;
+    else if (k === "fluid") sym = `<line x1="0.5" y1="${cy + 1}" x2="12.5" y2="${cy + 1}" stroke="#111" stroke-width="1" stroke-dasharray="2.5 1.5"/><circle cx="4.5" cy="${cy - 2.5}" r="1.4" fill="none" stroke="#111" stroke-width="0.6"/>`;
+    else if (k === "graft") sym = `<circle cx="6.5" cy="${cy}" r="4" fill="none" stroke="#111" stroke-width="0.9" stroke-dasharray="2 1.2"/>`;
+    else sym = eardrumMarkSvg(k, 6.5, cy);
+    return `${sym}<text x="17" y="${cy + 2.5}" font-size="7" font-family="sans-serif">${LEGEND_LABEL[k]}</text>`;
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 86 ${used.length * row + 1}"><defs>${EARDRUM_DEFS}</defs>${rows.join("")}</svg>`;
+}
+
+function eardrumUsed(v: Required<EardrumValue>): EardrumLegendKey[] {
+  return [
+    ...(v.perforation.length ? (["perforation"] as const) : []),
+    ...(v.retraction.length ? (["retraction"] as const) : []),
+    ...(v.bulging ? (["bulging"] as const) : []),
+    ...v.marks.map((m) => m.kind),
+  ];
 }
 
 /** Standard audiogram: frequency on x (log), dB HL on y (−10 top to 120 bottom). */
@@ -191,11 +322,15 @@ function text(v: unknown, f: TemplateField): string {
 
 const ZONE_LABEL: Record<EardrumZone, string> = { attic: "attic", as: "AS", ai: "AI", ps: "PS", pi: "PI" };
 
-function eardrumText(v: EardrumValue | undefined): string {
-  if (!v) return "";
+function eardrumText(value: EardrumValue | undefined): string {
+  if (!value) return "";
+  const v = normalizeEardrum(value);
   const parts: string[] = [];
-  if (v.perforation?.length) parts.push(`perforation ${v.perforation.map((z) => ZONE_LABEL[z]).join("+")}`);
-  if (v.retraction?.length) parts.push(`retraction ${v.retraction.map((z) => ZONE_LABEL[z]).join("+")}`);
+  if (v.perforation.length) parts.push(`perforation ${v.perforation.map((z) => ZONE_LABEL[z]).join("+")}`);
+  if (v.retraction.length) parts.push(`retraction ${v.retraction.map((z) => ZONE_LABEL[z]).join("+")}`);
+  for (const k of EARDRUM_MARKS) if (v.marks.some((m) => m.kind === k)) parts.push(EARDRUM_MARK_LABEL[k].toLowerCase());
+  if (v.bulging) parts.push("bulging");
+  if (v.strokes.length) parts.push("drawing");
   return parts.join("; ");
 }
 
@@ -212,9 +347,16 @@ function audiogramText(v: AudiogramValue | undefined): string {
     .join("; ");
 }
 
+export type DiagramKind = "tm" | "tm-legend" | "audiogram";
+export interface Diagram {
+  title: string;
+  svg: string;
+  kind?: DiagramKind;
+}
+
 export interface FlattenedExam {
   groups: { title: string; lines: ExamFindingLine[] }[];
-  diagrams: { title: string; svg: string }[];
+  diagrams: Diagram[];
 }
 
 export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findings): FlattenedExam {
@@ -231,7 +373,10 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
         const r = eardrumText(lv.right), l = eardrumText(lv.left);
         if (r || l) {
           lines.push({ label: f.label, value: [r && `R: ${r}`, l && `L: ${l}`].filter(Boolean).join(" · ") });
-          diagrams.push({ title: "Right TM", svg: eardrumSvg(lv.right, "right") }, { title: "Left TM", svg: eardrumSvg(lv.left, "left") });
+          diagrams.push({ title: "Right TM", svg: eardrumSvg(lv.right, "right"), kind: "tm" }, { title: "Left TM", svg: eardrumSvg(lv.left, "left"), kind: "tm" });
+          // A key only when the new symbols are used, so plain perforation/retraction prints as before.
+          const used = [...eardrumUsed(normalizeEardrum(lv.right)), ...eardrumUsed(normalizeEardrum(lv.left))];
+          if (used.some((k) => k !== "perforation" && k !== "retraction")) diagrams.push({ title: "Key", svg: eardrumLegendSvg(used), kind: "tm-legend" });
         }
         continue;
       }
@@ -239,7 +384,7 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
         const t = audiogramText(v as AudiogramValue);
         if (t) {
           lines.push({ label: f.label, value: t });
-          diagrams.push({ title: "Audiogram (O right, X left)", svg: audiogramSvg(v as AudiogramValue) });
+          diagrams.push({ title: "Audiogram (O right, X left)", svg: audiogramSvg(v as AudiogramValue), kind: "audiogram" });
         }
         continue;
       }

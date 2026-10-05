@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { audiogramSvg, eardrumSvg, renderPrescriptionHtml, safeImageDataUrl, sanitizeSvg, DEFAULT_PRINT_SETTINGS, SAMPLE_CHAMBER, SAMPLE_DOC, SAMPLE_DOCTOR, SAMPLE_PATIENT } from "../src";
+import { audiogramSvg, eardrumLegendSvg, eardrumSvg, renderPrescriptionHtml, safeImageDataUrl, sanitizeSvg, DEFAULT_PRINT_SETTINGS, SAMPLE_CHAMBER, SAMPLE_DOC, SAMPLE_DOCTOR, SAMPLE_PATIENT } from "../src";
 
 describe("sanitizeSvg", () => {
   it("strips scripts, event handlers, foreignObject and external refs", () => {
@@ -21,6 +21,18 @@ describe("sanitizeSvg", () => {
     expect(clean).toContain("scale(-1,1)");
     expect(clean).toContain(">L</text>");
     expect(sanitizeSvg(audiogramSvg({ right: { ac: { 500: 40 }, bc: {} } }))).toContain("<circle");
+  });
+  it("keeps TM symbols, strokes and the key byte-for-byte (nothing silently dropped)", () => {
+    const drum = eardrumSvg(
+      {
+        perforation: ["ai"], retraction: ["ps"], bulging: true, strokes: ["10,10 20,25 30,20"],
+        marks: [{ kind: "grommet", x: 40, y: 50 }, { kind: "tympanosclerosis", x: 60, y: 40 }, { kind: "fluid", x: 50, y: 70 }, { kind: "cholesteatoma", x: 45, y: 25 }, { kind: "granulation", x: 30, y: 60 }, { kind: "graft", x: 55, y: 55 }],
+      },
+      "left",
+    );
+    expect(sanitizeSvg(drum)).toBe(drum);
+    const key = eardrumLegendSvg(["perforation", "retraction", "bulging", "grommet", "cholesteatoma", "tympanosclerosis", "fluid", "granulation", "graft"]);
+    expect(sanitizeSvg(key)).toBe(key);
   });
   it("is applied by the print renderer", () => {
     const html = renderPrescriptionHtml({

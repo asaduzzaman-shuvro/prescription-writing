@@ -37,6 +37,12 @@ export function SettingsScreen() {
     [session.userId],
   );
 
+  // The TM map option only matters to doctors whose exam template has an eardrum field (ENT).
+  const { data: tmTpl } = useQuery<{ id: string }>(
+    `SELECT id FROM specialty_template WHERE specialty_code = ? AND schema LIKE '%"eardrum"%' LIMIT 1`,
+    [profile?.specialty_code ?? ""],
+  );
+
   useEffect(() => {
     if (current) setS(printSettingsOf(current.print_settings));
   }, [current?.id, current?.print_settings]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -157,6 +163,9 @@ export function SettingsScreen() {
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showQr} onChange={(e) => set("showQr", e.target.checked)} /> QR verification code</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showBarcode} onChange={(e) => set("showBarcode", e.target.checked)} data-testid="show-barcode" /> Patient ID barcode</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.chambersInHeader} onChange={(e) => set("chambersInHeader", e.target.checked)} /> List all chambers under the header</label>
+          {tmTpl.length > 0 && (
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.tmMapAlways} onChange={(e) => set("tmMapAlways", e.target.checked)} data-testid="tm-map-always" /> Always print the TM map (blank drums when nothing is marked)</label>
+          )}
         </div>
         <div>
           <h3 className="mb-1 text-sm font-semibold">Section headings</h3>

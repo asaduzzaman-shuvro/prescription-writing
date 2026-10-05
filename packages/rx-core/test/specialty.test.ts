@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { airBoneGap, audiogramSvg, eardrumSvg, ENT_TEMPLATE, flattenFindings, hearingGrade, ptaAverage, validateTemplateSchema } from "../src";
+import { airBoneGap, audiogramSvg, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, ptaAverage, validateTemplateSchema } from "../src";
 
 describe("ENT template", () => {
   it("is a valid schema", () => {
@@ -54,5 +54,62 @@ describe("flattenFindings", () => {
   it("mirrors the left eardrum", () => {
     expect(eardrumSvg(undefined, "left")).toContain("scale(-1,1)");
     expect(eardrumSvg({ perforation: ["ai"], retraction: [] }, "right")).toContain('fill="#111"');
+  });
+});
+
+describe("TM map symbols and drawing", () => {
+  const all = EARDRUM_MARKS.map((kind, i) => ({ kind, x: 30 + i * 6, y: 40 }));
+
+  it("draws every symbol, bulging and free-hand strokes inside the (mirrored) drum", () => {
+    const svg = eardrumSvg({ perforation: [], retraction: [], marks: all, bulging: true, strokes: ["20,30 25,35 30,32"] }, "left");
+    const inner = svg.slice(svg.indexOf("<g transform"), svg.indexOf("</g>"));
+    expect(inner).toContain('<polyline points="20,30 25,35 30,32"');
+    expect(inner).toContain('fill="url(#stipple)"'); // tympanosclerosis
+    expect(inner).toContain('stroke-dasharray="2.5 1.5"'); // fluid level
+    expect(inner).toContain('r="7"'); // graft
+    expect(inner.match(/x2="9\d(\.\d)?"/)).not.toBeNull(); // bulging ticks reach past the rim
+    expect(svg).toContain('<pattern id="stipple"');
+    expect(inner).not.toContain("<text"); // nothing that would print mirrored
+  });
+
+  it("cleans untrusted values: unknown kinds, NaN, out-of-range coordinates and limits", () => {
+    const v = normalizeEardrum({
+      perforation: ["ai", "nope"],
+      marks: [{ kind: "grommet", x: 150, y: -5 }, { kind: "bomb", x: 1, y: 1 }, { kind: "graft", x: Number.NaN, y: 2 }],
+      strokes: ["1,1 2,2", "x,y 3,3", "5,5", 7, "0,0 120,-3"],
+      bulging: "yes",
+    });
+    expect(v.perforation).toEqual(["ai"]);
+    expect(v.marks).toEqual([{ kind: "grommet", x: 100, y: 0 }]);
+    expect(v.strokes).toEqual(["1,1 2,2", "0,0 100,0"]);
+    expect(v.bulging).toBe(false);
+    const many = normalizeEardrum({ marks: Array.from({ length: 50 }, () => ({ kind: "grommet", x: 5, y: 5 })), strokes: Array.from({ length: 100 }, () => "1,1 2,2") });
+    expect(many.marks).toHaveLength(EARDRUM_LIMITS.marks);
+    expect(many.strokes).toHaveLength(EARDRUM_LIMITS.strokes);
+    const long = normalizeEardrum({ strokes: [Array.from({ length: 3000 }, (_, i) => `${i % 100},5`).join(" ")] });
+    expect(long.strokes[0]!.split(" ")).toHaveLength(EARDRUM_LIMITS.points);
+  });
+
+  it("words the findings and adds a key only for the new symbols", () => {
+    const out = flattenFindings(ENT_TEMPLATE, {
+      ear_tm_map: {
+        right: { perforation: ["ai"], retraction: [], marks: [{ kind: "grommet", x: 40, y: 50 }], strokes: ["10,10 20,20"] },
+        left: { perforation: [], retraction: [], bulging: true, marks: [{ kind: "fluid", x: 50, y: 70 }] },
+      },
+    });
+    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "R: perforation AI; grommet; drawing · L: fluid level; bulging" });
+    expect(out.diagrams.map((d) => d.kind)).toEqual(["tm", "tm", "tm-legend"]);
+    const key = out.diagrams[2]!.svg;
+    for (const label of ["Perforation", "Grommet", "Fluid level", "Bulging"]) expect(key).toContain(`>${label}</text>`);
+    expect(key).not.toContain("Retraction");
+
+    const plain = flattenFindings(ENT_TEMPLATE, { ear_tm_map: { right: { perforation: ["ai"], retraction: ["ps"] } } });
+    expect(plain.diagrams.map((d) => d.kind)).toEqual(["tm", "tm"]);
+  });
+
+  it("prints drums for a drawing alone", () => {
+    const out = flattenFindings(ENT_TEMPLATE, { ear_tm_map: { left: { perforation: [], retraction: [], strokes: ["10,10 20,20"] } } });
+    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "L: drawing" });
+    expect(out.diagrams).toHaveLength(2);
   });
 });

@@ -6,7 +6,7 @@
 const ELEMENTS = new Set(["svg", "g", "path", "circle", "ellipse", "line", "rect", "text", "tspan", "polyline", "polygon", "defs", "pattern"]);
 const ATTRS = new Set([
   "xmlns", "viewbox", "width", "height", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "d", "points",
-  "fill", "stroke", "stroke-width", "stroke-dasharray", "transform", "font-size", "font-family", "text-anchor",
+  "fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "transform", "font-size", "font-family", "text-anchor",
   "id", "patternunits", "patterntransform", "opacity", "fill-opacity",
 ]);
 

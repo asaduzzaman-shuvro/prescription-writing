@@ -4,13 +4,21 @@ import {
   AUDIO_FREQS,
   airBoneGap,
   audiogramSvg,
+  EARDRUM_DEFS,
+  EARDRUM_LIMITS,
+  EARDRUM_MARK_LABEL,
+  EARDRUM_MARKS,
   EARDRUM_ZONES,
+  eardrumOverlaySvg,
   eardrumZonePath,
   flattenFindings,
   hearingGrade,
+  normalizeEardrum,
   ptaAverage,
   type AudiogramEar,
   type AudiogramValue,
+  type Diagram,
+  type EardrumMarkKind,
   type EardrumValue,
   type EardrumZone,
   type ExamFindingLine,
@@ -25,7 +33,7 @@ import { useEffect, useRef, useState } from "react";
 import { saveExamFindings } from "@/lib/doctor/data";
 import { parseJson } from "@/lib/doctor/util";
 
-type Flatten = (groups: { title: string; lines: ExamFindingLine[] }[], diagrams: { title: string; svg: string }[]) => void;
+type Flatten = (groups: { title: string; lines: ExamFindingLine[] }[], diagrams: Diagram[]) => void;
 
 // ---------------------------------------------------------------------------
 // Field widgets
@@ -59,39 +67,132 @@ function SelectField({ f, value, onChange, disabled }: { f: TemplateField; value
   );
 }
 
+type DrumTool = "perforation" | "retraction" | "mark" | "bulging" | "pen" | "eraser";
+type Pt = [number, number];
+
+const TOOL_LABEL: Record<DrumTool, string> = { perforation: "Perforation", retraction: "Retraction", mark: "Mark", bulging: "Bulging", pen: "Pen", eraser: "Eraser" };
+const round1 = (n: number) => Math.round(Math.min(100, Math.max(0, n)) * 10) / 10;
+const near = (a: Pt, b: Pt, d: number) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 <= d * d;
+/** Index of the last item matching `f` (lib target predates Array#findLastIndex). */
+function lastIndex<T>(a: T[], f: (x: T) => boolean): number {
+  for (let i = a.length - 1; i >= 0; i--) if (f(a[i]!)) return i;
+  return -1;
+}
+const strokePts = (s: string): Pt[] => s.split(" ").map((p) => p.split(",").map(Number) as Pt);
+
+/** Right/left eardrums: tap quadrants, place symbols, toggle bulging, or draw free-hand (mouse, stylus or finger). */
 function EardrumField({ value, onChange, disabled }: { value: LateralValue<EardrumValue> | undefined; onChange: (v: LateralValue<EardrumValue>) => void; disabled: boolean }) {
-  const [mode, setMode] = useState<"perforation" | "retraction">("perforation");
-  const toggle = (side: Side2, zone: EardrumZone) => {
-    const cur = value?.[side] ?? { perforation: [], retraction: [] };
-    const list = cur[mode].includes(zone) ? cur[mode].filter((z) => z !== zone) : [...cur[mode], zone];
-    const other = mode === "perforation" ? "retraction" : "perforation";
-    onChange({ ...value, [side]: { ...cur, [mode]: list, [other]: cur[other].filter((z) => z !== zone) } });
+  const [tool, setTool] = useState<DrumTool>("perforation");
+  const [markKind, setMarkKind] = useState<EardrumMarkKind>("grommet");
+  const [undo, setUndo] = useState<LateralValue<EardrumValue> | null>(null);
+  const [draft, setDraft] = useState<{ side: Side2; pts: Pt[] } | null>(null);
+  const groups = useRef<Partial<Record<Side2, SVGGElement | null>>>({});
+
+  const ear = (side: Side2) => normalizeEardrum(value?.[side]);
+  const setEar = (side: Side2, e: EardrumValue) => {
+    setUndo(value ?? {});
+    onChange({ ...value, [side]: e });
   };
+
+  /** Pointer position in drum coordinates (inside the mirrored group for the left ear, so it prints where drawn). */
+  const toDrum = (side: Side2, ev: React.PointerEvent): Pt | null => {
+    const m = groups.current[side]?.getScreenCTM();
+    if (!m) return null;
+    const p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(m.inverse());
+    return [round1(p.x), round1(p.y)];
+  };
+
+  function onDown(side: Side2, ev: React.PointerEvent<SVGSVGElement>) {
+    if (disabled) return;
+    const pt = toDrum(side, ev);
+    if (!pt) return;
+    const e = ear(side);
+    if (tool === "perforation" || tool === "retraction") {
+      const zone = (ev.target as Element).getAttribute("data-zone") as EardrumZone | null;
+      if (!zone) return;
+      const other = tool === "perforation" ? "retraction" : "perforation";
+      const list = e[tool].includes(zone) ? e[tool].filter((z) => z !== zone) : [...e[tool], zone];
+      setEar(side, { ...e, [tool]: list, [other]: e[other].filter((z) => z !== zone) });
+    } else if (tool === "mark") {
+      if (e.marks.length < EARDRUM_LIMITS.marks) setEar(side, { ...e, marks: [...e.marks, { kind: markKind, x: pt[0], y: pt[1] }] });
+    } else if (tool === "bulging") {
+      setEar(side, { ...e, bulging: !e.bulging });
+    } else if (tool === "eraser") {
+      // Nearest mark first, then the most recent stroke passing close by.
+      const mi = lastIndex(e.marks, (m) => near([m.x, m.y], pt, 6));
+      if (mi >= 0) return setEar(side, { ...e, marks: e.marks.filter((_, i) => i !== mi) });
+      const si = lastIndex(e.strokes, (s) => strokePts(s).some((p) => near(p, pt, 4)));
+      if (si >= 0) setEar(side, { ...e, strokes: e.strokes.filter((_, i) => i !== si) });
+    } else if (tool === "pen" && e.strokes.length < EARDRUM_LIMITS.strokes) {
+      ev.currentTarget.setPointerCapture(ev.pointerId);
+      setDraft({ side, pts: [pt] });
+    }
+  }
+
+  function onMove(side: Side2, ev: React.PointerEvent<SVGSVGElement>) {
+    if (draft?.side !== side) return;
+    const pt = toDrum(side, ev);
+    const last = draft.pts[draft.pts.length - 1]!;
+    if (pt && !near(pt, last, 1)) setDraft({ side, pts: [...draft.pts, pt] });
+  }
+
+  function onUp(side: Side2) {
+    if (draft?.side !== side) return;
+    const e = ear(side);
+    // Saved once per stroke; normalizeEardrum enforces the point budget when printing.
+    if (draft.pts.length >= 2) setEar(side, { ...e, strokes: [...e.strokes, draft.pts.map((p) => p.join(",")).join(" ")] });
+    setDraft(null);
+  }
+
+  function clear(side: Side2) {
+    if (window.confirm(`Clear everything marked on the ${side} eardrum?`)) setEar(side, { perforation: [], retraction: [] });
+  }
+
+  const btn = (on: boolean) => `rounded px-2 py-0.5 ${on ? "bg-slate-800 text-white" : "bg-slate-100"}`;
   return (
     <div>
-      <div className="mb-1 flex gap-1 text-xs">
-        {(["perforation", "retraction"] as const).map((m) => (
-          <button key={m} type="button" onClick={() => setMode(m)} className={`rounded px-2 py-0.5 ${mode === m ? "bg-slate-800 text-white" : "bg-slate-100"}`}>Mark {m}</button>
-        ))}
-        <span className="text-slate-400">Tap quadrants: attic, AS, AI, PS, PI</span>
-      </div>
-      <div className="flex gap-4">
+      {!disabled && (
+        <div className="mb-1 flex flex-wrap items-center gap-1 text-xs" data-testid="eardrum-tools">
+          {(["perforation", "retraction", "mark", "bulging", "pen", "eraser"] as const).map((t) => (
+            <button key={t} type="button" aria-pressed={tool === t} onClick={() => setTool(t)} className={btn(tool === t)}>{TOOL_LABEL[t]}</button>
+          ))}
+          {tool === "mark" && (
+            <select className="input w-auto py-0.5 text-xs" value={markKind} onChange={(e) => setMarkKind(e.target.value as EardrumMarkKind)} aria-label="Mark type">
+              {EARDRUM_MARKS.map((k) => <option key={k} value={k}>{EARDRUM_MARK_LABEL[k]}</option>)}
+            </select>
+          )}
+          <button type="button" className="btn-ghost px-1 text-xs" disabled={!undo} onClick={() => { onChange(undo ?? {}); setUndo(null); }}>Undo</button>
+          <span className="text-slate-400">
+            {tool === "perforation" || tool === "retraction" ? "Tap quadrants: attic, AS, AI, PS, PI" : tool === "mark" ? "Tap where it is" : tool === "pen" ? "Draw on the drum" : tool === "eraser" ? "Tap a mark or line" : "Tap a drum"}
+          </span>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-4">
         {(["right", "left"] as const).map((side) => {
-          const v = value?.[side] ?? { perforation: [], retraction: [] };
+          const v = ear(side);
           return (
-            <svg key={side} viewBox="0 0 100 108" className="h-32 w-32" data-testid={`eardrum-${side}`}>
-              <defs><pattern id={`h-${side}`} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#333" strokeWidth="1" /></pattern></defs>
-              <g transform={side === "left" ? "translate(100,0) scale(-1,1)" : undefined}>
-                <circle cx="50" cy="50" r="38" fill="#fff" stroke="#111" strokeWidth="1.5" />
-                {EARDRUM_ZONES.map((z) => (
-                  <path key={z} d={eardrumZonePath(z)} data-zone={z} stroke="#666" strokeWidth="0.8" className={disabled ? "" : "cursor-pointer hover:opacity-70"}
-                    fill={v.perforation.includes(z) ? "#111" : v.retraction.includes(z) ? `url(#h-${side})` : "#f8fafc"}
-                    onClick={() => !disabled && toggle(side, z)} />
-                ))}
-                <line x1="50" y1="26" x2="54" y2="56" stroke="#111" strokeWidth="2" pointerEvents="none" />
-              </g>
-              <text x="50" y="106" fontSize="9" textAnchor="middle">{side === "right" ? "Right" : "Left"}</text>
-            </svg>
+            <div key={side} className="flex flex-col items-center">
+              <svg viewBox="0 0 100 108" className="h-48 w-48 select-none" data-testid={`eardrum-${side}`} style={{ touchAction: disabled ? undefined : "none" }}
+                onPointerDown={(e) => onDown(side, e)} onPointerMove={(e) => onMove(side, e)} onPointerUp={() => onUp(side)} onPointerCancel={() => setDraft(null)}>
+                <defs dangerouslySetInnerHTML={{ __html: EARDRUM_DEFS }} />
+                <g ref={(el) => { groups.current[side] = el; }} transform={side === "left" ? "translate(100,0) scale(-1,1)" : undefined}>
+                  <circle cx="50" cy="50" r="38" fill="#fff" stroke="#111" strokeWidth="1.5" />
+                  {EARDRUM_ZONES.map((z) => (
+                    <path key={z} d={eardrumZonePath(z)} data-zone={z} stroke="#666" strokeWidth="0.8"
+                      className={!disabled && (tool === "perforation" || tool === "retraction") ? "cursor-pointer hover:opacity-70" : ""}
+                      fill={v.perforation.includes(z) ? "#111" : v.retraction.includes(z) ? "url(#hatch)" : "#f8fafc"} />
+                  ))}
+                  <line x1="50" y1="26" x2="54" y2="56" stroke="#111" strokeWidth="2" pointerEvents="none" />
+                  {/* Same drawing code as the printout, so screen and paper can't disagree. */}
+                  <g pointerEvents="none" dangerouslySetInnerHTML={{ __html: eardrumOverlaySvg(v) }} />
+                  {draft?.side === side && draft.pts.length > 1 && (
+                    <polyline points={draft.pts.map((p) => p.join(",")).join(" ")} fill="none" stroke="#111" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+                  )}
+                </g>
+                <text x="50" y="106" fontSize="9" textAnchor="middle">{side === "right" ? "Right" : "Left"}</text>
+              </svg>
+              {!disabled && <button type="button" className="btn-ghost px-1 text-xs text-slate-500" onClick={() => clear(side)}>Clear {side}</button>}
+            </div>
           );
         })}
       </div>
