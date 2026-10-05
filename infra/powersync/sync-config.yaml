@@ -1,0 +1,43 @@
+# Sync Streams: what each signed-in user downloads into the browser's local SQLite.
+# Keep in sync with apps/web/src/lib/powersync/schema.ts and the `powersync` publication.
+config:
+  edition: 3
+streams:
+  # Global, read-only catalogue (~22k products). Inactive rows drop out and are removed on clients.
+  catalogue:
+    auto_subscribe: true
+    queries:
+      - SELECT id, brand_name, form_id, company_id, strength_text, generic_text, medicine_system FROM brand_product WHERE is_active = true
+      - SELECT id, name, short_label, default_route, default_unit FROM dosage_form
+      - SELECT id, name FROM company
+      - SELECT id, name, is_antibiotic, aware_group, pregnancy_category, paed_max_mg_per_kg_day, adult_max_mg_per_day FROM generic WHERE is_active = true
+      - SELECT product_id || ':' || position AS id, product_id, position, generic_id, strength_value, strength_unit, basis FROM product_ingredient
+      - SELECT id, generic_a, generic_b, severity, effect, management FROM generic_interaction WHERE is_active = true
+  libraries:
+    auto_subscribe: true
+    queries:
+      - SELECT code AS id, name, name_bn FROM specialty
+      - SELECT id, specialty_code, sort_order, name, name_bn FROM complaint WHERE is_active = true
+      - SELECT id, specialty_code, sort_order, name, category FROM investigation WHERE is_active = true
+      - SELECT id, specialty_code, sort_order, name, icd10, icd11 FROM diagnosis WHERE is_active = true
+      - SELECT id, specialty_code, sort_order, text_bn, text_en, category FROM advice_snippet WHERE is_active = true
+      - SELECT id, specialty_code, sort_order, text_bn, text_en FROM instruction_snippet WHERE is_active = true
+      - SELECT id, specialty_code, name, version, schema FROM specialty_template WHERE is_active = true
+  shared_templates:
+    auto_subscribe: true
+    queries:
+      - SELECT * FROM rx_template WHERE tenant_id IS NULL AND is_active = true
+  tenant_data:
+    auto_subscribe: true
+    queries:
+      - SELECT * FROM patient WHERE tenant_id = auth.parameter('tenant_id') AND deleted_at IS NULL
+      - SELECT * FROM encounter WHERE tenant_id = auth.parameter('tenant_id')
+      - SELECT * FROM prescription WHERE tenant_id = auth.parameter('tenant_id')
+      - SELECT * FROM chamber WHERE tenant_id = auth.parameter('tenant_id')
+      - SELECT user_id AS id, tenant_id, name_en, name_bn, degrees_en, degrees_bn, designation, institution, specialty_code, specialty_label, bmdc_number, bmdc_expiry, bmdc_verified_at, signature_data_url FROM doctor_profile WHERE tenant_id = auth.parameter('tenant_id')
+      - SELECT * FROM rx_template WHERE tenant_id = auth.parameter('tenant_id')
+      - SELECT * FROM appointment WHERE tenant_id = auth.parameter('tenant_id')
+  user_data:
+    auto_subscribe: true
+    queries:
+      - SELECT * FROM doctor_favorite WHERE user_id = auth.user_id()

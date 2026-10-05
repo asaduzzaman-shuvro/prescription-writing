@@ -1,0 +1,8 @@
+{
+  "name": "spike-print",
+  "private": true,
+  "type": "module",
+  "scripts": { "run": "tsx render.ts" },
+  "dependencies": { "@rx/core": "workspace:*", "qrcode": "^1.5.4" },
+  "devDependencies": { "playwright": "^1.63.0", "tsx": "^4.20.0", "@types/qrcode": "^1.5.5", "@types/node": "^24.0.0" }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "RxPad BD",
+  "short_name": "RxPad",
+  "start_url": "/doctor",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f6f67",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

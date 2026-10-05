@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Noto Sans Bengali";
+  src: url("/fonts/NotoSansBengali.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/fonts/NotoSans.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Noto Sans", "Noto Sans Bengali", ui-sans-serif, system-ui, sans-serif;
+  --color-brand-50: #eef7f6;
+  --color-brand-100: #d5ecea;
+  --color-brand-500: #13877d;
+  --color-brand-600: #0f6f67;
+  --color-brand-700: #0c5852;
+}
+
+@utility btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50; }
+@utility btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700; }
+@utility btn-secondary { @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
+@utility btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+@utility btn-ghost { @apply btn text-slate-600 hover:bg-slate-100; }
+@utility input { @apply w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100; }
+@utility label { @apply mb-1 block text-xs font-medium text-slate-600; }
+@utility card { @apply rounded-lg border border-slate-200 bg-white; }
+@utility badge { @apply inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium; }
+
+@layer components {
+  .table { @apply w-full text-sm; }
+  .table th { @apply border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase; }
+  .table td { @apply border-b border-slate-100 px-3 py-2 align-top; }
+}

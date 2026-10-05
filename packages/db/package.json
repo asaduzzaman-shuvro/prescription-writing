@@ -1,0 +1,33 @@
+{
+  "name": "@rx/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./import": "./src/import/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "tsx src/scripts/migrate.ts",
+    "seed:dev": "tsx src/scripts/seed-dev.ts",
+    "bench:search": "tsx src/scripts/bench-search.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@rx/core": "workspace:*",
+    "drizzle-orm": "^0.45.3",
+    "postgres": "^3.4.9",
+    "csv-parse": "^6.1.0",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,20 @@
+# local working docs (never commit)
+docs/plans/
+
+# dev-only seed data (MedEx-derived; must not be redistributed)
+data/dev-seed/
+
+node_modules/
+.next/
+.turbo/
+dist/
+coverage/
+playwright-report/
+test-results/
+out/
+*.tsbuildinfo
+
+.env*
+!.env.example
+
+.DS_Store

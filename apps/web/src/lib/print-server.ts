@@ -1,0 +1,83 @@
+import "server-only";
+import { DEFAULT_PRINT_SETTINGS, printAge, renderPrescriptionHtml, type ChamberHeader, type ChamberSlot, type PrescriptionDoc, type PrintSettings, type Sex } from "@rx/core";
+import { s, withTenant } from "@rx/db";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { chromium, type Browser } from "playwright";
+import QRCode from "qrcode";
+import { appDb } from "./db";
+
+const g = globalThis as unknown as { __rxBrowser?: Promise<Browser> };
+const browser = () => (g.__rxBrowser ??= chromium.launch());
+
+let fontCache: { bengali: string; latin: string } | null = null;
+function fonts() {
+  if (fontCache) return fontCache;
+  const dir = join(process.cwd(), "public/fonts");
+  const data = (f: string) => `data:font/ttf;base64,${readFileSync(join(dir, f)).toString("base64")}`;
+  fontCache = { bengali: data("NotoSansBengali.ttf"), latin: data("NotoSans.ttf") };
+  return fontCache;
+}
+
+/** Server-side render of a prescription to PDF (same renderer as the browser print). */
+export async function prescriptionPdf(ctx: { tenantId: string; userId: string }, prescriptionId: string): Promise<Buffer | null> {
+  const data = await withTenant(appDb, ctx, async (tx) => {
+    const [rx] = await tx.select().from(s.prescription).where(eq(s.prescription.id, prescriptionId));
+    if (!rx) return null;
+    const [patient] = await tx.select().from(s.patient).where(eq(s.patient.id, rx.patientId));
+    const [doctor] = await tx.select().from(s.doctorProfile).where(eq(s.doctorProfile.userId, rx.doctorUserId));
+    const [chamber] = rx.chamberId ? await tx.select().from(s.chamber).where(eq(s.chamber.id, rx.chamberId)) : [];
+    const [enc] = await tx.select().from(s.encounter).where(eq(s.encounter.id, rx.encounterId));
+    const chambers = await tx
+      .select()
+      .from(s.chamber)
+      .where(and(eq(s.chamber.isActive, true), or(eq(s.chamber.doctorUserId, rx.doctorUserId), isNull(s.chamber.doctorUserId))))
+      .orderBy(asc(s.chamber.name));
+    return { rx, patient, doctor, chamber, enc, chambers };
+  });
+  if (!data?.patient || !data.doctor) return null;
+  const { rx, patient, doctor, chamber, enc, chambers } = data;
+  const header = (c: typeof chamber | undefined): ChamberHeader => ({
+    name: c?.name ?? "", address: c?.address ?? "", phone: c?.phone ?? undefined, hours: c?.hours ?? undefined,
+    schedule: (c?.schedule as ChamberSlot[] | undefined) ?? [], serialPhone: c?.serialPhone ?? undefined,
+    footerText: c?.footerText ?? undefined, logoDataUrl: c?.logoDataUrl ?? undefined,
+  });
+  const doc = rx.doc as PrescriptionDoc;
+  if (rx.status !== "final" && enc) doc.vitals = (enc.vitals as PrescriptionDoc["vitals"]) ?? doc.vitals;
+  const settings: PrintSettings = { ...DEFAULT_PRINT_SETTINGS, ...((chamber?.printSettings as Partial<PrintSettings>) ?? {}) };
+  const base = process.env.PUBLIC_BASE_URL ?? "http://localhost:3000";
+  const verifyUrl = rx.verifyToken ? `${base}/v/${rx.verifyToken}` : null;
+  const date = rx.finalizedAt ? rx.finalizedAt.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }) : (enc?.visitDate ?? rx.createdAt.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }));
+  const html = renderPrescriptionHtml({
+    doc,
+    patient: {
+      name: patient.name, sex: (patient.sex as Sex) ?? undefined, mobile: patient.mobile ?? undefined, patientCode: patient.code ?? undefined,
+      address: patient.address ?? undefined, ...printAge(patient.dob, date),
+      birthWeightKg: patient.birthWeightKg ?? undefined, gestationalAgeWeeks: patient.gestationalAgeWeeks ?? undefined,
+    },
+    doctor: {
+      nameEn: doctor.nameEn, nameBn: doctor.nameBn ?? undefined, degreesEn: doctor.degreesEn, degreesBn: doctor.degreesBn,
+      designation: doctor.designation ?? undefined, institution: doctor.institution ?? undefined, specialty: doctor.specialtyLabel ?? undefined, bmdcNumber: doctor.bmdcNumber,
+    },
+    chamber: header(chamber),
+    // The prescription's own chamber first, as in the browser print.
+    chambers: [...chambers.filter((c) => c.id === chamber?.id), ...chambers.filter((c) => c.id !== chamber?.id)].map(header),
+    date,
+    settings,
+    qrSvg: verifyUrl ? await QRCode.toString(verifyUrl, { type: "svg", margin: 0 }) : undefined,
+    signatureDataUrl: doctor.signatureDataUrl ?? undefined,
+    fonts: fonts(),
+    footerNote: verifyUrl ? `Verify: ${verifyUrl.replace(/^https?:\/\//, "")}` : "DRAFT — not valid",
+  });
+  const page = await (await browser()).newPage({ javaScriptEnabled: false });
+  try {
+    // Everything (fonts, QR, signature) is inline; block all network so injected markup can't call out.
+    await page.route("**/*", (r) => r.abort());
+    await page.setContent(html, { waitUntil: "load" });
+    await page.waitForLoadState("load");
+    return Buffer.from(await page.pdf({ preferCSSPageSize: true, printBackground: true }));
+  } finally {
+    await page.close();
+  }
+}
