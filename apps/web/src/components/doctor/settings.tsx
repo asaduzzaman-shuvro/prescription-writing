@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_PRINT_SETTINGS, defaultSectionLabel, SECTION_KEYS, type PrintSettings, type SectionKey } from "@rx/core";
+import { DEFAULT_PRINT_SETTINGS, defaultSectionLabel, SECTION_KEYS, SKETCH_IDS, SKETCHES, type PrintSettings, type SectionKey, type SketchId } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
 import { useEffect, useState } from "react";
 import { printSettingsOf, savePrintSettings, saveSignature } from "@/lib/doctor/data";
@@ -37,11 +37,11 @@ export function SettingsScreen() {
     [session.userId],
   );
 
-  // The TM map option only matters to doctors whose exam template has an eardrum field (ENT).
-  const { data: tmTpl } = useQuery<{ id: string }>(
-    `SELECT id FROM specialty_template WHERE specialty_code = ? AND schema LIKE '%"eardrum"%' LIMIT 1`,
-    [profile?.specialty_code ?? ""],
-  );
+  // The picture options only matter to doctors whose exam template has those pictures (ENT).
+  const { data: tpls } = useQuery<{ schema: string }>("SELECT schema FROM specialty_template WHERE specialty_code = ?", [profile?.specialty_code ?? ""]);
+  const hasTm = tpls.some((t) => t.schema.includes('"eardrum"'));
+  const sketchesInTemplate = SKETCH_IDS.filter((id) => tpls.some((t) => new RegExp(`"sketch"\\s*:\\s*"${id}"`).test(t.schema)));
+  const toggleSketch = (id: SketchId, on: boolean) => set("sketchesAlways", on ? [...s.sketchesAlways.filter((x) => x !== id), id] : s.sketchesAlways.filter((x) => x !== id));
 
   useEffect(() => {
     if (current) setS(printSettingsOf(current.print_settings));
@@ -163,9 +163,15 @@ export function SettingsScreen() {
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showQr} onChange={(e) => set("showQr", e.target.checked)} /> QR verification code</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showBarcode} onChange={(e) => set("showBarcode", e.target.checked)} data-testid="show-barcode" /> Patient ID barcode</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.chambersInHeader} onChange={(e) => set("chambersInHeader", e.target.checked)} /> List all chambers under the header</label>
-          {tmTpl.length > 0 && (
+          {hasTm && (
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.tmMapAlways} onChange={(e) => set("tmMapAlways", e.target.checked)} data-testid="tm-map-always" /> Always print the TM map (blank drums when nothing is marked)</label>
           )}
+          {sketchesInTemplate.map((id) => (
+            <label key={id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={s.sketchesAlways.includes(id)} onChange={(e) => toggleSketch(id, e.target.checked)} data-testid={`sketch-always-${id}`} />
+              Always print the {SKETCHES[id].title.toLowerCase()} picture
+            </label>
+          ))}
         </div>
         <div>
           <h3 className="mb-1 text-sm font-semibold">Section headings</h3>

@@ -3,9 +3,11 @@
  * encounter stores answers keyed by field id; `flattenFindings` turns answers into printable lines
  * and small vector diagrams for the prescription.
  */
+import { DRAWING_DEFS, DRAWING_LIMITS, normalizeMarks, normalizeStrokes, r1, strokeSvg } from "./drawing";
+import { isSketchId, SKETCHES, sketchLegendSvg, sketchNeedsLegend, sketchSvg, sketchText, type SketchId } from "./sketches";
 import type { ExamFindingLine } from "./types";
 
-export type FieldType = "select" | "multiselect" | "text" | "number" | "eardrum" | "audiogram";
+export type FieldType = "select" | "multiselect" | "text" | "number" | "eardrum" | "audiogram" | "sketch";
 
 export interface TemplateField {
   id: string;
@@ -17,6 +19,8 @@ export interface TemplateField {
   unit?: string;
   /** Option printed as "normal" is omitted from print to keep the pad short. */
   normal?: string;
+  /** For `type: "sketch"`: which picture (oropharynx, larynx, neck). */
+  sketch?: SketchId;
 }
 
 export interface TemplateSection {
@@ -65,7 +69,7 @@ export interface EardrumValue {
   strokes?: string[];
 }
 /** Per ear, so a drawing can't grow without bound inside the prescription. */
-export const EARDRUM_LIMITS = { marks: 20, strokes: 40, points: 2000 } as const;
+export const EARDRUM_LIMITS = DRAWING_LIMITS;
 
 export const AUDIO_FREQS = [250, 500, 1000, 2000, 4000, 8000] as const;
 /** dB HL thresholds keyed by frequency, for air (ac) and bone (bc) conduction. */
@@ -81,7 +85,7 @@ export type Findings = Record<string, unknown>;
 // Validation
 // ---------------------------------------------------------------------------
 
-const FIELD_TYPES: FieldType[] = ["select", "multiselect", "text", "number", "eardrum", "audiogram"];
+const FIELD_TYPES: FieldType[] = ["select", "multiselect", "text", "number", "eardrum", "audiogram", "sketch"];
 
 /** Validate an admin-edited template JSON. Returns a list of problems (empty = valid). */
 export function validateTemplateSchema(raw: unknown): string[] {
@@ -102,6 +106,7 @@ export function validateTemplateSchema(raw: unknown): string[] {
       if (ids.has(f.id)) errors.push(`duplicate field id "${f.id}"`);
       ids.add(f.id);
       if (!FIELD_TYPES.includes(f.type)) errors.push(`field ${f.id}: unknown type "${f.type}"`);
+      if (f.type === "sketch" && !isSketchId(f.sketch)) errors.push(`field ${f.id}: "sketch" must be one of oropharynx, larynx, neck`);
       if ((f.type === "select" || f.type === "multiselect") && (!Array.isArray(f.options) || !f.options.length))
         errors.push(`field ${f.id}: options required for ${f.type}`);
     });
@@ -160,44 +165,20 @@ export function eardrumZonePath(zone: EardrumZone): string {
   return ZONE_PATHS[zone];
 }
 
-/** Fill patterns shared by the drum, the legend and the editor (identical everywhere, so repeated ids are harmless). */
-export const EARDRUM_DEFS =
-  `<pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#333" stroke-width="1"/></pattern>` +
-  `<pattern id="stipple" width="2.5" height="2.5" patternUnits="userSpaceOnUse"><circle cx="1.25" cy="1.25" r="0.55" fill="#111"/></pattern>`;
-
-const r1 = (n: number) => Math.round(n * 10) / 10;
-const coord = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? r1(Math.min(100, Math.max(0, v))) : null);
-
-function parseStroke(s: unknown): [number, number][] {
-  if (typeof s !== "string") return [];
-  const pts: [number, number][] = [];
-  for (const pair of s.trim().split(/\s+/)) {
-    const [x, y] = pair.split(",").map((n) => coord(Number(n)));
-    if (x !== null && x !== undefined && y !== null && y !== undefined) pts.push([x, y]);
-  }
-  return pts;
-}
+/** Fill patterns shared by the drum, the legend and the editor. */
+export const EARDRUM_DEFS = DRAWING_DEFS;
 
 /** Clean an eardrum value from the (client-writable) findings: known zones/kinds only, coordinates clamped, limits applied. */
 export function normalizeEardrum(v: unknown): Required<EardrumValue> {
   const o = (v && typeof v === "object" ? v : {}) as Partial<EardrumValue>;
   const zones = (a: unknown) => (Array.isArray(a) ? a.filter((z): z is EardrumZone => (EARDRUM_ZONES as readonly string[]).includes(z)) : []);
-  const marks = (Array.isArray(o.marks) ? o.marks : [])
-    .flatMap((m) => {
-      const x = coord(m?.x), y = coord(m?.y);
-      return m && (EARDRUM_MARKS as readonly string[]).includes(m.kind) && x !== null && y !== null ? [{ kind: m.kind, x, y }] : [];
-    })
-    .slice(0, EARDRUM_LIMITS.marks);
-  const strokes: string[] = [];
-  let budget: number = EARDRUM_LIMITS.points;
-  for (const s of Array.isArray(o.strokes) ? o.strokes : []) {
-    if (strokes.length >= EARDRUM_LIMITS.strokes || budget < 2) break;
-    const pts = parseStroke(s).slice(0, budget);
-    if (pts.length < 2) continue;
-    budget -= pts.length;
-    strokes.push(pts.map((p) => p.join(",")).join(" "));
-  }
-  return { perforation: zones(o.perforation), retraction: zones(o.retraction), marks, bulging: o.bulging === true, strokes };
+  return {
+    perforation: zones(o.perforation),
+    retraction: zones(o.retraction),
+    marks: normalizeMarks(o.marks, EARDRUM_MARKS),
+    bulging: o.bulging === true,
+    strokes: normalizeStrokes(o.strokes),
+  };
 }
 
 /** One symbol, centred on x,y. Shapes only (no text), so it reads the same on the mirrored left drum. */
@@ -227,10 +208,6 @@ const BULGING_SVG = Array.from({ length: 12 }, (_, i) => {
   const a = (i * Math.PI) / 6;
   return `<line x1="${r1(50 + 40 * Math.cos(a))}" y1="${r1(50 + 40 * Math.sin(a))}" x2="${r1(50 + 44 * Math.cos(a))}" y2="${r1(50 + 44 * Math.sin(a))}" stroke="#111" stroke-width="1"/>`;
 }).join("");
-
-function strokeSvg(s: string): string {
-  return `<polyline points="${s}" fill="none" stroke="#111" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>`;
-}
 
 /** Bulging ticks, marks and free-hand strokes; drawn over the zones (shared with the editor). */
 export function eardrumOverlaySvg(value: unknown): string {
@@ -347,11 +324,13 @@ function audiogramText(v: AudiogramValue | undefined): string {
     .join("; ");
 }
 
-export type DiagramKind = "tm" | "tm-legend" | "audiogram";
+export type DiagramKind = "tm" | "tm-legend" | "audiogram" | "sketch" | "legend";
 export interface Diagram {
   title: string;
   svg: string;
   kind?: DiagramKind;
+  /** Which picture a sketch or its key belongs to. */
+  ref?: string;
 }
 
 export interface FlattenedExam {
@@ -377,6 +356,16 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
           // A key only when the new symbols are used, so plain perforation/retraction prints as before.
           const used = [...eardrumUsed(normalizeEardrum(lv.right)), ...eardrumUsed(normalizeEardrum(lv.left))];
           if (used.some((k) => k !== "perforation" && k !== "retraction")) diagrams.push({ title: "Key", svg: eardrumLegendSvg(used), kind: "tm-legend" });
+        }
+        continue;
+      }
+      if (f.type === "sketch") {
+        if (!isSketchId(f.sketch)) continue;
+        const t = sketchText(f.sketch, v);
+        if (t) {
+          lines.push({ label: f.label, value: t });
+          diagrams.push({ title: SKETCHES[f.sketch].title, svg: sketchSvg(f.sketch, v), kind: "sketch", ref: f.sketch });
+          if (sketchNeedsLegend(f.sketch, v)) diagrams.push({ title: "Key", svg: sketchLegendSvg(f.sketch, v), kind: "legend", ref: f.sketch });
         }
         continue;
       }

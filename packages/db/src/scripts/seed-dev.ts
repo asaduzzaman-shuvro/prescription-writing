@@ -5,7 +5,7 @@
  *   pnpm db:seed:dev            (expects data/dev-seed/*.csv; run scripts/fetch-dev-seed.sh first)
  */
 import { ENT_TEMPLATE, OPHTHALMOLOGY_TEMPLATE, parseShortcut, VASCULAR_TEMPLATE, type RxItem, type SpecialtyTemplateSchema } from "@rx/core";
-import { eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -160,10 +160,26 @@ async function seedSpecialtyTemplates() {
 }
 
 async function seedEnt() {
-  const exists = await db.select({ id: s.specialtyTemplate.id }).from(s.specialtyTemplate).where(eq(s.specialtyTemplate.specialtyCode, "ent"));
-  if (!exists[0]) {
-    await db.insert(s.specialtyTemplate).values({ specialtyCode: "ent", name: "ENT examination", version: 1, schema: JSON.stringify(ENT_TEMPLATE), source: "rx-curated" });
+  const name = "ENT examination";
+  const [latest] = await db
+    .select({ version: s.specialtyTemplate.version, schema: s.specialtyTemplate.schema, source: s.specialtyTemplate.source })
+    .from(s.specialtyTemplate)
+    .where(and(eq(s.specialtyTemplate.specialtyCode, "ent"), eq(s.specialtyTemplate.name, name)))
+    .orderBy(desc(s.specialtyTemplate.version))
+    .limit(1);
+  if (!latest) {
+    await db.insert(s.specialtyTemplate).values({ specialtyCode: "ent", name, version: 1, schema: JSON.stringify(ENT_TEMPLATE), source: "rx-curated" });
     console.log("ENT exam template: seeded");
+  } else if (latest.source === "rx-curated" && latest.schema !== JSON.stringify(ENT_TEMPLATE)) {
+    // The curated template changed in code: publish it as a new version, as Admin → Specialty templates does
+    // (only the newest is active; encounters keep the version they used).
+    await db.transaction(async (tx) => {
+      await tx.update(s.specialtyTemplate).set({ isActive: false, updatedAt: new Date() }).where(and(eq(s.specialtyTemplate.specialtyCode, "ent"), eq(s.specialtyTemplate.name, name)));
+      await tx.insert(s.specialtyTemplate).values({ specialtyCode: "ent", name, version: latest.version + 1, schema: JSON.stringify(ENT_TEMPLATE), source: "rx-curated" });
+    });
+    console.log(`ENT exam template: published v${latest.version + 1}`);
+  } else if (latest.source !== "rx-curated" && !latest.schema.includes('"sketch"')) {
+    console.log("ENT exam template was edited by an admin: add the oropharynx/larynx/neck picture fields in Admin → Specialty templates.");
   }
   // Shared ENT Rx templates built from products in the (dev) catalogue.
   const shared = await db.select({ id: s.rxTemplate.id }).from(s.rxTemplate).where(isNull(s.rxTemplate.tenantId));

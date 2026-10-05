@@ -123,7 +123,7 @@ export interface PrescriptionDoc {
   advice: string[];
   followUp?: { kind: "after"; value: number; unit: DurationUnit } | { kind: "date"; date: string } | { kind: "none" };
   /** Optional small vector diagrams (inline SVG markup). Untrusted: the renderer sanitises them. */
-  diagrams?: { title: string; svg: string; kind?: "tm" | "tm-legend" | "audiogram" }[];
+  diagrams?: { title: string; svg: string; kind?: "tm" | "tm-legend" | "audiogram" | "sketch" | "legend"; ref?: string }[];
   /** This patient's visit count (1 = first visit), fixed when the prescription is finalised. */
   visitNo?: number;
 }

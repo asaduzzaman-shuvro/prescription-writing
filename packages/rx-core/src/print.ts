@@ -4,6 +4,7 @@ import { formatSlot } from "./chamber";
 import { followUpDate, formatDateDmy } from "./dates";
 import { bmi, formatDuration, formatInstructionParts, type Lang } from "./dose";
 import { safeImageDataUrl, sanitizeSvg } from "./sanitize";
+import { isSketchId, SKETCHES, sketchSvg, type SketchId } from "./sketches";
 import { eardrumSvg } from "./specialty";
 import type { ChamberHeader, DoctorHeader, PatientInfo, PrescriptionDoc, RxItem } from "./types";
 
@@ -40,6 +41,8 @@ export interface PrintSettings {
   chambersInHeader: boolean;
   /** ENT: print blank right/left eardrums when nothing was marked, for marking by pen. */
   tmMapAlways: boolean;
+  /** ENT: throat/neck pictures printed blank when nothing was marked. */
+  sketchesAlways: SketchId[];
 }
 
 /** Printable sections whose heading can be renamed or hidden. */
@@ -77,6 +80,7 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   showBarcode: false,
   chambersInHeader: false,
   tmMapAlways: false,
+  sketchesAlways: [],
 };
 
 export interface RenderInput {
@@ -259,9 +263,12 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const blankTm = s.tmMapAlways && !hasTm
     ? [{ title: "Right TM", svg: eardrumSvg(undefined, "right"), kind: "tm" as const }, { title: "Left TM", svg: eardrumSvg(undefined, "left"), kind: "tm" as const }]
     : [];
-  const diagrams = [...blankTm, ...(doc.diagrams ?? [])]
+  const blankSketches = (Array.isArray(s.sketchesAlways) ? s.sketchesAlways : [])
+    .filter((id) => isSketchId(id) && !(doc.diagrams ?? []).some((d) => d.kind === "sketch" && d.ref === id))
+    .map((id) => ({ title: SKETCHES[id].title, svg: sketchSvg(id), kind: "sketch" as const, ref: id }));
+  const diagrams = [...blankTm, ...(doc.diagrams ?? []), ...blankSketches]
     // Diagrams come from the client-writable prescription doc: sanitise before embedding.
-    .map((d) => `<figure class="diagram${d.kind === "tm-legend" ? " legend" : ""}"><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`)
+    .map((d) => `<figure class="diagram${d.kind === "tm-legend" || d.kind === "legend" ? " legend" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`)
     .join("");
 
   const barcodeSvg = s.showBarcode && patient.patientCode ? code39Svg(patient.patientCode) : null;
@@ -364,6 +371,7 @@ ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .diagram .svg svg { width: 28mm; height: auto; }
 .diagram.legend { vertical-align: top; text-align: left; }
 .diagram.legend .svg svg { width: 32mm; }
+.diagram.neck .svg svg { width: 30mm; }
 .bottom { display: flex; justify-content: space-between; align-items: flex-end; padding-top: 2mm; break-inside: avoid; }
 .qr svg { width: 18mm; height: 18mm; }
 .sign { text-align: center; min-width: 45mm; margin-left: auto; }

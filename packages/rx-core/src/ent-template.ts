@@ -49,9 +49,12 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
         { id: "thr_tonsil", label: "Tonsil surface", type: "multiselect", options: ["Normal", "Congested", "Pus in crypts", "Membrane", "Irwin Moore sign +", "Jugulodigastric LN enlarged"], normal: "Normal" },
         { id: "thr_ppw", label: "Posterior pharyngeal wall", type: "select", options: ["Normal", "Congested", "Granular", "Post-nasal drip", "Bulge"], normal: "Normal" },
         { id: "thr_uvula", label: "Uvula / palate", type: "select", options: ["Normal", "Pushed (quinsy)", "Bifid", "Elongated"], normal: "Normal" },
+        { id: "thr_oro_map", label: "Oropharynx map", type: "sketch", sketch: "oropharynx" },
         { id: "thr_idl", label: "IDL / laryngoscopy", type: "text" },
         { id: "thr_cords", label: "Vocal cords", type: "select", options: ["Mobile, normal", "Nodule", "Polyp", "Congested", "Right cord palsy", "Left cord palsy", "Growth"] },
+        { id: "thr_larynx_map", label: "Larynx map", type: "sketch", sketch: "larynx" },
         { id: "thr_neck", label: "Neck", type: "select", options: ["No lymphadenopathy", "LN enlarged right", "LN enlarged left", "Bilateral LN", "Thyroid swelling", "Midline swelling"], normal: "No lymphadenopathy" },
+        { id: "thr_neck_map", label: "Neck map", type: "sketch", sketch: "neck" },
       ],
     },
     {

@@ -34,6 +34,25 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   for (const [f, db] of [[500, 10], [1000, 15], [2000, 20]] as const) await exam.getByLabel(`right bc ${f}`).fill(String(db));
   await expect(exam.getByText("PTA 47.5 dB (Moderate) · A-B gap 30 dB")).toBeVisible();
 
+  // Throat & neck pictures: R tonsil congested and an ulcer on the oropharynx; a line drawn on the neck.
+  await exam.getByRole("button", { name: /Throat/ }).click();
+  const oro = page.getByTestId("sketch-oropharynx");
+  await oro.locator('[data-zone="r_tonsil"]').click(); // "Congested" is the first tool
+  await page.getByTestId("sketch-tools-oropharynx").getByRole("button", { name: "Mark", exact: true }).click();
+  await page.getByTestId("sketch-tools-oropharynx").getByLabel("Mark type").selectOption("ulcer");
+  await oro.scrollIntoViewIfNeeded();
+  const ob = (await oro.boundingBox())!;
+  await page.mouse.click(ob.x + ob.width * 0.6, ob.y + ob.height * (80 / 108));
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil congested; ulcer");
+  await page.getByTestId("sketch-tools-neck").getByRole("button", { name: "Pen", exact: true }).click();
+  await page.getByTestId("sketch-neck").scrollIntoViewIfNeeded();
+  const nb = (await page.getByTestId("sketch-neck").boundingBox())!;
+  await page.mouse.move(nb.x + nb.width * 0.3, nb.y + nb.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(nb.x + nb.width * 0.4, nb.y + nb.height * 0.6, { steps: 10 });
+  await page.mouse.up();
+  await expect(page.getByTestId("sketch-summary-neck")).toHaveText("drawing");
+
   await addMedicine(page, "candistin", "3 drop tds re 7d");
   await page.waitForTimeout(800); // exam autosave debounce
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/ent-editor.png`, fullPage: true });
@@ -44,22 +63,27 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await expect(frame.getByText("R Perforated, L Intact")).toBeVisible();
   await expect(frame.getByText("R: perforation AI+PI; drawing · L: grommet")).toBeVisible();
   await expect(frame.locator("figure.diagram", { hasText: "Right TM" }).locator("polyline")).toHaveCount(1);
-  await expect(frame.locator("figure.diagram.legend")).toContainText("Grommet");
+  await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Grommet" })).toHaveCount(1);
+  await expect(frame.getByText("R tonsil congested; ulcer")).toBeVisible();
+  await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Congested" })).toContainText("Ulcer");
+  await expect(frame.locator("figure.diagram", { hasText: "Neck" }).locator("polyline")).toHaveCount(1);
   await expect(frame.getByText(/R 47.5 dB \(Moderate, A-B gap 30 dB\)/)).toBeVisible();
-  await expect(frame.locator(".diagram svg")).toHaveCount(4); // 2 drums, the key, the audiogram
+  // 2 drums + key, oropharynx + key, neck (a drawing alone has no key), audiogram
+  await expect(frame.locator(".diagram svg")).toHaveCount(7);
   await expect(frame.locator(".instr")).toContainText("ডান কানে");
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/ent-print.png`, fullPage: true });
 });
 
-test("ENT doctor can always print blank TM maps, to mark by pen", async ({ page }) => {
+test("ENT doctor can always print blank TM maps and throat/neck pictures, to mark by pen", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
   const setAlways = async (on: boolean) => {
     await page.goto("/doctor#/settings");
-    await page.getByTestId("tm-map-always").setChecked(on);
+    const boxes = ["tm-map-always", "sketch-always-oropharynx", "sketch-always-larynx", "sketch-always-neck"];
+    for (const b of boxes) await page.getByTestId(b).setChecked(on);
     await page.getByTestId("save-print").click();
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("tm-map-always")).toBeChecked({ checked: on });
+    for (const b of boxes) await expect(page.getByTestId(b)).toBeChecked({ checked: on });
   };
   await setAlways(true);
   try {
@@ -69,6 +93,7 @@ test("ENT doctor can always print blank TM maps, to mark by pen", async ({ page 
     await page.getByTestId("finalize").click();
     const frame = page.frameLocator("[data-testid=print-frame]");
     await expect(frame.locator("figcaption", { hasText: /^(Right|Left) TM$/ })).toHaveCount(2);
+    await expect(frame.locator("figcaption", { hasText: /^(Oropharynx|Larynx \(IDL\)|Neck)$/ })).toHaveCount(3);
     await expect(frame.locator("figure.diagram.legend")).toHaveCount(0);
   } finally {
     // Print settings live on the shared demo chamber: don't leak into the other tests.

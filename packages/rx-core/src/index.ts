@@ -7,6 +7,8 @@ export * from "./dose";
 export * from "./print";
 export * from "./sample";
 export * from "./forms";
+export * from "./drawing";
+export * from "./sketches";
 export * from "./specialty";
 export * from "./ent-template";
 export * from "./specialty-templates";

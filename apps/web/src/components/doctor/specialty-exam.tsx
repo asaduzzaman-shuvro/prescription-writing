@@ -25,6 +25,7 @@ import {
   type Findings,
   type LateralValue,
   type Side2,
+  type SketchValue,
   type SpecialtyTemplateSchema,
   type TemplateField,
 } from "@rx/core";
@@ -32,6 +33,7 @@ import { usePowerSync, useQuery } from "@powersync/react";
 import { useEffect, useRef, useState } from "react";
 import { saveExamFindings } from "@/lib/doctor/data";
 import { parseJson } from "@/lib/doctor/util";
+import { SketchField } from "./sketch-field";
 
 type Flatten = (groups: { title: string; lines: ExamFindingLine[] }[], diagrams: Diagram[]) => void;
 
@@ -314,6 +316,8 @@ export function SpecialtyExam({ encounterId, specialtyCode, readOnly, onFlatten 
                   <span className="pt-1.5 text-xs text-slate-600">{f.label}</span>
                   {f.type === "eardrum" ? (
                     <EardrumField value={findings[f.id] as LateralValue<EardrumValue>} onChange={(v) => update(f.id, v)} disabled={readOnly} />
+                  ) : f.type === "sketch" && f.sketch ? (
+                    <SketchField sketch={f.sketch} value={findings[f.id] as SketchValue} onChange={(v) => update(f.id, v)} disabled={readOnly} />
                   ) : f.type === "audiogram" ? (
                     <AudiogramField value={findings[f.id] as AudiogramValue} onChange={(v) => update(f.id, v)} disabled={readOnly} />
                   ) : f.lateral ? (
