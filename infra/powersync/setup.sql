@@ -12,5 +12,11 @@ BEGIN
 END $$;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO powersync_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO powersync_role;
+-- Tables are created by the database owner (who runs the migrations), so cover that role too.
+DO $$
+BEGIN
+  EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT ON TABLES TO powersync_role',
+                 (SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = current_database()));
+END $$;
 SELECT 'CREATE DATABASE powersync_storage OWNER powersync_storage_user'
  WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'powersync_storage')\gexec
