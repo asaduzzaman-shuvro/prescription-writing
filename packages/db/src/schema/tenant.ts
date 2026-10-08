@@ -251,6 +251,36 @@ export const prescription = pgTable(
   ],
 );
 
+/**
+ * A paper lab report the patient brought (CBC, sugar, X-ray…), entered by the assistant or doctor.
+ * Results are @rx/core LabResult[] (LOINC-coded values with units, the lab's range and H/L flags).
+ */
+export const labReport = pgTable(
+  "lab_report",
+  {
+    id: uuid().primaryKey(),
+    tenantId: uuid()
+      .notNull()
+      .references(() => tenant.id),
+    patientId: uuid()
+      .notNull()
+      .references(() => patient.id),
+    /** The visit it was entered at; its prescription prints the report's ticked values. */
+    encounterId: uuid().references(() => encounter.id),
+    reportDate: date().notNull(),
+    labName: text(),
+    /** @rx/core LabPanel id, or "other" for a free-text report. */
+    panel: text().notNull(),
+    title: text().notNull(),
+    results: jsonb().notNull().default([]),
+    conclusion: text(),
+    createdBy: uuid(),
+    deletedAt: timestamp({ withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index("lab_report_patient_idx").on(t.patientId, t.reportDate), index("lab_report_encounter_idx").on(t.encounterId)],
+);
+
 /** Flattened Rx lines, written server-side when a prescription is finalised (reporting only). */
 export const prescriptionItem = pgTable(
   "prescription_item",
