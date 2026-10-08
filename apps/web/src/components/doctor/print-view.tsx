@@ -4,8 +4,10 @@ import { paperDimensions } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/doctor/context";
+import { markVisitDone } from "@/lib/doctor/data";
 import { buildPrintHtml, type PrintBundle } from "@/lib/doctor/print";
-import { Link } from "@/lib/doctor/router";
+import { Link, navigate } from "@/lib/doctor/router";
+import { resumeEditAfterPrint } from "@/lib/doctor/util";
 import { ShareButtons } from "./share";
 
 export function PrintView({ prescriptionId }: { prescriptionId: string }) {
@@ -28,11 +30,23 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
     buildPrintHtml(db, prescriptionId, { publicBaseUrl: session.publicBaseUrl }).then(setBundle);
   }, [db, prescriptionId, session.publicBaseUrl, watch[0]?.k]);
 
+  /** After printing a finalised prescription, offer to go back to Today for the next patient. */
+  async function askDone() {
+    const encounterId = meta[0]?.encounter_id;
+    if (bundle?.status !== "final" || !encounterId) return;
+    if (!confirm("Done printing? Go to Today for the next patient.")) return;
+    resumeEditAfterPrint.clear(encounterId); // a later View from the queue opens it locked, not as a new draft
+    await markVisitDone(db, encounterId);
+    navigate("/");
+  }
+
   async function print() {
     const w = frame.current?.contentWindow;
     if (!w) return;
     await w.document.fonts.ready;
     w.focus();
+    // Fires once the dialog closes; the browser can't tell printed from cancelled, so the doctor decides.
+    w.addEventListener("afterprint", () => void askDone(), { once: true });
     w.print();
   }
 
@@ -44,7 +58,7 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
         {/* A printed prescription is never changed: going back opens the next version, ready to edit. */}
         {meta[0] && <Link to={`/visit/${meta[0].encounter_id}${bundle.status === "final" ? "?edit=1" : ""}`} className="btn-ghost">← Back to visit</Link>}
         <button className="btn-primary" onClick={print} data-testid="print">Print</button>
-        <a className="btn-secondary" href={`/api/print/${prescriptionId}/pdf`} target="_blank" rel="noreferrer">Download PDF (online)</a>
+        <a className="btn-secondary" href={`/api/print/${prescriptionId}/pdf`} target="_blank" rel="noreferrer" onClick={() => setTimeout(() => void askDone(), 0)}>Download PDF (online)</a>
         {bundle.status === "final" && <a className="btn-ghost text-xs" href={`/api/fhir/prescription/${prescriptionId}`} title="FHIR R4 bundle (DGHS Core IG aligned)">FHIR</a>}
         {bundle.status === "final" && meta[0] && bundle.verifyUrl && <ShareButtons mobile={meta[0].mobile} patientName={meta[0].name} verifyUrl={bundle.verifyUrl} prescriptionId={prescriptionId} />}
         <span className="text-xs text-slate-500">

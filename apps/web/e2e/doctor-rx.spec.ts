@@ -81,3 +81,43 @@ test("back from print opens the prescription ready to edit, as the next version"
   await page.getByRole("link", { name }).click();
   await expect(page.getByText("final v2")).toBeVisible();
 });
+
+test("after printing, the doctor goes back to Today for the next patient", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  const name = `E2E Done ${uniq()}`;
+  await registerPatient(page, { name, age: "28", sex: "Male", mobile: mobile() });
+  await addMedicine(page, "napa extend", "1+0+1 af 5d");
+  await page.getByTestId("finalize").click();
+  const frame = page.frameLocator("[data-testid=print-frame]");
+  await expect(frame.locator(".rx-item")).toHaveCount(1);
+  await expect(page.getByTestId("sync-status")).toHaveText("Synced", { timeout: 60_000 }); // preview stops re-rendering
+
+  // Headless Chromium has no print dialog: stand in for one that closes straight away.
+  const printAndClose = async (answer: "accept" | "dismiss") => {
+    await page.getByTestId("print-frame").evaluate((f: HTMLIFrameElement) => {
+      const w = f.contentWindow!;
+      w.print = () => w.dispatchEvent(new Event("afterprint"));
+    });
+    // Handle the popup as it opens: the click doesn't finish while a popup is up.
+    let message = "";
+    page.once("dialog", (d) => { message = d.message(); void d[answer](); });
+    await page.getByTestId("print").click();
+    await expect.poll(() => message).toBe("Done printing? Go to Today for the next patient.");
+  };
+
+  // Cancel keeps the print screen (to reprint or share).
+  await printAndClose("dismiss");
+  await expect(page.getByTestId("print-frame")).toBeVisible();
+
+  // OK goes to Today, where the visit is done.
+  await printAndClose("accept");
+  await expect(page.getByRole("heading", { name: /^Today/ })).toBeVisible();
+  const row = page.getByRole("row").filter({ hasText: name });
+  await expect(row.getByText("done", { exact: true })).toBeVisible();
+
+  // Viewing it later shows the printed prescription, locked; no new draft is made.
+  await row.getByRole("link", { name: "View" }).click();
+  await expect(page.getByTestId("rx-locked")).toContainText("Finalised & printed (v1)");
+  await expect(page.getByLabel("Version")).toHaveCount(0); // the picker only shows with 2+ versions
+});

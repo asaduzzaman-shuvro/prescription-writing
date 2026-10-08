@@ -225,6 +225,11 @@ export async function finalizePrescription(db: Db, prescriptionId: string, doc: 
   for (const item of doc.items) if (item.productId) await bumpFavoriteUse(db, item);
 }
 
+/** The doctor is finished with this visit (Finalise already does this; going back to Today makes sure). */
+export async function markVisitDone(db: Db, encounterId: string) {
+  await db.execute(`UPDATE encounter SET status = 'done', updated_at = ? WHERE id = ? AND status <> 'done'`, [nowIso(), encounterId]);
+}
+
 /** A finalised prescription is never edited; "edit" creates version n+1 as a new draft. */
 export async function newVersion(db: Db, prescriptionId: string): Promise<string> {
   // Editing can start from the visit or the print screen: reuse a draft that is already open for this visit.
