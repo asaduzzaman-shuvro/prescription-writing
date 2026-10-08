@@ -289,6 +289,8 @@ function RxEditor({
     clearTimeout(timer.current);
     pending.current = null;
     await finalizePrescription(db, prescriptionId, doc, vitals);
+    // The browser's Back from the print screen resumes editing in the next version (the link passes ?edit=1).
+    resumeEditAfterPrint.set(encounterId);
     navigate(`/rx/${prescriptionId}/print`);
   }
 
@@ -349,6 +351,12 @@ function RxEditor({
         </span>
       </div>
 
+      {readOnly && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900" data-testid="rx-locked">
+          <span><b>Finalised &amp; printed (v{rx.version}).</b> It is locked so the printed copy stays on record. To change medicines or findings, edit it as a new version.</span>
+          <button className="btn-primary ml-auto" onClick={editAsNewVersion} data-testid="edit-new-version">Edit prescription (creates v{rx.version + 1})</button>
+        </div>
+      )}
       {safety.general.map((g) => <div key={g} className="rounded bg-amber-50 p-2 text-sm text-amber-800">{g}</div>)}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
@@ -492,6 +500,24 @@ function VisitTypeControl({ encounterId, patientId, visitDate, chamberId, visitT
   );
 }
 
+/**
+ * Marks a visit whose prescription was just finalised, so the browser's Back from the print screen
+ * opens it for editing. Kept for the tab only; without storage the visit simply opens locked.
+ * (Not history.replaceState: Next.js wraps it and puts back its own URL.)
+ */
+const resumeEditAfterPrint = {
+  key: (encounterId: string) => `rx-resume-edit:${encounterId}`,
+  set(encounterId: string) {
+    try { sessionStorage.setItem(this.key(encounterId), "1"); } catch { /* storage unavailable */ }
+  },
+  has(encounterId: string) {
+    try { return typeof window !== "undefined" && sessionStorage.getItem(this.key(encounterId)) === "1"; } catch { return false; }
+  },
+  clear(encounterId: string) {
+    try { sessionStorage.removeItem(this.key(encounterId)); } catch { /* storage unavailable */ }
+  },
+};
+
 export function VisitScreen({ encounterId }: { encounterId: string }) {
   const db = usePowerSync();
   const session = useSession();
@@ -506,7 +532,11 @@ export function VisitScreen({ encounterId }: { encounterId: string }) {
     [enc?.patient_id ?? ""],
   );
   const p = pts[0];
-  const explicitRx = typeof window !== "undefined" ? new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("rx") : null;
+  const params = new URLSearchParams(typeof window !== "undefined" ? (window.location.hash.split("?")[1] ?? "") : "");
+  const explicitRx = params.get("rx");
+  /** Coming back from printing: open the next version for editing instead of the locked printed one. */
+  const resumeEdit = params.get("edit") === "1" || resumeEditAfterPrint.has(encounterId);
+  const resuming = useRef(false);
   const { data: rxs } = useQuery<{ id: string; status: string; version: number }>(
     "SELECT id, status, version FROM prescription WHERE encounter_id = ? ORDER BY version DESC",
     [encounterId],
@@ -516,10 +546,18 @@ export function VisitScreen({ encounterId }: { encounterId: string }) {
 
   useEffect(() => {
     if (!enc || !isDoctor) return;
+    if (resumeEdit && !explicitRx && rxs[0]?.status === "final") {
+      if (resuming.current) return;
+      resuming.current = true;
+      resumeEditAfterPrint.clear(encounterId);
+      // Reuses a draft already open for this visit, so a reload or a second Back never adds versions.
+      void newVersion(db, rxs[0].id).then(setRxId);
+      return;
+    }
     const pick = explicitRx ?? rxs[0]?.id ?? null;
     if (pick) setRxId(pick);
     else if (enc.status !== "cancelled") ensureDraft(db, encounterId, session.userId).then(setRxId);
-  }, [enc?.id, rxs.length, explicitRx]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enc?.id, rxs.length, rxs[0]?.status, explicitRx, resumeEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!enc || !p) return <div className="text-sm text-slate-500">Loading visit…</div>;
   const allergies = parseJson<string[]>(p.allergies, []);

@@ -227,6 +227,13 @@ export async function finalizePrescription(db: Db, prescriptionId: string, doc: 
 
 /** A finalised prescription is never edited; "edit" creates version n+1 as a new draft. */
 export async function newVersion(db: Db, prescriptionId: string): Promise<string> {
+  // Editing can start from the visit or the print screen: reuse a draft that is already open for this visit.
+  const open = await db.getOptional<{ id: string }>(
+    `SELECT d.id FROM prescription d JOIN prescription me ON me.encounter_id = d.encounter_id
+      WHERE me.id = ? AND d.status = 'draft' ORDER BY d.version DESC LIMIT 1`,
+    [prescriptionId],
+  );
+  if (open) return open.id;
   const old = await db.get<{ tenant_id: string; encounter_id: string; patient_id: string; doctor_user_id: string; chamber_id: string | null; version: number; doc: string }>(
     `SELECT tenant_id, encounter_id, patient_id, doctor_user_id, chamber_id, version, doc FROM prescription WHERE id = ?`,
     [prescriptionId],

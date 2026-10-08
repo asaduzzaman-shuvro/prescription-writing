@@ -40,3 +40,44 @@ test("doctor writes, finalises and verifies a bilingual prescription", async ({ 
   await expect(page.getByText("Genuine prescription issued via RxPad")).toBeVisible();
   await expect(page.getByText("MOXACIL")).toBeVisible();
 });
+
+test("back from print opens the prescription ready to edit, as the next version", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  const name = `E2E Edit ${uniq()}`;
+  await registerPatient(page, { name, age: "40", sex: "Female", mobile: mobile() });
+  const tm = page.getByTestId("specialty-exam").getByLabel("TM", { exact: true }).nth(0);
+  await tm.selectOption("Dull");
+  await addMedicine(page, "candistin", "3 drop tds re 7d");
+  await page.waitForTimeout(800); // exam autosave debounce
+  await page.getByTestId("finalize").click();
+
+  // "Back to visit" lands in an editable v2: no lock, no Edit button to press.
+  await page.getByRole("link", { name: "← Back to visit" }).click();
+  await expect(page.getByTestId("save-state")).toHaveText(/v2/);
+  await expect(page.getByTestId("rx-locked")).toHaveCount(0);
+  await tm.selectOption("Congested");
+  await addMedicine(page, "candistin", "1 drop bd 5d");
+  await page.waitForTimeout(800);
+  await page.getByTestId("finalize").click();
+  const frame = page.frameLocator("[data-testid=print-frame]");
+  await expect(frame.getByText("R Congested")).toBeVisible();
+  await expect(frame.locator(".rx-item")).toHaveCount(2);
+
+  // The browser's Back does the same; going back again reuses that draft instead of adding versions.
+  await page.goBack();
+  await expect(page.getByTestId("save-state")).toHaveText(/v3/);
+  await expect(tm).toBeEnabled();
+  await page.getByRole("link", { name: "Preview" }).click();
+  await page.getByRole("link", { name: "← Back to visit" }).click();
+  await expect(page.getByTestId("save-state")).toHaveText(/v3/);
+  await expect(page.getByLabel("Version").locator("option")).toHaveCount(3);
+
+  // Printed versions stay locked when picked on purpose.
+  await page.getByLabel("Version").selectOption({ label: "v1 · final" });
+  await expect(page.getByTestId("rx-locked")).toContainText("Finalised & printed (v1)");
+
+  // Patient history shows the printed v2, not the unprinted v3 draft.
+  await page.getByRole("link", { name }).click();
+  await expect(page.getByText("final v2")).toBeVisible();
+});

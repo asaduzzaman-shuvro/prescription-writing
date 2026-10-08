@@ -41,7 +41,8 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 print:hidden">
-        {meta[0] && <Link to={`/visit/${meta[0].encounter_id}`} className="btn-ghost">← Back to visit</Link>}
+        {/* A printed prescription is never changed: going back opens the next version, ready to edit. */}
+        {meta[0] && <Link to={`/visit/${meta[0].encounter_id}${bundle.status === "final" ? "?edit=1" : ""}`} className="btn-ghost">← Back to visit</Link>}
         <button className="btn-primary" onClick={print} data-testid="print">Print</button>
         <a className="btn-secondary" href={`/api/print/${prescriptionId}/pdf`} target="_blank" rel="noreferrer">Download PDF (online)</a>
         {bundle.status === "final" && <a className="btn-ghost text-xs" href={`/api/fhir/prescription/${prescriptionId}`} title="FHIR R4 bundle (DGHS Core IG aligned)">FHIR</a>}
