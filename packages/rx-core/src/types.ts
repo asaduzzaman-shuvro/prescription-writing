@@ -112,6 +112,8 @@ export interface PrescriptionDoc {
   /** Structured specialty exam (e.g. ENT) already flattened to printable lines. `id` is the template section id. */
   specialtyFindings?: { id?: string; title: string; lines: ExamFindingLine[] }[];
   investigations: string[];
+  /** Lab report findings, one line per report. Drafts print the live reports; finalising fixes them here. */
+  labFindings?: { title: string; date: string; text: string }[];
   diagnoses: string[];
   /** Management plan, including referrals out ("Refd to … Dept., BSMMU"). */
   plan?: string[];
