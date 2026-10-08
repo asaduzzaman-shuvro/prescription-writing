@@ -7,6 +7,7 @@ import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, parseJson } from "@/lib/doctor/util";
+import { LabReportSummary, useLabReports } from "./lab-reports";
 
 export function PatientDetail({ patientId }: { patientId: string }) {
   const db = usePowerSync();
@@ -22,6 +23,7 @@ export function PatientDetail({ patientId }: { patientId: string }) {
       WHERE e.patient_id = ? ORDER BY e.visit_date DESC, e.created_at DESC`,
     [patientId],
   );
+  const labs = useLabReports(patientId);
   const p = pts[0];
   if (!p) return <div className="text-sm text-slate-500">Loading patient…</div>;
   const allergies = parseJson<string[]>(p.allergies, []);
@@ -78,6 +80,14 @@ export function PatientDetail({ patientId }: { patientId: string }) {
         })}
         {!visits.length && <p className="p-3 text-sm text-slate-500">No visits yet.</p>}
       </div>
+      {labs.length > 0 && (
+        <>
+          <h2 className="font-semibold">Lab reports</h2>
+          <div className="card divide-y divide-slate-100" data-testid="patient-lab-reports">
+            {labs.map((r) => <div key={r.id} className="p-3"><LabReportSummary r={r} /></div>)}
+          </div>
+        </>
+      )}
     </div>
   );
 }

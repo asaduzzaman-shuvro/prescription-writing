@@ -115,6 +115,25 @@ const prescription = new Table(
   { indexes: { patient: ["patient_id"], encounter: ["encounter_id"] } },
 );
 
+/** Results are a JSON string of @rx/core LabResult[]. Soft-deleted rows drop out of the sync stream. */
+const lab_report = new Table(
+  {
+    tenant_id: column.text,
+    patient_id: column.text,
+    encounter_id: column.text,
+    report_date: column.text,
+    lab_name: column.text,
+    panel: column.text,
+    title: column.text,
+    results: column.text,
+    conclusion: column.text,
+    created_by: column.text,
+    deleted_at: column.text,
+    ...timestamps,
+  },
+  { indexes: { patient: ["patient_id", "report_date"], encounter: ["encounter_id"] } },
+);
+
 const chamber = new Table({
   tenant_id: column.text,
   doctor_user_id: column.text,
@@ -201,6 +220,7 @@ export const AppSchema = new Schema({
   patient,
   encounter,
   prescription,
+  lab_report,
   chamber,
   doctor_profile,
   rx_template,
@@ -211,6 +231,7 @@ export type Database = (typeof AppSchema)["types"];
 export type PatientRow = Database["patient"];
 export type EncounterRow = Database["encounter"];
 export type PrescriptionRow = Database["prescription"];
+export type LabReportRow = Database["lab_report"];
 
 /** Tables the client is allowed to write; everything else is read-only on the server side. */
-export const WRITABLE_TABLES = ["appointment", "patient", "encounter", "prescription", "chamber", "rx_template", "doctor_favorite", "doctor_profile"] as const;
+export const WRITABLE_TABLES = ["appointment", "patient", "encounter", "prescription", "lab_report", "chamber", "rx_template", "doctor_favorite", "doctor_profile"] as const;

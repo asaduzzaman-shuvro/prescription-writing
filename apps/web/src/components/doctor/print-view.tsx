@@ -17,7 +17,8 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
   const frame = useRef<HTMLIFrameElement>(null);
   // Re-render when the prescription, chamber settings or profile change (e.g. patient code arrives after sync).
   const { data: watch } = useQuery<{ k: string }>(
-    `SELECT rx.updated_at || coalesce(rx.verify_token, '') || coalesce(p.code, '') || coalesce(c.updated_at, '') || coalesce((SELECT max(updated_at) FROM chamber), '') AS k
+    `SELECT rx.updated_at || coalesce(rx.verify_token, '') || coalesce(p.code, '') || coalesce(c.updated_at, '') || coalesce((SELECT max(updated_at) FROM chamber), '')
+            || coalesce((SELECT max(updated_at) FROM lab_report WHERE encounter_id = rx.encounter_id), '') AS k
        FROM prescription rx JOIN patient p ON p.id = rx.patient_id LEFT JOIN chamber c ON c.id = rx.chamber_id WHERE rx.id = ?`,
     [prescriptionId],
   );

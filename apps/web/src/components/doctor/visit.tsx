@@ -1,6 +1,6 @@
 "use client";
 
-import { bmi, chamberWorkdays, classifyDosageForm, inFreeReportWindow, parseShortcut, type ChamberSlot, type PrescriptionDoc, type RxItem, type Vitals } from "@rx/core";
+import { bmi, chamberWorkdays, classifyDosageForm, inFreeReportWindow, parseShortcut, type ChamberSlot, type PrescriptionDoc, type RxItem, type Sex, type Vitals } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -28,6 +28,7 @@ import { checkSafety, type SafetyResult } from "@/lib/doctor/safety";
 import { ageLabel, ageParts, parseJson, resumeEditAfterPrint, uuid } from "@/lib/doctor/util";
 import { ChipList } from "./chips";
 import { KeyValueList } from "./kv-list";
+import { LabReports } from "./lab-reports";
 import { MedicineSearch } from "./med-search";
 import { RxItemRow } from "./rx-item";
 import { SpecialtyExam } from "./specialty-exam";
@@ -568,6 +569,9 @@ export function VisitScreen({ encounterId }: { encounterId: string }) {
       </div>
       <div className="card p-3">
         <VitalsPanel encounterId={encounterId} initial={vitals} readOnly={enc.status === "done" && !isDoctor} />
+      </div>
+      <div className="card p-3">
+        <LabReports encounterId={encounterId} patientId={p.id} sex={(p.sex as Sex | null) ?? null} />
       </div>
       {isDoctor ? (
         rxId ? (

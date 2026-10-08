@@ -4,8 +4,8 @@
  * Local-database access for the doctor app. Reads and writes go to the browser SQLite managed by
  * PowerSync; writes are queued and uploaded to /api/sync/upload when online.
  */
-import type { ChamberSlot, PrescriptionDoc, PrintSettings, RxItem, Vitals } from "@rx/core";
-import { DEFAULT_PRINT_SETTINGS } from "@rx/core";
+import type { ChamberSlot, LabResult, PrescriptionDoc, PrintSettings, RxItem, Vitals } from "@rx/core";
+import { DEFAULT_PRINT_SETTINGS, labLine, labReportProblem } from "@rx/core";
 import type { AbstractPowerSyncDatabase } from "@powersync/web";
 import { nowIso, parseJson, randomToken, today, uuid } from "./util";
 
@@ -214,15 +214,73 @@ export async function finalizePrescription(db: Db, prescriptionId: string, doc: 
           [prescriptionId],
         )
       ).n;
+    const rx = await tx.get<{ encounter_id: string }>(`SELECT encounter_id FROM prescription WHERE id = ?`, [prescriptionId]);
+    // The printed copy keeps the report values as they were; later edits to the reports don't change it.
+    const labFindings = await labFindingsOf(tx, rx.encounter_id);
     await tx.execute(
       `UPDATE prescription SET doc = ?, status = 'final', finalized_at = ?, verify_token = COALESCE(verify_token, ?), updated_at = ?
         WHERE id = ? AND status = 'draft'`,
-      [JSON.stringify({ ...doc, vitals, visitNo }), now, randomToken(), now, prescriptionId],
+      [JSON.stringify({ ...doc, vitals, visitNo, labFindings }), now, randomToken(), now, prescriptionId],
     );
-    const rx = await tx.get<{ encounter_id: string }>(`SELECT encounter_id FROM prescription WHERE id = ?`, [prescriptionId]);
     await tx.execute(`UPDATE encounter SET status = 'done', updated_at = ? WHERE id = ?`, [now, rx.encounter_id]);
   });
   for (const item of doc.items) if (item.productId) await bumpFavoriteUse(db, item);
+}
+
+// ---------------------------------------------------------------------------
+// Lab reports
+// ---------------------------------------------------------------------------
+
+export interface LabReportInput {
+  patientId: string;
+  encounterId: string | null;
+  reportDate: string;
+  labName: string;
+  panel: string;
+  title: string;
+  results: LabResult[];
+  conclusion: string;
+}
+
+/** Save a new (no id) or edited lab report. Runs the same checks as the upload endpoint, so a save never bounces later. */
+export async function saveLabReport(db: Db, r: LabReportInput, id?: string): Promise<string> {
+  const problem = labReportProblem({ results: r.results, title: r.title, labName: r.labName, conclusion: r.conclusion, reportDate: r.reportDate }, today());
+  if (problem) throw new Error(problem);
+  if (!r.title.trim()) throw new Error("title is required");
+  const now = nowIso();
+  const fields = [r.reportDate, r.labName.trim() || null, r.panel, r.title.trim(), JSON.stringify(r.results), r.conclusion.trim() || null];
+  if (id) {
+    await db.execute(
+      `UPDATE lab_report SET report_date = ?, lab_name = ?, panel = ?, title = ?, results = ?, conclusion = ?, updated_at = ? WHERE id = ?`,
+      [...fields, now, id],
+    );
+    return id;
+  }
+  const newId = uuid();
+  const p = await db.get<{ tenant_id: string }>(`SELECT tenant_id FROM patient WHERE id = ?`, [r.patientId]);
+  await db.execute(
+    `INSERT INTO lab_report (id, tenant_id, patient_id, encounter_id, report_date, lab_name, panel, title, results, conclusion, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [newId, p.tenant_id, r.patientId, r.encounterId, ...fields, now, now],
+  );
+  return newId;
+}
+
+/** Remove a report (kept on the server as a soft delete, for the record). */
+export async function deleteLabReport(db: Db, id: string) {
+  const now = nowIso();
+  await db.execute(`UPDATE lab_report SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, id]);
+}
+
+/** The printed lines for a visit's reports: ticked values and conclusions, oldest report first. */
+export async function labFindingsOf(q: Pick<Db, "getAll">, encounterId: string): Promise<NonNullable<PrescriptionDoc["labFindings"]>> {
+  const rows = await q.getAll<{ report_date: string; title: string; panel: string; results: string | null; conclusion: string | null }>(
+    `SELECT report_date, title, panel, results, conclusion FROM lab_report WHERE encounter_id = ? AND deleted_at IS NULL ORDER BY report_date, created_at`,
+    [encounterId],
+  );
+  return rows
+    .map((r) => labLine({ panel: r.panel, title: r.title, reportDate: r.report_date, results: parseJson<LabResult[]>(r.results, []), conclusion: r.conclusion ?? undefined }, { onlyPrinted: true }))
+    .filter((l): l is NonNullable<typeof l> => l !== null);
 }
 
 /** The doctor is finished with this visit (Finalise already does this; going back to Today makes sure). */

@@ -33,6 +33,7 @@ streams:
       - SELECT * FROM patient WHERE tenant_id = auth.parameter('tenant_id') AND deleted_at IS NULL
       - SELECT * FROM encounter WHERE tenant_id = auth.parameter('tenant_id')
       - SELECT * FROM prescription WHERE tenant_id = auth.parameter('tenant_id')
+      - SELECT * FROM lab_report WHERE tenant_id = auth.parameter('tenant_id') AND deleted_at IS NULL
       - SELECT * FROM chamber WHERE tenant_id = auth.parameter('tenant_id')
       - SELECT user_id AS id, tenant_id, name_en, name_bn, degrees_en, degrees_bn, designation, institution, specialty_code, specialty_label, bmdc_number, bmdc_expiry, bmdc_verified_at, signature_data_url FROM doctor_profile WHERE tenant_id = auth.parameter('tenant_id')
       - SELECT * FROM rx_template WHERE tenant_id = auth.parameter('tenant_id')
