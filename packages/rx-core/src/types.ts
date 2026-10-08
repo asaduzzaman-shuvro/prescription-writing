@@ -109,8 +109,8 @@ export interface PrescriptionDoc {
   /** General O/E findings as "Label : value" lines (Pulse : Normal, Fundus : NAD). */
   oeFindings?: ExamFindingLine[];
   examination?: string;
-  /** Structured specialty exam (e.g. ENT) already flattened to printable lines. */
-  specialtyFindings?: { title: string; lines: ExamFindingLine[] }[];
+  /** Structured specialty exam (e.g. ENT) already flattened to printable lines. `id` is the template section id. */
+  specialtyFindings?: { id?: string; title: string; lines: ExamFindingLine[] }[];
   investigations: string[];
   diagnoses: string[];
   /** Management plan, including referrals out ("Refd to … Dept., BSMMU"). */
@@ -123,7 +123,8 @@ export interface PrescriptionDoc {
   advice: string[];
   followUp?: { kind: "after"; value: number; unit: DurationUnit } | { kind: "date"; date: string } | { kind: "none" };
   /** Optional small vector diagrams (inline SVG markup). Untrusted: the renderer sanitises them. */
-  diagrams?: { title: string; svg: string; kind?: "tm" | "tm-legend" | "audiogram" | "sketch" | "legend"; ref?: string }[];
+  /** `section` is the exam section the picture prints under (older prescriptions: none, printed after all findings). */
+  diagrams?: { title: string; svg: string; kind?: "tm" | "tm-legend" | "audiogram" | "sketch" | "legend"; ref?: string; section?: string }[];
   /** This patient's visit count (1 = first visit), fixed when the prescription is finalised. */
   visitNo?: number;
 }

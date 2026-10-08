@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySketchPreset, ENT_TEMPLATE, sketchSvg, sanitizeSvg, syncSketchMaps, sketchPresets } from "../src";
+import { applySketchPreset, ENT_TEMPLATE, sketchLegendSvg, sketchSvg, sanitizeSvg, syncSketchMaps, sketchPresets } from "../src";
 
 describe("throat & neck answers draw on the pictures", () => {
   it("maps tonsils, posterior pharyngeal wall, cords and neck", () => {
@@ -98,5 +98,12 @@ describe("nose & PNS answers draw on the nose picture", () => {
     const all = sketchPresets({ nose_septum: "S-shaped DNS", nose_mucosa: "Crusting", nose_polyp: { right: "Present (grade 3)" }, nose_discharge: { left: "Watery" }, nose_sinus_tender: ["Ethmoid"] }).nose;
     const svg = sketchSvg("nose", applySketchPreset("nose", undefined, { zones: {}, marks: [] }, all));
     expect(sanitizeSvg(svg)).toBe(svg);
+  });
+});
+
+describe("nose key", () => {
+  it("widens for long labels so none is cut off, and keeps the usual width otherwise", () => {
+    expect(sketchLegendSvg("nose", { marks: [{ kind: "dev_l", x: 50, y: 58 }] })).toContain('viewBox="0 0 107 12"');
+    expect(sketchLegendSvg("oropharynx", { zones: { uvula: "swollen" } })).toContain('viewBox="0 0 86 12"');
   });
 });

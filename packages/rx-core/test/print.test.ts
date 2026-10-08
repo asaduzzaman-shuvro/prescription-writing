@@ -3,6 +3,8 @@ import {
   addDuration,
   DEFAULT_PRINT_SETTINGS,
   eardrumSvg,
+  ENT_TEMPLATE,
+  flattenFindings,
   followUpDate,
   formatDateDmy,
   formatInstructionParts,
@@ -179,5 +181,55 @@ describe("TM map always printed", () => {
     expect(drums(render({ diagrams: [] }, {}, { ...always, mode: "pad" }))).toHaveLength(2);
     const html = render({ diagrams: [{ title: "Key", svg: "<svg></svg>", kind: "tm-legend" }] });
     expect(html).toContain(`<figure class="diagram legend">`);
+  });
+});
+
+describe("exam pictures print under their own section", () => {
+  const exam = flattenFindings(ENT_TEMPLATE, {
+    ear_tm: { right: "Perforated" },
+    ear_tm_map: { right: { perforation: ["ai"], retraction: [] } },
+    nose_septum: "DNS to left",
+    nose_map: { zones: { r_it: "hypertrophied" } },
+    thr_tonsil_grade: { right: "Grade 3" },
+    thr_oro_map: { zones: { r_tonsil: "swollen" } },
+    aud_pta: { right: { ac: { 500: 40, 1000: 45, 2000: 50, 4000: 55 }, bc: {} } },
+  });
+  const at = (html: string, s: string) => {
+    const i = html.indexOf(s);
+    expect(i, s).toBeGreaterThan(-1);
+    return i;
+  };
+
+  it("tags every group and picture with its template section", () => {
+    expect(exam.groups.map((g) => g.id)).toEqual(["ear", "nose", "throat", "audiology"]);
+    expect(exam.diagrams.map((d) => [d.title, d.section])).toEqual([
+      ["Right TM", "ear"], ["Left TM", "ear"], ["Nose & sinuses", "nose"], ["Key", "nose"], ["Oropharynx", "throat"], ["Key", "throat"], ["Audiogram (O right, X left)", "audiology"],
+    ]);
+  });
+
+  it("puts Ear, Nose, Throat and Audiology pictures right after their findings", () => {
+    const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
+    const order = ["<h3>Ear</h3>", "Right TM</figcaption>", "<h3>Nose &amp; PNS</h3>", "Nose &amp; sinuses</figcaption>", "<h3>Throat &amp; neck</h3>", "Oropharynx</figcaption>", "<h3>Audiology</h3>", "Audiogram"];
+    const idx = order.map((s) => at(html, s));
+    expect(idx).toEqual([...idx].sort((a, b) => a - b));
+    expect(html).not.toContain(`<section class="diagrams">`);
+  });
+
+  it("prints older prescriptions (no sections) as before: all pictures after the findings", () => {
+    const old = { specialtyFindings: exam.groups.map(({ title, lines }) => ({ title, lines })), diagrams: exam.diagrams.map(({ section: _, ...d }) => d) };
+    const html = render(old);
+    expect(at(html, "<h3>Audiology</h3>")).toBeLessThan(at(html, `<section class="diagrams">`));
+    expect(at(html, `<section class="diagrams">`)).toBeLessThan(at(html, "Right TM</figcaption>"));
+  });
+
+  it("puts a blank always-print picture in its section, or after the findings when that section is empty", () => {
+    const settings = { ...DEFAULT_PRINT_SETTINGS, tmMapAlways: true, sketchesAlways: ["larynx" as const] };
+    const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams.filter((d) => d.section !== "ear") }, {}, settings);
+    expect(at(html, "<h3>Ear</h3>")).toBeLessThan(at(html, "Right TM</figcaption>"));
+    expect(at(html, "Right TM</figcaption>")).toBeLessThan(at(html, "<h3>Nose &amp; PNS</h3>"));
+    expect(at(html, "<h3>Throat &amp; neck</h3>")).toBeLessThan(at(html, "Larynx (IDL)</figcaption>"));
+    expect(at(html, "Larynx (IDL)</figcaption>")).toBeLessThan(at(html, "<h3>Audiology</h3>"));
+    const noEar = render({ specialtyFindings: exam.groups.filter((g) => g.id !== "ear"), diagrams: [] }, {}, settings);
+    expect(at(noEar, `<section class="diagrams">`)).toBeLessThan(at(noEar, "Right TM</figcaption>"));
   });
 });

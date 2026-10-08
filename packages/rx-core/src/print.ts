@@ -249,27 +249,33 @@ export function renderPrescriptionHtml(input: RenderInput): string {
       ${doc.referredBy?.trim() ? `<span><b>Ref By:</b> ${esc(doc.referredBy)}</span>` : ""}
     </div>`;
 
-  const specialty = (doc.specialtyFindings ?? [])
-    .map((g) =>
-      section(
-        g.title,
-        g.lines.length ? `<ul>${g.lines.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "",
-      ),
-    )
-    .join("");
-
   // Older prescriptions have no `kind`; their drums are titled "Right TM" / "Left TM".
   const hasTm = (doc.diagrams ?? []).some((d) => d.kind === "tm" || /^(Right|Left) TM$/.test(d.title));
   const blankTm = s.tmMapAlways && !hasTm
-    ? [{ title: "Right TM", svg: eardrumSvg(undefined, "right"), kind: "tm" as const }, { title: "Left TM", svg: eardrumSvg(undefined, "left"), kind: "tm" as const }]
+    ? [{ title: "Right TM", svg: eardrumSvg(undefined, "right"), kind: "tm" as const, section: "ear" }, { title: "Left TM", svg: eardrumSvg(undefined, "left"), kind: "tm" as const, section: "ear" }]
     : [];
   const blankSketches = (Array.isArray(s.sketchesAlways) ? s.sketchesAlways : [])
     .filter((id) => isSketchId(id) && !(doc.diagrams ?? []).some((d) => d.kind === "sketch" && d.ref === id))
-    .map((id) => ({ title: SKETCHES[id].title, svg: sketchSvg(id), kind: "sketch" as const, ref: id }));
-  const diagrams = [...blankTm, ...(doc.diagrams ?? []), ...blankSketches]
-    // Diagrams come from the client-writable prescription doc: sanitise before embedding.
-    .map((d) => `<figure class="diagram${d.kind === "tm-legend" || d.kind === "legend" ? " legend" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`)
+    .map((id) => ({ title: SKETCHES[id].title, svg: sketchSvg(id), kind: "sketch" as const, ref: id, section: SKETCHES[id].section }));
+  const allDiagrams = [...blankTm, ...(doc.diagrams ?? []), ...blankSketches];
+  const figures = (ds: typeof allDiagrams) =>
+    ds
+      // Diagrams come from the client-writable prescription doc: sanitise before embedding.
+      .map((d) => `<figure class="diagram${d.kind === "tm-legend" || d.kind === "legend" ? " legend" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`)
+      .join("");
+
+  // Each picture prints under its own exam section; the rest (older prescriptions, or a blank
+  // "always print" picture whose section has no findings) print together after all findings.
+  const groups = doc.specialtyFindings ?? [];
+  const placed = (d: (typeof allDiagrams)[number]) => typeof d.section === "string" && groups.some((g) => g.id === d.section);
+  const specialty = groups
+    .map((g) => {
+      const lines = g.lines.length ? `<ul>${g.lines.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
+      const pics = g.id ? figures(allDiagrams.filter((d) => d.section === g.id)) : "";
+      return section(g.title, lines + (pics ? `<div class="diagrams">${pics}</div>` : ""));
+    })
     .join("");
+  const diagrams = figures(allDiagrams.filter((d) => !placed(d)));
 
   const barcodeSvg = s.showBarcode && patient.patientCode ? code39Svg(patient.patientCode) : null;
   const left = [
@@ -367,6 +373,7 @@ ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .rx-item .gen { font-size: 0.85em; }
 .rx-item .instr, .rx-item .note { padding-left: 5mm; }
 .rx-item .note { font-size: 0.9em; }
+ul + .diagrams { margin-top: 1.5mm; }
 .diagram { display: inline-block; margin: 0 2mm 2mm 0; text-align: center; font-size: 0.8em; }
 .diagram .svg svg { width: 28mm; height: auto; }
 .diagram.legend { vertical-align: top; text-align: left; }

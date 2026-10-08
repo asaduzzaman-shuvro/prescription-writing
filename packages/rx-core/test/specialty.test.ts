@@ -178,7 +178,7 @@ describe("TM answer draws on the TM map", () => {
     expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "R: central perforation (medium)" });
     expect(out.diagrams.map((d) => d.kind)).toEqual(["tm", "tm"]);
     const lookOnly = flattenFindings(ENT_TEMPLATE, { ear_tm_map: { left: { perforation: [], retraction: [], look: "hidden" } } });
-    expect(lookOnly.groups).toEqual([]);
+    expect(lookOnly.groups).toEqual([{ id: "ear", title: "Ear", lines: [] }]); // a heading for the drums
     expect(lookOnly.diagrams).toHaveLength(2);
   });
 });

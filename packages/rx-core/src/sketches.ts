@@ -19,6 +19,8 @@ type Shape =
 export interface SketchDef {
   id: SketchId;
   title: string;
+  /** ENT template section it prints under (used for the blank "always print" copy). */
+  section: string;
   /** Drawing size; marks and strokes are stored in these units. */
   viewBox: [number, number];
   /** Static outline and labels (drawn above the zones, never tappable). */
@@ -49,6 +51,7 @@ const sides = (y: number) => text(5, y, "R", 7) + text(95, y, "L", 7);
 const ORO_ARCH = "M14,74 C14,40 30,24 50,24 C70,24 86,40 86,74";
 const OROPHARYNX: SketchDef = {
   id: "oropharynx",
+  section: "throat",
   title: "Oropharynx",
   viewBox: [100, 108],
   zones: [
@@ -86,6 +89,7 @@ const R_CORD = "M49.5,36 L37,74 L43.5,74 L50,39 Z";
 const R_ARYT = "M34,80 A6,6 0 1 0 46,80 A6,6 0 1 0 34,80 Z";
 const LARYNX: SketchDef = {
   id: "larynx",
+  section: "throat",
   title: "Larynx (IDL)",
   viewBox: [100, 108],
   zones: [
@@ -129,6 +133,7 @@ const R_LEVELS = {
 };
 const NECK: SketchDef = {
   id: "neck",
+  section: "throat",
   title: "Neck",
   viewBox: [100, 112],
   zones: [
@@ -176,6 +181,7 @@ const R_NOSE = {
 };
 const NOSE: SketchDef = {
   id: "nose",
+  section: "nose",
   title: "Nose & sinuses",
   viewBox: [100, 108],
   zones: [
@@ -336,7 +342,10 @@ export function sketchLegendSvg(id: SketchId, value: unknown): string {
     ...usedStates.map((s) => (cy: number) => `<rect x="2" y="${cy - 4}" width="9" height="8" fill="${s.fill}" stroke="#555" stroke-width="0.6"/>${legendText(cy, s.label)}`),
     ...usedMarks.map((m) => (cy: number) => `${shapeSvg(m.shape, 6.5, cy, true)}${legendText(cy, m.label)}`),
   ].map((draw, i) => draw(6 + i * row));
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 86 ${rows.length * row + 1}"><defs>${DRAWING_DEFS}</defs>${rows.join("")}</svg>`;
+  // Wide enough for the longest label (about 3.9 units a character at this size), so none is cut off.
+  const longest = Math.max(0, ...[...usedStates, ...usedMarks].map((x) => x.label.length));
+  const width = Math.max(86, Math.ceil(17 + longest * 3.9));
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${rows.length * row + 1}"><defs>${DRAWING_DEFS}</defs>${rows.join("")}</svg>`;
 }
 const legendText = (cy: number, label: string) => `<text x="17" y="${cy + 2.5}" font-size="7" font-family="sans-serif">${label}</text>`;
 

@@ -470,10 +470,12 @@ export interface Diagram {
   kind?: DiagramKind;
   /** Which picture a sketch or its key belongs to. */
   ref?: string;
+  /** Template section it prints under. */
+  section?: string;
 }
 
 export interface FlattenedExam {
-  groups: { title: string; lines: ExamFindingLine[] }[];
+  groups: { id: string; title: string; lines: ExamFindingLine[] }[];
   diagrams: Diagram[];
 }
 
@@ -483,6 +485,7 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
   const side = schema.lateralLabels ?? DEFAULT_LATERAL;
   for (const section of schema.sections) {
     const lines: ExamFindingLine[] = [];
+    const firstDiagram = diagrams.length;
     for (const f of section.fields) {
       const v = findings[f.id];
       if (v === undefined) continue;
@@ -527,7 +530,9 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
       const t = text(v, f);
       if (t) lines.push({ label: f.label, value: t });
     }
-    if (lines.length) groups.push({ title: section.title, lines });
+    // Pictures print under their own section, so a section with pictures but no lines still gets a heading.
+    for (const d of diagrams.slice(firstDiagram)) d.section = section.id;
+    if (lines.length || diagrams.length > firstDiagram) groups.push({ id: section.id, title: section.title, lines });
   }
   return { groups, diagrams };
 }

@@ -71,6 +71,12 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await expect(frame.getByText(/R 47.5 dB \(Moderate, A-B gap 30 dB\)/)).toBeVisible();
   // 2 drums + key, oropharynx + key, neck (a drawing alone has no key), audiogram
   await expect(frame.locator(".diagram svg")).toHaveCount(7);
+  // Each picture prints under its own findings, not in one block at the end.
+  const examSection = (title: RegExp) => frame.locator("section", { has: frame.locator("h3", { hasText: title }) });
+  await expect(examSection(/^Ear$/).locator("figcaption", { hasText: /^(Right|Left) TM$/ })).toHaveCount(2);
+  await expect(examSection(/^Throat & neck$/).locator("figcaption", { hasText: /^(Oropharynx|Neck)$/ })).toHaveCount(2);
+  await expect(examSection(/^Audiology$/).locator("figure.diagram")).toHaveCount(1);
+  await expect(frame.locator("section.diagrams")).toHaveCount(0);
   await expect(frame.locator(".instr")).toContainText("ডান কানে");
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/ent-print.png`, fullPage: true });
 });
@@ -167,7 +173,7 @@ test("Nose & PNS answers draw on the nose picture; Reset clears it after confirm
   await page.getByTestId("finalize").click();
   const frame = page.frameLocator("[data-testid=print-frame]");
   await expect(frame.getByText("L inferior turbinate pale / boggy")).toBeVisible();
-  await expect(frame.locator("figure.diagram", { hasText: "Nose & sinuses" })).toHaveCount(1);
+  await expect(frame.locator("section", { has: frame.locator("h3", { hasText: /^Nose & PNS$/ }) }).locator("figure.diagram", { hasText: "Nose & sinuses" })).toHaveCount(1);
   await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Pale / boggy" })).toHaveCount(1);
 });
 
