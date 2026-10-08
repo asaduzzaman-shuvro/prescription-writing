@@ -104,7 +104,7 @@ test("TM answer draws on the TM map; Reset clears both maps after confirming", a
   await expect(tm.nth(0)).toHaveValue("Retracted"); // answers stay; only the maps are reset
 });
 
-test("Throat & neck answers draw on the pictures", async ({ page }) => {
+test("Throat & neck answers draw on the pictures; Reset clears a picture after confirming", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
   await registerPatient(page, { name: `ENT Throat ${uniq()}`, age: "30", sex: "Female", mobile: mobile() });
@@ -123,6 +123,16 @@ test("Throat & neck answers draw on the pictures", async ({ page }) => {
   await expect(larynx.locator('[data-zone="l_cord"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByLabel("Neck", { exact: true }).selectOption("Thyroid swelling");
   await expect(page.getByTestId("sketch-summary-neck")).toHaveText("Thyroid enlarged");
+
+  const reset = page.getByTestId("sketch-tools-oropharynx").getByRole("button", { name: "Reset", exact: true });
+  page.once("dialog", (d) => void d.dismiss());
+  await reset.click();
+  await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#bbb");
+  page.once("dialog", (d) => void d.accept());
+  await reset.click();
+  await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#fff");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveCount(0);
+  await expect(larynx.locator('[data-zone="l_cord"]')).toHaveAttribute("fill", "#bbb"); // other pictures untouched
 });
 
 test("ENT doctor can always print blank TM maps and throat/neck pictures, to mark by pen", async ({ page }) => {

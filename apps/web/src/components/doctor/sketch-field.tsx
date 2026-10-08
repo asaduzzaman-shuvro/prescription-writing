@@ -77,8 +77,8 @@ export function SketchField({ sketch, value, onChange, disabled }: { sketch: Ske
             </select>
           )}
           <button type="button" className="btn-ghost px-1 text-xs" disabled={!undo} onClick={() => { onChange(undo ?? {}); setUndo(null); }}>Undo</button>
-          <button type="button" className="btn-ghost px-1 text-xs text-slate-500"
-            onClick={() => window.confirm(`Clear everything marked on the ${def.title.toLowerCase()} picture?`) && commit({ zones: {}, marks: [], strokes: [] })}>Clear</button>
+          <button type="button" className="rounded px-1 text-xs font-medium text-red-600 hover:bg-red-50"
+            onClick={() => window.confirm(`Reset the ${def.title.toLowerCase()} picture? Everything drawn on it will be cleared.`) && commit({ zones: {}, marks: [], strokes: [] })}>Reset</button>
           <span className="text-slate-400">
             {tool.startsWith("state:") ? "Tap an area (tap again to undo)" : tool === "mark" ? "Tap where it is" : tool === "pen" ? "Draw on the picture" : "Tap a mark or line"}
           </span>
