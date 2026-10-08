@@ -1,5 +1,5 @@
 import "server-only";
-import { DEFAULT_PRINT_SETTINGS, printAge, renderPrescriptionHtml, type ChamberHeader, type ChamberSlot, type PrescriptionDoc, type PrintSettings, type Sex } from "@rx/core";
+import { DEFAULT_PRINT_SETTINGS, labLine, printAge, renderPrescriptionHtml, type ChamberHeader, type ChamberSlot, type LabResult, type PrescriptionDoc, type PrintSettings, type Sex } from "@rx/core";
 import { s, withTenant } from "@rx/db";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { readFileSync } from "node:fs";
@@ -34,10 +34,15 @@ export async function prescriptionPdf(ctx: { tenantId: string; userId: string },
       .from(s.chamber)
       .where(and(eq(s.chamber.isActive, true), or(eq(s.chamber.doctorUserId, rx.doctorUserId), isNull(s.chamber.doctorUserId))))
       .orderBy(asc(s.chamber.name));
-    return { rx, patient, doctor, chamber, enc, chambers };
+    const labs = rx.status === "final"
+      ? []
+      : await tx.select().from(s.labReport)
+          .where(and(eq(s.labReport.encounterId, rx.encounterId), isNull(s.labReport.deletedAt)))
+          .orderBy(asc(s.labReport.reportDate), asc(s.labReport.createdAt));
+    return { rx, patient, doctor, chamber, enc, chambers, labs };
   });
   if (!data?.patient || !data.doctor) return null;
-  const { rx, patient, doctor, chamber, enc, chambers } = data;
+  const { rx, patient, doctor, chamber, enc, chambers, labs } = data;
   const header = (c: typeof chamber | undefined): ChamberHeader => ({
     name: c?.name ?? "", address: c?.address ?? "", phone: c?.phone ?? undefined, hours: c?.hours ?? undefined,
     schedule: (c?.schedule as ChamberSlot[] | undefined) ?? [], serialPhone: c?.serialPhone ?? undefined,
@@ -45,6 +50,12 @@ export async function prescriptionPdf(ctx: { tenantId: string; userId: string },
   });
   const doc = rx.doc as PrescriptionDoc;
   if (rx.status !== "final" && enc) doc.vitals = (enc.vitals as PrescriptionDoc["vitals"]) ?? doc.vitals;
+  // Drafts print the visit's live lab reports (finalised ones keep their snapshot), as the browser print does.
+  if (rx.status !== "final") {
+    doc.labFindings = labs
+      .map((r) => labLine({ panel: r.panel, title: r.title, reportDate: r.reportDate, results: r.results as LabResult[], conclusion: r.conclusion ?? undefined }, { onlyPrinted: true }))
+      .filter((l): l is NonNullable<typeof l> => l !== null);
+  }
   const settings: PrintSettings = { ...DEFAULT_PRINT_SETTINGS, ...((chamber?.printSettings as Partial<PrintSettings>) ?? {}) };
   const base = process.env.PUBLIC_BASE_URL ?? "http://localhost:3000";
   const verifyUrl = rx.verifyToken ? `${base}/v/${rx.verifyToken}` : null;

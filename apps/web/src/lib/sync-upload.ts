@@ -1,5 +1,5 @@
 import "server-only";
-import { formatInstruction, type PrescriptionDoc } from "@rx/core";
+import { formatInstruction, labReportProblem, type PrescriptionDoc } from "@rx/core";
 import { s, withTenant, type Tx } from "@rx/db";
 import { eq, sql, type SQL } from "drizzle-orm";
 import { appDb } from "./db";
@@ -56,6 +56,14 @@ const SPECS: Record<string, TableSpec> = {
       encounter_id: "uuid", patient_id: "uuid", doctor_user_id: "uuid", chamber_id: "uuid", version: "int",
       supersedes_id: "uuid", status: "enum:prescription_status", doc: "jsonb", finalized_at: "ts", verify_token: "text",
       created_at: "ts",
+    },
+  },
+  lab_report: {
+    // The assistant types in the paper reports while the patient waits; removal is a soft delete.
+    roles: ["doctor", "assistant", "clinic_admin"],
+    columns: {
+      patient_id: "uuid", encounter_id: "uuid", report_date: "date", lab_name: "text", panel: "text", title: "text",
+      results: "jsonb", conclusion: "text", deleted_at: "ts", created_at: "ts",
     },
   },
   chamber: {
@@ -161,6 +169,7 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
     if (before && before.doctor_user_id !== session.userId) throw new Rejection("not your prescription");
   }
   if (op.table === "encounter" && op.op === "PUT" && !data.doctor_user_id) throw new Rejection("doctor_user_id required");
+  if (op.table === "lab_report") await checkLabReport(tx, op, data, before);
   if (op.table === "chamber") {
     if (op.op === "PUT" && !before && session.tenantRole === "doctor") data.doctor_user_id = session.userId;
     if (typeof data.logo_data_url === "string" && data.logo_data_url.length > 400_000) throw new Rejection("logo image too large (max 300 KB)");
@@ -178,7 +187,7 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
     if (op.table === "doctor_profile") throw new Rejection("profiles are created by the platform admin");
     const insertCols = [sql`id`, sql`tenant_id`, ...cols.map(([k]) => sql.identifier(k))];
     const insertVals = [sql`${op.id}::uuid`, sql`${session.tenantId}::uuid`, ...cols.map(([k, v]) => valueSql(spec.columns[k]!, v))];
-    if ((op.table === "patient" || op.table === "encounter" || op.table === "appointment") && !("created_by" in data)) {
+    if ((op.table === "patient" || op.table === "encounter" || op.table === "appointment" || op.table === "lab_report") && !("created_by" in data)) {
       insertCols.push(sql`created_by`);
       insertVals.push(sql`${session.userId}::uuid`);
     }
@@ -194,6 +203,35 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
   if (op.table === "prescription") {
     const [row] = await tx.select().from(s.prescription).where(eq(s.prescription.id, op.id));
     if (row && row.status === "final" && before?.status !== "final") await finalize(tx, session, row);
+  }
+}
+
+/** Today in Bangladesh, where the clinics are (the server may run in UTC). */
+const todayBd = () => new Date(Date.now() + 6 * 3600_000).toISOString().slice(0, 10);
+
+/** Same checks the lab report card runs before saving (labReportProblem), plus the row must make sense. */
+async function checkLabReport(tx: Tx, op: CrudOp, data: Record<string, unknown>, before: Record<string, unknown> | undefined) {
+  let results = data.results;
+  if (typeof results === "string") {
+    try {
+      results = JSON.parse(results);
+    } catch {
+      throw new Rejection("results must be a list");
+    }
+  }
+  const problem = labReportProblem(
+    { results, title: data.title, labName: data.lab_name, conclusion: data.conclusion, reportDate: data.report_date },
+    todayBd(),
+  );
+  if (problem) throw new Rejection(problem);
+  if (op.op === "PUT" && !before) {
+    for (const k of ["patient_id", "report_date", "panel", "title"]) if (!String(data[k] ?? "").trim()) throw new Rejection(`${k} is required`);
+  }
+  const patientId = (data.patient_id ?? before?.patient_id) as string | undefined;
+  const encounterId = (data.encounter_id ?? before?.encounter_id) as string | undefined;
+  if (encounterId && patientId) {
+    const rows = (await tx.execute(sql`select 1 from encounter where id = ${encounterId}::uuid and patient_id = ${patientId}::uuid`)) as unknown as unknown[];
+    if (!rows.length) throw new Rejection("the visit belongs to another patient");
   }
 }
 

@@ -3,7 +3,7 @@
 import { printAge, renderPrescriptionHtml, type ChamberHeader, type ChamberSlot, type PatientInfo, type PrescriptionDoc, type PrintSettings, type Sex } from "@rx/core";
 import type { AbstractPowerSyncDatabase } from "@powersync/web";
 import QRCode from "qrcode";
-import { printSettingsOf } from "./data";
+import { labFindingsOf, printSettingsOf } from "./data";
 import { parseJson } from "./util";
 
 /** Timestamps are stored in UTC; print the doctor's local calendar date. */
@@ -61,7 +61,10 @@ export async function buildPrintHtml(
   ]);
   const doc = parseJson<PrescriptionDoc>(rx.doc, { chiefComplaints: [], vitals: {}, investigations: [], diagnoses: [], items: [], advice: [] });
   // Drafts print the live encounter vitals; finalised prescriptions use their snapshot.
-  if (rx.status !== "final") doc.vitals = parseJson(enc?.vitals, doc.vitals);
+  if (rx.status !== "final") {
+    doc.vitals = parseJson(enc?.vitals, doc.vitals);
+    doc.labFindings = await labFindingsOf(db, rx.encounter_id);
+  }
   const settings = opts.settingsOverride ?? printSettingsOf(chamber?.print_settings);
   const date = rx.finalized_at ? localDate(rx.finalized_at) : (enc?.visit_date ?? localDate(rx.created_at));
   const patientInfo: PatientInfo = {
