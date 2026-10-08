@@ -11,7 +11,7 @@ apps/web            Next.js 16 app — /admin (online), /doctor (PWA, works offl
 packages/rx-core    Shared domain logic: dose shortcuts (1+0+1, tds, af, 7d…), Bangla formatting,
                     print renderer, ENT / eye / vascular exam templates + diagrams, Code 39 barcode, FHIR export
 packages/db         Drizzle schema + migrations (RLS), CSV import (dry-run diff), dev seed
-infra               docker compose: Postgres 17 (logical WAL) + PowerSync service
+infra               docker compose: PowerSync service (Postgres runs on your machine)
 spikes/print        Bangla print/PDF spike (Phase 0 evidence)
 ```
 
@@ -19,8 +19,11 @@ spikes/print        Bangla print/PDF spike (Phase 0 evidence)
 
 ```bash
 pnpm install
-docker compose -f infra/docker-compose.yml up -d postgres
-psql postgres://rx:rx@localhost:5433/rx -f infra/powersync/setup.sql   # once: replication role + storage DB
+# Local Postgres (Homebrew etc.) on localhost:5432 with logical replication for PowerSync, once:
+#   psql -d postgres -c "ALTER SYSTEM SET wal_level = logical"   then restart Postgres
+psql -d postgres -c "CREATE ROLE prescription_service LOGIN CREATEROLE PASSWORD 'prescription_service'"  # app owner; runs the migrations
+createdb -O prescription_service prescription_service
+psql -d prescription_service -f infra/powersync/setup.sql             # once, as a superuser: replication role + storage DB
 pnpm db:migrate
 ./scripts/fetch-dev-seed.sh && pnpm db:seed:dev                        # DEV ONLY data, see below
 cp infra/.env.example infra/.env && cp apps/web/.env.example apps/web/.env.local
@@ -28,6 +31,10 @@ cp infra/.env.example infra/.env && cp apps/web/.env.example apps/web/.env.local
 docker compose -f infra/docker-compose.yml up -d
 pnpm dev                                                               # http://localhost:3000
 ```
+
+The dev database URL defaults to `postgres://prescription_service:prescription_service@localhost:5432/prescription_service` (`packages/db/src/dev-urls.ts`); set `DATABASE_URL` /
+`DATABASE_URL_APP` to use another server. PowerSync reaches it from Docker via `host.docker.internal`; override
+`PS_DATA_SOURCE_URI` / `PS_STORAGE_SOURCE_URI` in `infra/.env` if your server differs.
 
 Re-running `pnpm db:seed:dev` on an existing dev database adds any new specialties' pick-lists and exam templates,
 and publishes a new ENT exam template version when the curated one in code has changed (admin-edited ones are left alone).

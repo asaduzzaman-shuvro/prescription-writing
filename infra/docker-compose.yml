@@ -1,39 +1,22 @@
-# Local dev infrastructure.
+# Local dev infrastructure: the PowerSync service. Postgres runs on your machine (localhost:5432, wal_level=logical).
 #   docker compose -f infra/docker-compose.yml up -d
-# First run only: psql postgres://rx:rx@localhost:5433/rx -f infra/powersync/setup.sql, then pnpm db:migrate.
+# First run only: see README "Run locally" (prescription_service user + database, infra/powersync/setup.sql), then pnpm db:migrate.
 name: rx
 services:
-  postgres:
-    image: postgres:17
-    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
-    environment:
-      POSTGRES_USER: rx
-      POSTGRES_PASSWORD: rx
-      POSTGRES_DB: rx
-    ports:
-      - "5433:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rx -d rx"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   powersync:
     image: journeyapps/powersync-service:1.26.1
     command: ["start", "-r", "unified"]
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
       POWERSYNC_CONFIG_PATH: /config/service.yaml
       NODE_OPTIONS: --max-old-space-size=1000
       PS_PORT: "8080"
-      PS_DATA_SOURCE_URI: postgresql://powersync_role:powersync_dev@postgres:5432/rx
-      PS_STORAGE_SOURCE_URI: postgresql://powersync_storage_user:storage_dev@postgres:5432/powersync_storage
+      # The host's Postgres, seen from the container. Override in infra/.env for another server.
+      PS_DATA_SOURCE_URI: ${PS_DATA_SOURCE_URI:-postgresql://powersync_role:powersync_dev@host.docker.internal:5432/prescription_service}
+      PS_STORAGE_SOURCE_URI: ${PS_STORAGE_SOURCE_URI:-postgresql://powersync_storage_user:storage_dev@host.docker.internal:5432/powersync_storage}
       PS_JWT_SECRET: ${PS_JWT_SECRET}
       PS_JWT_KID: ${PS_JWT_KID:-powersync-dev}
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Docker Desktop provides it; this makes Linux match
     volumes:
       - ./powersync/service.yaml:/config/service.yaml:ro
       - ./powersync/sync-config.yaml:/config/sync-config.yaml:ro
@@ -44,6 +27,3 @@ services:
       interval: 5s
       timeout: 2s
       retries: 20
-
-volumes:
-  pgdata:

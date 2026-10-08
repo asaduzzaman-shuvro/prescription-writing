@@ -1,5 +1,5 @@
 -- One-time (idempotent) PowerSync setup on the app database server. Run as a superuser:
---   psql postgres://rx:rx@localhost:5433/rx -f infra/powersync/setup.sql
+--   psql -d prescription_service -f infra/powersync/setup.sql
 -- CREATE DATABASE cannot run inside the migration transaction, so it lives here.
 DO $$
 BEGIN

@@ -11,12 +11,13 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../client";
+import { DEV_DATABASE_URL } from "../dev-urls";
 import { applyPlan, buildPlan, guessMapping, loadSnapshot, parseCsv, parseMedexGenerics, rowsToProducts } from "../import";
 import { hashPassword } from "../password";
 import * as s from "../schema";
 import { ADVICE, COMPLAINTS, DIAGNOSES, INSTRUCTIONS, INVESTIGATIONS, SPECIALTIES } from "../seed/libraries";
 
-const url = process.env.DATABASE_URL ?? "postgres://rx:rx@localhost:5433/rx";
+const url = process.env.DATABASE_URL ?? DEV_DATABASE_URL;
 const host = new URL(url).hostname;
 if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
   console.error(`Refusing to load the MedEx-derived dev seed into non-local database host "${host}".`);

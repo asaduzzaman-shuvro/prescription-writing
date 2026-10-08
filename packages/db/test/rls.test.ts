@@ -1,14 +1,14 @@
 /**
- * Integration test against the local dev database (docker compose). Verifies that the rx_app role
+ * Integration test against the local dev database. Verifies that the rx_app role
  * can only see and write rows of the tenant set by withTenant().
  */
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, s, withTenant } from "../src";
+import { createDb, DEV_DATABASE_URL, DEV_DATABASE_URL_APP, s, withTenant } from "../src";
 
-const owner = createDb(process.env.DATABASE_URL ?? "postgres://rx:rx@localhost:5433/rx", { max: 2 });
-const app = createDb(process.env.DATABASE_URL_APP ?? "postgres://rx_app:rx_app@localhost:5433/rx", { max: 2 });
+const owner = createDb(process.env.DATABASE_URL ?? DEV_DATABASE_URL, { max: 2 });
+const app = createDb(process.env.DATABASE_URL_APP ?? DEV_DATABASE_URL_APP, { max: 2 });
 const A = randomUUID();
 const B = randomUUID();
 const userA = randomUUID();
