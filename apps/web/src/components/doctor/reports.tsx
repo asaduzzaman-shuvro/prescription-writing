@@ -30,7 +30,7 @@ export function ReportsScreen() {
   const { data: rxs } = useQuery<{ doc: string }>(
     `SELECT rx.doc FROM prescription rx JOIN encounter e ON e.id = rx.encounter_id
       WHERE rx.status = 'final' AND e.visit_date BETWEEN ? AND ? ${mine ? "AND rx.doctor_user_id = ?" : ""}
-        AND NOT EXISTS (SELECT 1 FROM prescription n WHERE n.supersedes_id = rx.id)`,
+        AND NOT EXISTS (SELECT 1 FROM prescription n WHERE n.supersedes_id = rx.id AND n.status = 'final')`,
     mine ? [from, to, session.userId] : [from, to],
   );
   const fees = visits.reduce((s, v) => s + (v.fee ?? 0), 0);

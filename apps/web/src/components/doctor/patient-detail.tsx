@@ -18,7 +18,7 @@ export function PatientDetail({ patientId }: { patientId: string }) {
     `SELECT e.id, e.visit_date, e.status, d.name_en AS doctor, rx.id AS rx_id, rx.status AS rx_status, rx.doc, rx.version
        FROM encounter e
        LEFT JOIN doctor_profile d ON d.id = e.doctor_user_id
-       LEFT JOIN prescription rx ON rx.id = (SELECT id FROM prescription WHERE encounter_id = e.id ORDER BY version DESC LIMIT 1)
+       LEFT JOIN prescription rx ON rx.id = (SELECT id FROM prescription WHERE encounter_id = e.id ORDER BY status = 'final' DESC, version DESC LIMIT 1)
       WHERE e.patient_id = ? ORDER BY e.visit_date DESC, e.created_at DESC`,
     [patientId],
   );
