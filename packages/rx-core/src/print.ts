@@ -46,15 +46,15 @@ export interface PrintSettings {
 }
 
 /** Printable sections whose heading can be renamed or hidden. */
-export type SectionKey = "cc" | "history" | "oe" | "ix" | "dx" | "plan" | "notes" | "advice" | "followUp";
+export type SectionKey = "cc" | "history" | "oe" | "labs" | "ix" | "dx" | "plan" | "notes" | "advice" | "followUp";
 
-export const SECTION_KEYS: SectionKey[] = ["cc", "history", "oe", "ix", "dx", "plan", "notes", "advice", "followUp"];
+export const SECTION_KEYS: SectionKey[] = ["cc", "history", "oe", "labs", "ix", "dx", "plan", "notes", "advice", "followUp"];
 
 /** Default headings. Clinical headings stay English (as on Bangladeshi pads); advice and follow-up follow the language. */
 export function defaultSectionLabel(key: SectionKey, lang: Lang): string {
   if (key === "advice") return lang === "bn" ? "উপদেশ" : "Advice";
   if (key === "followUp") return lang === "bn" ? "পুনরায় সাক্ষাৎ" : "Follow-up";
-  return { cc: "C/C", history: "History", oe: "O/E", ix: "Ix", dx: "Dx", plan: "Plan", notes: "Note" }[key];
+  return { cc: "C/C", history: "History", oe: "O/E", labs: "Reports", ix: "Ix", dx: "Dx", plan: "Plan", notes: "Note" }[key];
 }
 
 export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
@@ -286,6 +286,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     sec("oe", oeBlock(doc)),
     specialty,
     diagrams ? `<section class="diagrams">${diagrams}</section>` : "",
+    sec("labs", list((doc.labFindings ?? []).map((l) => l.text))),
     sec("ix", list(doc.investigations)),
     sec("dx", list(doc.diagnoses)),
     sec("plan", list(doc.plan ?? [])),
