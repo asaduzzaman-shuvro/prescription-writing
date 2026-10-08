@@ -25,7 +25,7 @@ import { useSession } from "@/lib/doctor/context";
 import { useMyProfile } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
 import { checkSafety, type SafetyResult } from "@/lib/doctor/safety";
-import { ageLabel, ageParts, parseJson, uuid } from "@/lib/doctor/util";
+import { ageLabel, ageParts, parseJson, resumeEditAfterPrint, uuid } from "@/lib/doctor/util";
 import { ChipList } from "./chips";
 import { KeyValueList } from "./kv-list";
 import { MedicineSearch } from "./med-search";
@@ -499,24 +499,6 @@ function VisitTypeControl({ encounterId, patientId, visitDate, chamberId, visitT
     </>
   );
 }
-
-/**
- * Marks a visit whose prescription was just finalised, so the browser's Back from the print screen
- * opens it for editing. Kept for the tab only; without storage the visit simply opens locked.
- * (Not history.replaceState: Next.js wraps it and puts back its own URL.)
- */
-const resumeEditAfterPrint = {
-  key: (encounterId: string) => `rx-resume-edit:${encounterId}`,
-  set(encounterId: string) {
-    try { sessionStorage.setItem(this.key(encounterId), "1"); } catch { /* storage unavailable */ }
-  },
-  has(encounterId: string) {
-    try { return typeof window !== "undefined" && sessionStorage.getItem(this.key(encounterId)) === "1"; } catch { return false; }
-  },
-  clear(encounterId: string) {
-    try { sessionStorage.removeItem(this.key(encounterId)); } catch { /* storage unavailable */ }
-  },
-};
 
 export function VisitScreen({ encounterId }: { encounterId: string }) {
   const db = usePowerSync();

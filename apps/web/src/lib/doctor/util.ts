@@ -51,3 +51,21 @@ export function normaliseMobile(input: string): string {
   if (digits.startsWith("88")) return digits.slice(2);
   return digits;
 }
+
+/**
+ * Marks a visit whose prescription was just finalised, so the browser's Back from the print screen
+ * opens it for editing. Kept for the tab only; without storage the visit simply opens locked.
+ * (Not history.replaceState: Next.js wraps it and puts back its own URL.)
+ */
+export const resumeEditAfterPrint = {
+  key: (encounterId: string) => `rx-resume-edit:${encounterId}`,
+  set(encounterId: string) {
+    try { sessionStorage.setItem(this.key(encounterId), "1"); } catch { /* storage unavailable */ }
+  },
+  has(encounterId: string) {
+    try { return typeof window !== "undefined" && sessionStorage.getItem(this.key(encounterId)) === "1"; } catch { return false; }
+  },
+  clear(encounterId: string) {
+    try { sessionStorage.removeItem(this.key(encounterId)); } catch { /* storage unavailable */ }
+  },
+};
