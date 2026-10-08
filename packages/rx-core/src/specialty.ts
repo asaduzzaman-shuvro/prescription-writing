@@ -60,6 +60,12 @@ export interface EardrumMark {
   x: number;
   y: number;
 }
+/** Whole-drum appearance drawn from the TM answer (intact light reflex, congested vessels, dull, not visible). */
+export const TM_LOOKS = ["intact", "congested", "dull", "hidden"] as const;
+export type TmLook = (typeof TM_LOOKS)[number];
+/** Central perforation drawn as a hole around the umbo, sized from the "Perforation size" answer. */
+export const PERF_DISC_SIZES = ["small", "medium", "large"] as const;
+export type PerfDiscSize = (typeof PERF_DISC_SIZES)[number];
 export interface EardrumValue {
   perforation: EardrumZone[];
   retraction: EardrumZone[];
@@ -67,7 +73,10 @@ export interface EardrumValue {
   bulging?: boolean;
   /** Free-hand strokes, each "x,y x,y …" in drum coordinates (left drum: inside the mirrored group). */
   strokes?: string[];
+  look?: TmLook;
+  disc?: PerfDiscSize;
 }
+export type NormalizedEardrum = Required<Omit<EardrumValue, "look" | "disc">> & Pick<EardrumValue, "look" | "disc">;
 /** Per ear, so a drawing can't grow without bound inside the prescription. */
 export const EARDRUM_LIMITS = DRAWING_LIMITS;
 
@@ -169,15 +178,19 @@ export function eardrumZonePath(zone: EardrumZone): string {
 export const EARDRUM_DEFS = DRAWING_DEFS;
 
 /** Clean an eardrum value from the (client-writable) findings: known zones/kinds only, coordinates clamped, limits applied. */
-export function normalizeEardrum(v: unknown): Required<EardrumValue> {
+export function normalizeEardrum(v: unknown): NormalizedEardrum {
   const o = (v && typeof v === "object" ? v : {}) as Partial<EardrumValue>;
   const zones = (a: unknown) => (Array.isArray(a) ? a.filter((z): z is EardrumZone => (EARDRUM_ZONES as readonly string[]).includes(z)) : []);
+  const look = (TM_LOOKS as readonly unknown[]).includes(o.look) ? o.look : undefined;
+  const disc = (PERF_DISC_SIZES as readonly unknown[]).includes(o.disc) ? o.disc : undefined;
   return {
     perforation: zones(o.perforation),
     retraction: zones(o.retraction),
     marks: normalizeMarks(o.marks, EARDRUM_MARKS),
     bulging: o.bulging === true,
     strokes: normalizeStrokes(o.strokes),
+    ...(look ? { look } : {}),
+    ...(disc ? { disc } : {}),
   };
 }
 
@@ -209,10 +222,135 @@ const BULGING_SVG = Array.from({ length: 12 }, (_, i) => {
   return `<line x1="${r1(50 + 40 * Math.cos(a))}" y1="${r1(50 + 40 * Math.sin(a))}" x2="${r1(50 + 44 * Math.cos(a))}" y2="${r1(50 + 44 * Math.sin(a))}" stroke="#111" stroke-width="1"/>`;
 }).join("");
 
-/** Bulging ticks, marks and free-hand strokes; drawn over the zones (shared with the editor). */
+/** Whole-drum appearance. Shapes only (no text), so it reads the same on the mirrored left drum. */
+const LOOK_SVG: Record<TmLook, string> = {
+  // Cone of light from the umbo, antero-inferior.
+  intact: `<path d="M53,59 L29,77 L36,83 Z" fill="#fff" stroke="#111" stroke-width="0.6"/>`,
+  // Radial vessels from the annulus and one along the handle of the malleus.
+  congested:
+    Array.from({ length: 10 }, (_, i) => {
+      const a = ((i * 36 + 18) * Math.PI) / 180;
+      return `<line x1="${r1(50 + 37 * Math.cos(a))}" y1="${r1(50 + 37 * Math.sin(a))}" x2="${r1(50 + 28 * Math.cos(a))}" y2="${r1(50 + 28 * Math.sin(a))}" stroke="#111" stroke-width="0.7"/>`;
+    }).join("") + `<path d="M52.5,27 Q55,36 53.5,42 T56,54" fill="none" stroke="#111" stroke-width="0.7"/>`,
+  // Lustreless: a light stipple wash and no light reflex.
+  dull: `<circle cx="50" cy="50" r="37.2" fill="url(#stipple)" fill-opacity="0.35"/>`,
+  // Not visible: drum greyed out and crossed.
+  hidden: `<circle cx="50" cy="50" r="37.2" fill="#bbb"/><line x1="24" y1="24" x2="76" y2="76" stroke="#111" stroke-width="1.2"/><line x1="76" y1="24" x2="24" y2="76" stroke="#111" stroke-width="1.2"/>`,
+};
+
+const DISC_R: Record<PerfDiscSize, number> = { small: 7, medium: 12, large: 18 };
+/** Central perforation: a hole round the umbo, with the malleus handle still showing (grey on the black hole). */
+const discSvg = (size: PerfDiscSize) =>
+  `<circle cx="50" cy="58" r="${DISC_R[size]}" fill="#111"/><line x1="50" y1="26" x2="54" y2="56" stroke="#888" stroke-width="2"/>`;
+
+/** Appearance, central perforation, bulging ticks, marks and free-hand strokes; drawn over the zones (shared with the editor). */
 export function eardrumOverlaySvg(value: unknown): string {
   const v = normalizeEardrum(value);
-  return (v.bulging ? BULGING_SVG : "") + v.marks.map((m) => eardrumMarkSvg(m.kind, m.x, m.y)).join("") + v.strokes.map(strokeSvg).join("");
+  return (
+    (v.look ? LOOK_SVG[v.look] : "") +
+    (v.disc ? discSvg(v.disc) : "") +
+    (v.bulging ? BULGING_SVG : "") +
+    v.marks.map((m) => eardrumMarkSvg(m.kind, m.x, m.y)).join("") +
+    v.strokes.map(strokeSvg).join("")
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TM answer → TM map (the TM dropdown draws a starting picture the doctor can still edit)
+// ---------------------------------------------------------------------------
+
+/** ENT template fields that drive the TM map. */
+export const TM_LINK = { tm: "ear_tm", perfType: "ear_perf_type", perfSize: "ear_perf_size", map: "ear_tm_map" } as const;
+
+/** What one TM answer draws on that ear's map. */
+export interface TmPreset {
+  perforation?: EardrumZone[];
+  retraction?: EardrumZone[];
+  bulging?: boolean;
+  look?: TmLook;
+  disc?: PerfDiscSize;
+}
+
+const PARS_TENSA: EardrumZone[] = ["as", "ai", "ps", "pi"];
+
+/** The picture for a TM answer (option text as in the ENT template; anything else draws nothing). */
+export function tmPreset(tm: string | undefined, perfType?: string, perfSize?: string): TmPreset {
+  switch (tm) {
+    case "Intact":
+      return { look: "intact" };
+    case "Retracted":
+      return { retraction: PARS_TENSA };
+    case "Bulging":
+      return { bulging: true };
+    case "Congested":
+      return { look: "congested" };
+    case "Dull":
+      return { look: "dull" };
+    case "Not visible":
+      return { look: "hidden" };
+    case "Perforated":
+      switch (perfType) {
+        case "Subtotal":
+          return { perforation: PARS_TENSA };
+        case "Total":
+          return { perforation: [...EARDRUM_ZONES] };
+        case "Attic":
+          return { perforation: ["attic"] };
+        case "Marginal":
+          return { perforation: ["ps"] };
+        default: {
+          // Central, or type not chosen yet.
+          const size = perfSize?.toLowerCase();
+          return { disc: (PERF_DISC_SIZES as readonly string[]).includes(size ?? "") ? (size as PerfDiscSize) : "medium" };
+        }
+      }
+    default:
+      return {};
+  }
+}
+
+/** Swap the old answer's picture for the new one; the doctor's own taps elsewhere, marks and strokes stay. */
+export function applyTmPreset(ear: unknown, prev: TmPreset, next: TmPreset): EardrumValue {
+  const e = normalizeEardrum(ear);
+  const keep = (zones: EardrumZone[], drop: EardrumZone[] = []) => zones.filter((z) => !drop.includes(z));
+  const add = (zones: EardrumZone[], extra: EardrumZone[] = []) => [...zones, ...extra.filter((z) => !zones.includes(z))];
+  // A zone is either perforated or retracted, never both (as when tapping).
+  const perforation = add(keep(keep(e.perforation, prev.perforation), next.retraction), next.perforation);
+  const retraction = add(keep(keep(e.retraction, prev.retraction), next.perforation), next.retraction);
+  const look = next.look ?? (e.look === prev.look ? undefined : e.look);
+  const disc = next.disc ?? (e.disc === prev.disc ? undefined : e.disc);
+  return {
+    perforation,
+    retraction,
+    marks: e.marks,
+    strokes: e.strokes,
+    bulging: next.bulging === true || (e.bulging && !prev.bulging),
+    ...(look ? { look } : {}),
+    ...(disc ? { disc } : {}),
+  };
+}
+
+/**
+ * Redraw the TM map for each ear whose TM / perforation answers changed between `prev` and `next`.
+ * A no-op for templates without these fields (eyes, vascular) or without a TM map.
+ */
+export function syncTmMap(schema: SpecialtyTemplateSchema, prev: Findings, next: Findings): Findings {
+  if (!schema.sections.some((s) => s.fields.some((f) => f.id === TM_LINK.map && f.type === "eardrum"))) return next;
+  const answer = (f: Findings, id: string, side: Side2) => {
+    const v = (f[id] as LateralValue<unknown> | undefined)?.[side];
+    return typeof v === "string" ? v : undefined;
+  };
+  const preset = (f: Findings, side: Side2) => tmPreset(answer(f, TM_LINK.tm, side), answer(f, TM_LINK.perfType, side), answer(f, TM_LINK.perfSize, side));
+  let map = next[TM_LINK.map] as LateralValue<EardrumValue> | undefined;
+  let changed = false;
+  for (const side of ["right", "left"] as const) {
+    const before = preset(prev, side), after = preset(next, side);
+    // Same picture (e.g. perforation size changed while the TM is "Retracted"): leave the doctor's edits alone.
+    if (JSON.stringify(before) === JSON.stringify(after)) continue;
+    map = { ...map, [side]: applyTmPreset(map?.[side], before, after) };
+    changed = true;
+  }
+  return changed ? { ...next, [TM_LINK.map]: map } : next;
 }
 
 export function eardrumSvg(value: EardrumValue | undefined, side: Side2): string {
@@ -246,9 +384,9 @@ export function eardrumLegendSvg(keys: EardrumLegendKey[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 86 ${used.length * row + 1}"><defs>${EARDRUM_DEFS}</defs>${rows.join("")}</svg>`;
 }
 
-function eardrumUsed(v: Required<EardrumValue>): EardrumLegendKey[] {
+function eardrumUsed(v: NormalizedEardrum): EardrumLegendKey[] {
   return [
-    ...(v.perforation.length ? (["perforation"] as const) : []),
+    ...(v.perforation.length || v.disc ? (["perforation"] as const) : []),
     ...(v.retraction.length ? (["retraction"] as const) : []),
     ...(v.bulging ? (["bulging"] as const) : []),
     ...v.marks.map((m) => m.kind),
@@ -303,6 +441,7 @@ function eardrumText(value: EardrumValue | undefined): string {
   if (!value) return "";
   const v = normalizeEardrum(value);
   const parts: string[] = [];
+  if (v.disc) parts.push(`central perforation (${v.disc})`);
   if (v.perforation.length) parts.push(`perforation ${v.perforation.map((z) => ZONE_LABEL[z]).join("+")}`);
   if (v.retraction.length) parts.push(`retraction ${v.retraction.map((z) => ZONE_LABEL[z]).join("+")}`);
   for (const k of EARDRUM_MARKS) if (v.marks.some((m) => m.kind === k)) parts.push(EARDRUM_MARK_LABEL[k].toLowerCase());
@@ -350,8 +489,9 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
       if (f.type === "eardrum") {
         const lv = v as LateralValue<EardrumValue>;
         const r = eardrumText(lv.right), l = eardrumText(lv.left);
-        if (r || l) {
-          lines.push({ label: f.label, value: [r && `R: ${r}`, l && `L: ${l}`].filter(Boolean).join(" · ") });
+        // The appearance alone (e.g. "Dull") has no words here, since the TM line already says it, but still prints the drums.
+        if (r || l || normalizeEardrum(lv.right).look || normalizeEardrum(lv.left).look) {
+          if (r || l) lines.push({ label: f.label, value: [r && `R: ${r}`, l && `L: ${l}`].filter(Boolean).join(" · ") });
           diagrams.push({ title: "Right TM", svg: eardrumSvg(lv.right, "right"), kind: "tm" }, { title: "Left TM", svg: eardrumSvg(lv.left, "left"), kind: "tm" });
           // A key only when the new symbols are used, so plain perforation/retraction prints as before.
           const used = [...eardrumUsed(normalizeEardrum(lv.right)), ...eardrumUsed(normalizeEardrum(lv.left))];

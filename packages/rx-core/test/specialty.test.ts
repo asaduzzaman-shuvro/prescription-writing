@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { airBoneGap, audiogramSvg, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, ptaAverage, validateTemplateSchema } from "../src";
+import { airBoneGap, applyTmPreset, audiogramSvg, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, ptaAverage, sanitizeSvg, syncTmMap, TM_LOOKS, tmPreset, validateTemplateSchema } from "../src";
 
 describe("ENT template", () => {
   it("is a valid schema", () => {
@@ -111,5 +111,74 @@ describe("TM map symbols and drawing", () => {
     const out = flattenFindings(ENT_TEMPLATE, { ear_tm_map: { left: { perforation: [], retraction: [], strokes: ["10,10 20,20"] } } });
     expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "L: drawing" });
     expect(out.diagrams).toHaveLength(2);
+  });
+});
+
+describe("TM answer draws on the TM map", () => {
+  it("maps every TM option, and perforation type/size", () => {
+    expect(tmPreset("Intact")).toEqual({ look: "intact" });
+    expect(tmPreset("Retracted")).toEqual({ retraction: ["as", "ai", "ps", "pi"] });
+    expect(tmPreset("Bulging")).toEqual({ bulging: true });
+    expect(tmPreset("Congested")).toEqual({ look: "congested" });
+    expect(tmPreset("Dull")).toEqual({ look: "dull" });
+    expect(tmPreset("Not visible")).toEqual({ look: "hidden" });
+    expect(tmPreset("Perforated")).toEqual({ disc: "medium" });
+    expect(tmPreset("Perforated", "Central", "Large")).toEqual({ disc: "large" });
+    expect(tmPreset("Perforated", "Subtotal")).toEqual({ perforation: ["as", "ai", "ps", "pi"] });
+    expect(tmPreset("Perforated", "Total")).toEqual({ perforation: ["attic", "as", "ai", "ps", "pi"] });
+    expect(tmPreset("Perforated", "Attic")).toEqual({ perforation: ["attic"] });
+    expect(tmPreset("Perforated", "Marginal")).toEqual({ perforation: ["ps"] });
+    expect(tmPreset(undefined)).toEqual({});
+    expect(tmPreset("Renamed by admin")).toEqual({});
+  });
+
+  it("swaps the old picture for the new one and keeps the doctor's marks and strokes", () => {
+    const mine = { marks: [{ kind: "grommet" as const, x: 40, y: 50 }], strokes: ["10,10 20,20"] };
+    const perforated = applyTmPreset({ perforation: ["attic"], retraction: [], ...mine }, {}, tmPreset("Perforated", "Subtotal"));
+    expect(perforated.perforation).toEqual(["attic", "as", "ai", "ps", "pi"]);
+    const retracted = applyTmPreset(perforated, tmPreset("Perforated", "Subtotal"), tmPreset("Retracted"));
+    expect(retracted).toMatchObject({ perforation: ["attic"], retraction: ["as", "ai", "ps", "pi"], ...mine, bulging: false });
+    const congested = applyTmPreset({ ...retracted, bulging: true }, tmPreset("Retracted"), tmPreset("Congested"));
+    expect(congested).toMatchObject({ perforation: ["attic"], retraction: [], bulging: true, look: "congested" });
+    const cleared = applyTmPreset(congested, tmPreset("Congested"), {});
+    expect(cleared.look).toBeUndefined();
+    expect(applyTmPreset({ perforation: [], retraction: [], bulging: true }, tmPreset("Bulging"), tmPreset("Dull")).bulging).toBe(false);
+  });
+
+  it("redraws only the ear whose answers changed", () => {
+    const prev = { ear_tm: { right: "Intact", left: "Dull" }, ear_tm_map: { left: { perforation: [], retraction: [], look: "dull", strokes: ["1,1 2,2"] } } };
+    const next = syncTmMap(ENT_TEMPLATE, prev, { ...prev, ear_tm: { right: "Perforated", left: "Dull" } });
+    expect(next.ear_tm_map).toEqual({ right: { perforation: [], retraction: [], marks: [], strokes: [], bulging: false, disc: "medium" }, left: prev.ear_tm_map.left });
+    const sized = syncTmMap(ENT_TEMPLATE, next, { ...next, ear_perf_size: { right: "Small" } });
+    expect((sized.ear_tm_map as { right: { disc: string } }).right.disc).toBe("small");
+    // Same picture: the doctor's edits are left alone.
+    const edited = { ...prev, ear_tm: { right: "Retracted" }, ear_tm_map: { right: { perforation: [], retraction: ["ai"] } } };
+    expect(syncTmMap(ENT_TEMPLATE, edited, { ...edited, ear_perf_size: { right: "Large" } })).toEqual({ ...edited, ear_perf_size: { right: "Large" } });
+    // Templates without a TM map are untouched.
+    const eye = { sections: [{ id: "x", title: "X", fields: [{ id: "ear_tm", label: "TM", type: "select" as const, lateral: true, options: ["Intact"] }] }] };
+    const f = { ear_tm: { right: "Intact" } };
+    expect(syncTmMap(eye, {}, f)).toBe(f);
+  });
+
+  it("draws each look and the central perforation, cleans bad values, and survives the sanitiser", () => {
+    for (const look of TM_LOOKS) {
+      const svg = eardrumSvg({ perforation: [], retraction: [], look, disc: "large" }, "left");
+      expect(sanitizeSvg(svg)).toBe(svg);
+      expect(svg.slice(svg.indexOf("<g transform"), svg.indexOf("</g>"))).not.toContain("<text");
+    }
+    expect(eardrumSvg({ perforation: [], retraction: [], look: "hidden" }, "right")).toContain('fill="#bbb"');
+    expect(eardrumSvg({ perforation: [], retraction: [], disc: "small" }, "right")).toContain('r="7" fill="#111"');
+    const bad = normalizeEardrum({ look: "<script>", disc: "huge" });
+    expect(bad.look).toBeUndefined();
+    expect(bad.disc).toBeUndefined();
+  });
+
+  it("prints the central perforation in words, and prints drums for an appearance alone", () => {
+    const out = flattenFindings(ENT_TEMPLATE, { ear_tm: { right: "Perforated", left: "Dull" }, ear_tm_map: { right: { perforation: [], retraction: [], disc: "medium" }, left: { perforation: [], retraction: [], look: "dull" } } });
+    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "R: central perforation (medium)" });
+    expect(out.diagrams.map((d) => d.kind)).toEqual(["tm", "tm"]);
+    const lookOnly = flattenFindings(ENT_TEMPLATE, { ear_tm_map: { left: { perforation: [], retraction: [], look: "hidden" } } });
+    expect(lookOnly.groups).toEqual([]);
+    expect(lookOnly.diagrams).toHaveLength(2);
   });
 });

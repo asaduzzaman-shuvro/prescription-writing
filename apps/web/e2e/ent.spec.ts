@@ -61,7 +61,8 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   const frame = page.frameLocator("[data-testid=print-frame]");
   await expect(frame.locator("section h3", { hasText: "Ear" })).toBeVisible();
   await expect(frame.getByText("R Perforated, L Intact")).toBeVisible();
-  await expect(frame.getByText("R: perforation AI+PI; drawing · L: grommet")).toBeVisible();
+  // "Perforated" with no type yet draws a central perforation; the AI and PI taps add to it.
+  await expect(frame.getByText("R: central perforation (medium); perforation AI+PI; drawing · L: grommet")).toBeVisible();
   await expect(frame.locator("figure.diagram", { hasText: "Right TM" }).locator("polyline")).toHaveCount(1);
   await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Grommet" })).toHaveCount(1);
   await expect(frame.getByText("R tonsil congested; ulcer")).toBeVisible();
@@ -72,6 +73,25 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await expect(frame.locator(".diagram svg")).toHaveCount(7);
   await expect(frame.locator(".instr")).toContainText("ডান কানে");
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/ent-print.png`, fullPage: true });
+});
+
+test("TM answer draws on the TM map", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  await registerPatient(page, { name: `ENT TM ${uniq()}`, age: "35", sex: "Male", mobile: mobile() });
+  const exam = page.getByTestId("specialty-exam");
+  const tm = exam.getByLabel("TM", { exact: true });
+  const right = page.getByTestId("eardrum-right"), left = page.getByTestId("eardrum-left");
+
+  await tm.nth(0).selectOption("Perforated");
+  await expect(right.locator('circle[r="12"][fill="#111"]')).toHaveCount(1); // central, medium until sized
+  await exam.getByLabel("Perforation", { exact: true }).nth(0).selectOption("Subtotal");
+  await expect(right.locator('circle[r="12"]')).toHaveCount(0);
+  await expect(right.locator('[data-zone="ai"]')).toHaveAttribute("fill", "#111");
+  await tm.nth(0).selectOption("Retracted");
+  await expect(right.locator('[data-zone="ai"]')).toHaveAttribute("fill", "url(#hatch)");
+  await tm.nth(1).selectOption("Not visible");
+  await expect(left.locator('circle[fill="#bbb"]')).toHaveCount(1);
 });
 
 test("ENT doctor can always print blank TM maps and throat/neck pictures, to mark by pen", async ({ page }) => {

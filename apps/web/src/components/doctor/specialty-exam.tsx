@@ -15,6 +15,7 @@ import {
   hearingGrade,
   normalizeEardrum,
   ptaAverage,
+  syncTmMap,
   type AudiogramEar,
   type AudiogramValue,
   type Diagram,
@@ -282,7 +283,8 @@ export function SpecialtyExam({ encounterId, specialtyCode, readOnly, onFlatten 
   if (!schema || findings === null) return null;
 
   function update(id: string, v: unknown) {
-    const next = { ...findings, [id]: v };
+    // A TM / perforation answer also redraws that ear's TM map.
+    const next = syncTmMap(schema!, findings!, { ...findings, [id]: v });
     setFindings(next);
     pending.current = next;
     clearTimeout(timer.current);
