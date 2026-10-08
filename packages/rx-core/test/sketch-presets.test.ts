@@ -59,3 +59,44 @@ describe("throat & neck answers draw on the pictures", () => {
     }
   });
 });
+
+describe("nose & PNS answers draw on the nose picture", () => {
+  it("maps septum, turbinates, mucosa, polyps, discharge and sinus tenderness", () => {
+    const p = sketchPresets({
+      nose_septum: "DNS to left",
+      nose_turbinate: { right: "Hypertrophied", left: "Pale & boggy" },
+      nose_mucosa: "Congested",
+      nose_polyp: { right: "Present (grade 2)", left: "Antrochoanal" },
+      nose_discharge: { right: "Mucopurulent", left: "None" },
+      nose_sinus_tender: ["Maxillary", "Frontal"],
+    }).nose;
+    expect(p.zones).toEqual({
+      r_cavity: "congested", l_cavity: "congested", r_it: "hypertrophied", l_it: "pale",
+      r_maxillary: "tender", l_maxillary: "tender", r_frontal: "tender", l_frontal: "tender",
+    });
+    expect(p.marks.map((m) => m.kind)).toEqual(["dev_l", "polyp", "polyp", "discharge", "polyp", "polyp"]);
+    expect(p.marks.filter((m) => m.kind === "polyp").every((m, i) => (i < 2 ? m.x < 50 : m.x > 50))).toBe(true);
+  });
+
+  it("draws the septum findings on the septum", () => {
+    const kinds = (septum: string) => sketchPresets({ nose_septum: septum }).nose.marks.map((m) => [m.kind, m.x]);
+    expect(kinds("S-shaped DNS")).toEqual([["dev_r", 50], ["dev_l", 50]]);
+    expect(kinds("Spur right")).toEqual([["spur_r", 50]]);
+    expect(kinds("Perforation")).toEqual([["perforation", 50]]);
+    expect(kinds("Haematoma")).toEqual([["haematoma", 50]]);
+    expect(kinds("Central")).toEqual([]);
+  });
+
+  it("draws nothing for normal answers", () => {
+    const p = sketchPresets({ nose_external: "Saddle", nose_septum: "Central", nose_turbinate: { right: "Normal" }, nose_mucosa: "Normal", nose_polyp: { right: "Absent" }, nose_cottle: { right: "Positive" }, nose_sinus_tender: ["None"] });
+    expect(p.nose).toEqual({ zones: {}, marks: [] });
+  });
+
+  it("writes the nose picture into the ENT template's nose map", () => {
+    const next = syncSketchMaps(ENT_TEMPLATE, {}, { nose_turbinate: { right: "Congested" } });
+    expect(next.nose_map).toEqual({ zones: { r_it: "congested" }, marks: [], strokes: [] });
+    const all = sketchPresets({ nose_septum: "S-shaped DNS", nose_mucosa: "Crusting", nose_polyp: { right: "Present (grade 3)" }, nose_discharge: { left: "Watery" }, nose_sinus_tender: ["Ethmoid"] }).nose;
+    const svg = sketchSvg("nose", applySketchPreset("nose", undefined, { zones: {}, marks: [] }, all));
+    expect(sanitizeSvg(svg)).toBe(svg);
+  });
+});

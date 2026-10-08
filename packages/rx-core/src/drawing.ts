@@ -7,7 +7,8 @@
 /** Fill patterns used by every drawing, its key and the editor (identical everywhere, so repeated ids are harmless). */
 export const DRAWING_DEFS =
   `<pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#333" stroke-width="1"/></pattern>` +
-  `<pattern id="stipple" width="2.5" height="2.5" patternUnits="userSpaceOnUse"><circle cx="1.25" cy="1.25" r="0.55" fill="#111"/></pattern>`;
+  `<pattern id="stipple" width="2.5" height="2.5" patternUnits="userSpaceOnUse"><circle cx="1.25" cy="1.25" r="0.55" fill="#111"/></pattern>` +
+  `<pattern id="cross" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#333" stroke-width="0.8"/><line x1="0" y1="0" x2="4" y2="0" stroke="#333" stroke-width="0.8"/></pattern>`;
 
 /** Per drawing, so a drawing can't grow without bound inside the prescription. */
 export const DRAWING_LIMITS = { marks: 20, strokes: 40, points: 2000 } as const;

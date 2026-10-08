@@ -37,6 +37,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
         { id: "nose_polyp", label: "Polyp", type: "select", lateral: true, options: ["Absent", "Present (grade 1)", "Present (grade 2)", "Present (grade 3)", "Antrochoanal"], normal: "Absent" },
         { id: "nose_cottle", label: "Cottle's test", type: "select", lateral: true, options: ["Negative", "Positive"], normal: "Negative" },
         { id: "nose_sinus_tender", label: "Sinus tenderness", type: "multiselect", options: ["None", "Maxillary", "Frontal", "Ethmoid"], normal: "None" },
+        { id: "nose_map", label: "Nose & sinus map", type: "sketch", sketch: "nose" },
         { id: "nose_dne", label: "DNE findings", type: "text" },
       ],
     },

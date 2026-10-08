@@ -90,7 +90,7 @@ describe("sketches in the ENT exam", () => {
   it("are valid template fields; an unknown picture is rejected", () => {
     expect(validateTemplateSchema(ENT_TEMPLATE)).toEqual([]);
     const bad = { sections: [{ id: "t", title: "T", fields: [{ id: "x", label: "X", type: "sketch", sketch: "foot" }] }] };
-    expect(validateTemplateSchema(bad)).toEqual([`field x: "sketch" must be one of oropharynx, larynx, neck`]);
+    expect(validateTemplateSchema(bad)).toEqual([`field x: "sketch" must be one of nose, oropharynx, larynx, neck`]);
   });
 
   it("print a line, the picture and its key; a drawing alone needs no key", () => {

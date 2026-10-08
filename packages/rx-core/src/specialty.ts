@@ -4,7 +4,7 @@
  * and small vector diagrams for the prescription.
  */
 import { DRAWING_DEFS, DRAWING_LIMITS, normalizeMarks, normalizeStrokes, r1, strokeSvg } from "./drawing";
-import { isSketchId, SKETCHES, sketchLegendSvg, sketchNeedsLegend, sketchSvg, sketchText, type SketchId } from "./sketches";
+import { isSketchId, SKETCH_IDS, SKETCHES, sketchLegendSvg, sketchNeedsLegend, sketchSvg, sketchText, type SketchId } from "./sketches";
 import type { ExamFindingLine } from "./types";
 
 export type FieldType = "select" | "multiselect" | "text" | "number" | "eardrum" | "audiogram" | "sketch";
@@ -19,7 +19,7 @@ export interface TemplateField {
   unit?: string;
   /** Option printed as "normal" is omitted from print to keep the pad short. */
   normal?: string;
-  /** For `type: "sketch"`: which picture (oropharynx, larynx, neck). */
+  /** For `type: "sketch"`: which picture (nose, oropharynx, larynx, neck). */
   sketch?: SketchId;
 }
 
@@ -115,7 +115,7 @@ export function validateTemplateSchema(raw: unknown): string[] {
       if (ids.has(f.id)) errors.push(`duplicate field id "${f.id}"`);
       ids.add(f.id);
       if (!FIELD_TYPES.includes(f.type)) errors.push(`field ${f.id}: unknown type "${f.type}"`);
-      if (f.type === "sketch" && !isSketchId(f.sketch)) errors.push(`field ${f.id}: "sketch" must be one of oropharynx, larynx, neck`);
+      if (f.type === "sketch" && !isSketchId(f.sketch)) errors.push(`field ${f.id}: "sketch" must be one of ${SKETCH_IDS.join(", ")}`);
       if ((f.type === "select" || f.type === "multiselect") && (!Array.isArray(f.options) || !f.options.length))
         errors.push(`field ${f.id}: options required for ${f.type}`);
     });

@@ -3,11 +3,12 @@ import { normalizeSketch, type NormalizedSketch, type SketchId } from "./sketche
 import type { Findings, LateralValue, SpecialtyTemplateSchema } from "./specialty";
 
 /**
- * Throat & neck answers → the throat and neck pictures. Like the TM map, an answer draws a starting
+ * Nose, throat & neck answers → the nose, throat and neck pictures. Like the TM map, an answer draws a starting
  * picture the doctor can still edit; changing the answer swaps only what the old answer drew.
  * Option text is matched as written in the ENT template, so a renamed option simply draws nothing.
- * Findings with no side in the answer (a single polyp, growth, quinsy) aren't drawn: the doctor
- * places them, since guessing a side would put a wrong mark on the prescription.
+ * Findings with no side in the answer (a single laryngeal polyp, growth, quinsy) and findings the
+ * pictures can't show (external nose, Cottle's test) aren't drawn: the doctor places what applies,
+ * since guessing a side would put a wrong mark on the prescription.
  */
 
 /** What the answers draw on one picture: zone states and symbols. */
@@ -18,6 +19,12 @@ export interface SketchPreset {
 
 /** ENT template fields read here. */
 export const SKETCH_LINK = {
+  septum: "nose_septum",
+  turbinate: "nose_turbinate",
+  mucosa: "nose_mucosa",
+  discharge: "nose_discharge",
+  polyp: "nose_polyp",
+  sinusTender: "nose_sinus_tender",
   tonsilGrade: "thr_tonsil_grade",
   tonsil: "thr_tonsil",
   ppw: "thr_ppw",
@@ -36,6 +43,15 @@ const side = (f: Findings, id: string, s: "right" | "left") => {
 
 /** Symbol positions, in each picture's own coordinates (patient's right on the viewer's left). */
 const AT = {
+  // Septum symbols sit on the septum (x = 50); polyps run down from the middle meatus.
+  deviation: [50, 58],
+  sShape: { right: [50, 38], left: [50, 74] },
+  spur: [50, 82],
+  septalHole: [50, 64],
+  haematoma: [50, 56],
+  polyp: { right: [[42, 62], [45, 72], [45, 88]], left: [[61.5, 62], [58.5, 72], [58.5, 88]] },
+  discharge: { right: [41, 90], left: [59, 90] },
+  crust: { right: [42, 74], left: [58, 74] }, // on the inferior turbinates
   tonsil: { right: { pus: [24, 52], membrane: [24, 62] }, left: { pus: [76, 52], membrane: [76, 62] } },
   ppwBulge: [50, 56],
   // Junction of the anterior and middle thirds of each cord: the usual site of vocal nodules.
@@ -46,8 +62,50 @@ const mark = (kind: string, [x, y]: readonly [number, number]): PlacedMark => ({
 
 /** Every picture's preset for these answers. Later rules win a zone (e.g. "Congested" over a grade's "Swollen"). */
 export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
-  const oro = empty(), lar = empty(), neck = empty();
+  const nose = empty(), oro = empty(), lar = empty(), neck = empty();
   const L = SKETCH_LINK;
+
+  switch (one(f, L.septum)) {
+    case "DNS to right":
+      nose.marks.push(mark("dev_r", AT.deviation));
+      break;
+    case "DNS to left":
+      nose.marks.push(mark("dev_l", AT.deviation));
+      break;
+    case "S-shaped DNS":
+      nose.marks.push(mark("dev_r", AT.sShape.right), mark("dev_l", AT.sShape.left));
+      break;
+    case "Spur right":
+      nose.marks.push(mark("spur_r", AT.spur));
+      break;
+    case "Spur left":
+      nose.marks.push(mark("spur_l", AT.spur));
+      break;
+    case "Perforation":
+      nose.marks.push(mark("perforation", AT.septalHole));
+      break;
+    case "Haematoma":
+      nose.marks.push(mark("haematoma", AT.haematoma));
+      break;
+  }
+  const mucosa = one(f, L.mucosa);
+  if (mucosa === "Congested" || mucosa === "Pale") nose.zones.r_cavity = nose.zones.l_cavity = mucosa === "Congested" ? "congested" : "pale";
+  if (mucosa === "Crusting") nose.marks.push(mark("crust", AT.crust.right), mark("crust", AT.crust.left));
+  for (const s of ["right", "left"] as const) {
+    const it = side(f, L.turbinate, s);
+    const st = it === "Hypertrophied" ? "hypertrophied" : it === "Pale & boggy" ? "pale" : it === "Congested" ? "congested" : undefined;
+    if (st) nose.zones[s === "right" ? "r_it" : "l_it"] = st;
+    const polyp = side(f, L.polyp, s);
+    // Grade 1–3: one polyp per grade, down from the middle meatus; antrochoanal: meatus to the floor.
+    const n = polyp === "Antrochoanal" ? 0 : Number(/grade (\d)/.exec(polyp ?? "")?.[1] ?? 0);
+    for (const at of polyp === "Antrochoanal" ? [AT.polyp[s][0], AT.polyp[s][2]] : AT.polyp[s].slice(0, n)) nose.marks.push(mark("polyp", at));
+    const discharge = side(f, L.discharge, s);
+    if (discharge && discharge !== "None") nose.marks.push(mark("discharge", AT.discharge[s]));
+  }
+  for (const sinus of many(f, L.sinusTender)) {
+    const k = ({ Maxillary: "maxillary", Frontal: "frontal", Ethmoid: "ethmoid" } as Record<string, string>)[sinus];
+    if (k) nose.zones[`r_${k}`] = nose.zones[`l_${k}`] = "tender";
+  }
 
   for (const s of ["right", "left"] as const) {
     const grade = side(f, L.tonsilGrade, s);
@@ -99,7 +157,7 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
       break;
   }
 
-  return { oropharynx: oro, larynx: lar, neck };
+  return { nose, oropharynx: oro, larynx: lar, neck };
 }
 
 const sameMark = (a: PlacedMark, b: PlacedMark) => a.kind === b.kind && a.x === b.x && a.y === b.y;
@@ -119,7 +177,7 @@ export function applySketchPreset(id: SketchId, value: unknown, prev: SketchPres
   return normalizeSketch(id, { zones, marks, strokes: v.strokes });
 }
 
-/** Redraw each throat/neck picture in the template whose answers changed between `prev` and `next`. */
+/** Redraw each nose/throat/neck picture in the template whose answers changed between `prev` and `next`. */
 export function syncSketchMaps(schema: SpecialtyTemplateSchema, prev: Findings, next: Findings): Findings {
   const before = sketchPresets(prev), after = sketchPresets(next);
   let out = next;

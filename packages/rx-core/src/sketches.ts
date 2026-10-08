@@ -1,17 +1,20 @@
 import { DRAWING_DEFS, normalizeMarks, normalizeStrokes, r1, strokeSvg, type PlacedMark } from "./drawing";
 
 /**
- * Throat and neck pictures for the ENT exam: an open-mouth (oropharynx) view, an indirect
- * laryngoscopy view and a front view of the neck with lymph node levels. Each picture is data —
+ * Nose, throat and neck pictures for the ENT exam: a front (coronal) view of the nose and sinuses, an
+ * open-mouth (oropharynx) view, an indirect laryngoscopy view and a front view of the neck with lymph
+ * node levels. Each picture is data —
  * a base outline, tappable zones, zone states and symbols — drawn by the same code on screen and on
  * paper. The patient's right is on the viewer's left in all three. Option sets follow common ENT
  * practice and must be reviewed by an ENT consultant before production use.
  */
 
-export const SKETCH_IDS = ["oropharynx", "larynx", "neck"] as const;
+export const SKETCH_IDS = ["nose", "oropharynx", "larynx", "neck"] as const;
 export type SketchId = (typeof SKETCH_IDS)[number];
 
-type Shape = "ulcer" | "patch" | "growth" | "pus" | "bulge" | "nodule" | "polyp" | "cyst" | "leukoplakia" | "node" | "mass" | "scar" | "sinus";
+type Shape =
+  | "ulcer" | "patch" | "growth" | "pus" | "bulge" | "nodule" | "polyp" | "cyst" | "leukoplakia" | "node" | "mass" | "scar" | "sinus"
+  | "bowR" | "bowL" | "spurR" | "spurL" | "hole";
 
 export interface SketchDef {
   id: SketchId;
@@ -159,7 +162,66 @@ const NECK: SketchDef = {
   ],
 };
 
-export const SKETCHES: Record<SketchId, SketchDef> = { oropharynx: OROPHARYNX, larynx: LARYNX, neck: NECK };
+// ---------------------------------------------------------------------------
+// Nose & sinuses (coronal: frontal sinuses at the top, maxillary sinuses beside the nasal cavities)
+// ---------------------------------------------------------------------------
+
+const R_NOSE = {
+  frontal: "M36,7 C39,2 47,2 48.5,7 L48.5,17 C44,18.5 39,17.5 36,14 Z",
+  ethmoid: poly("35.5,20 44,20 44,46 35.5,46"),
+  maxillary: "M12,50 L35.5,48 L35.5,92 C26,95 16,91 12,83 Z",
+  cavity: poly("44,20 48.5,20 48.5,94 35.5,94 35.5,46 44,46"),
+  mt: "M35.5,48 C42,47 46,52 45,57 C44,60 40,59 35.5,57 Z",
+  it: "M35.5,66 C43,64 47.5,71 46.5,79 C45,84 40,84 35.5,82 Z",
+};
+const NOSE: SketchDef = {
+  id: "nose",
+  title: "Nose & sinuses",
+  viewBox: [100, 108],
+  zones: [
+    ...(["frontal", "ethmoid", "maxillary", "cavity"] as const).flatMap((k) => {
+      const label = { frontal: "frontal sinus", ethmoid: "ethmoid", maxillary: "maxillary sinus", cavity: "nasal cavity" }[k];
+      return [
+        { id: `r_${k}`, label: `R ${label}`, path: R_NOSE[k] },
+        { id: `l_${k}`, label: `L ${label}`, path: mirror(R_NOSE[k]) },
+      ];
+    }),
+    { id: "septum", label: "Septum", path: poly("48.5,18 51.5,18 51.5,94 48.5,94") },
+    ...(["mt", "it"] as const).flatMap((k) => {
+      const label = k === "mt" ? "middle turbinate" : "inferior turbinate";
+      return [
+        { id: `r_${k}`, label: `R ${label}`, path: R_NOSE[k] },
+        { id: `l_${k}`, label: `L ${label}`, path: mirror(R_NOSE[k]) },
+      ];
+    }),
+  ],
+  base:
+    `<circle cx="22" cy="33" r="12" fill="none" stroke="#555" stroke-width="0.8"/><circle cx="78" cy="33" r="12" fill="none" stroke="#555" stroke-width="0.8"/>` + // orbits
+    `<line x1="10" y1="94.5" x2="90" y2="94.5" stroke="#111" stroke-width="1.5"/>` + // palate
+    [R_NOSE.mt, R_NOSE.it].flatMap((p) => [p, mirror(p)]).map((p) => `<path d="${p}" fill="none" stroke="#555" stroke-width="0.8"/>`).join("") + // turbinates
+    [[42, 13, "F"], [58, 13, "F"], [39.8, 35, "E"], [60.2, 35, "E"], [23, 72, "Max"], [77, 72, "Max"]]
+      .map(([x, y, t]) => text(x as number, y as number, t as string, 4.5, "#555")).join("") +
+    sides(105),
+  states: [
+    { id: "congested", label: "Congested", fill: "url(#hatch)" },
+    { id: "hypertrophied", label: "Hypertrophied", fill: "#bbb" },
+    { id: "pale", label: "Pale / boggy", fill: "url(#stipple)" },
+    { id: "tender", label: "Tender", fill: "url(#cross)" },
+  ],
+  marks: [
+    { kind: "polyp", label: "Polyp", shape: "polyp" },
+    { kind: "discharge", label: "Discharge", shape: "pus" },
+    { kind: "crust", label: "Crusting", shape: "leukoplakia" },
+    { kind: "dev_r", label: "Septum deviated to right", shape: "bowR" },
+    { kind: "dev_l", label: "Septum deviated to left", shape: "bowL" },
+    { kind: "spur_r", label: "Spur to right", shape: "spurR" },
+    { kind: "spur_l", label: "Spur to left", shape: "spurL" },
+    { kind: "perforation", label: "Septal perforation", shape: "hole" },
+    { kind: "haematoma", label: "Septal haematoma", shape: "mass" },
+  ],
+};
+
+export const SKETCHES: Record<SketchId, SketchDef> = { nose: NOSE, oropharynx: OROPHARYNX, larynx: LARYNX, neck: NECK };
 
 export function isSketchId(id: unknown): id is SketchId {
   return typeof id === "string" && (SKETCH_IDS as readonly string[]).includes(id);
@@ -169,8 +231,8 @@ export function isSketchId(id: unknown): id is SketchId {
 // Symbols
 // ---------------------------------------------------------------------------
 
-/** One symbol centred on x,y (shapes only). */
-function shapeSvg(shape: Shape, x: number, y: number): string {
+/** One symbol centred on x,y (shapes only). `compact` keeps the tall septum symbols within a key row. */
+function shapeSvg(shape: Shape, x: number, y: number, compact = false): string {
   const c = (dx: number, dy: number, r: number, fill: string, sw = 0.6) => `<circle cx="${r1(x + dx)}" cy="${r1(y + dy)}" r="${r}" fill="${fill}" stroke="#111" stroke-width="${sw}"/>`;
   switch (shape) {
     case "ulcer":
@@ -198,6 +260,20 @@ function shapeSvg(shape: Shape, x: number, y: number): string {
     case "scar":
       return `<line x1="${r1(x - 6)}" y1="${y}" x2="${r1(x + 6)}" y2="${y}" stroke="#111" stroke-width="0.9"/>` +
         [-4, -1.3, 1.3, 4].map((dx) => `<line x1="${r1(x + dx)}" y1="${r1(y - 1.6)}" x2="${r1(x + dx)}" y2="${r1(y + 1.6)}" stroke="#111" stroke-width="0.7"/>`).join("");
+    case "bowR":
+    case "bowL": {
+      // The septum bowing towards one side: blank out the straight septum here, then draw the curve.
+      const h = compact ? 4.5 : 9, d = (compact ? 5 : 10) * (shape === "bowR" ? -1 : 1);
+      return `<line x1="${x}" y1="${r1(y - h)}" x2="${x}" y2="${r1(y + h)}" stroke="#fff" stroke-width="3.4"/>` +
+        `<path d="M${x},${r1(y - h)} Q${r1(x + d)},${y} ${x},${r1(y + h)}" fill="none" stroke="#111" stroke-width="1.4"/>`;
+    }
+    case "spurR":
+    case "spurL": {
+      const d = shape === "spurR" ? -6 : 6;
+      return `<path d="M${x},${r1(y - 3)} L${r1(x + d)},${y} L${x},${r1(y + 3)} Z" fill="#111"/>`;
+    }
+    case "hole":
+      return `<ellipse cx="${x}" cy="${y}" rx="1.6" ry="3" fill="#111"/>`;
     case "sinus":
       return c(0, 0, 2.2, "#fff", 0.9) + `<circle cx="${x}" cy="${y}" r="0.7" fill="#111"/>`;
   }
@@ -258,7 +334,7 @@ export function sketchLegendSvg(id: SketchId, value: unknown): string {
   const row = 11;
   const rows = [
     ...usedStates.map((s) => (cy: number) => `<rect x="2" y="${cy - 4}" width="9" height="8" fill="${s.fill}" stroke="#555" stroke-width="0.6"/>${legendText(cy, s.label)}`),
-    ...usedMarks.map((m) => (cy: number) => `${shapeSvg(m.shape, 6.5, cy)}${legendText(cy, m.label)}`),
+    ...usedMarks.map((m) => (cy: number) => `${shapeSvg(m.shape, 6.5, cy, true)}${legendText(cy, m.label)}`),
   ].map((draw, i) => draw(6 + i * row));
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 86 ${rows.length * row + 1}"><defs>${DRAWING_DEFS}</defs>${rows.join("")}</svg>`;
 }

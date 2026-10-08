@@ -135,6 +135,42 @@ test("Throat & neck answers draw on the pictures; Reset clears a picture after c
   await expect(larynx.locator('[data-zone="l_cord"]')).toHaveAttribute("fill", "#bbb"); // other pictures untouched
 });
 
+test("Nose & PNS answers draw on the nose picture; Reset clears it after confirming", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  await registerPatient(page, { name: `ENT Nose ${uniq()}`, age: "26", sex: "Male", mobile: mobile() });
+  const exam = page.getByTestId("specialty-exam");
+  await exam.getByRole("button", { name: /Nose/ }).click();
+  const nose = page.getByTestId("sketch-nose"), summary = page.getByTestId("sketch-summary-nose");
+
+  await exam.getByLabel("Inferior turbinate", { exact: true }).nth(0).selectOption("Hypertrophied");
+  await expect(nose.locator('[data-zone="r_it"]')).toHaveAttribute("fill", "#bbb");
+  await exam.getByLabel("Septum", { exact: true }).selectOption("DNS to left");
+  await exam.getByRole("button", { name: "Maxillary", exact: true }).click();
+  await expect(summary).toHaveText("R maxillary sinus tender, L maxillary sinus tender, R inferior turbinate hypertrophied; septum deviated to left");
+  await exam.getByLabel("Septum", { exact: true }).selectOption("Spur right");
+  await expect(summary).toHaveText("R maxillary sinus tender, L maxillary sinus tender, R inferior turbinate hypertrophied; spur to right");
+
+  const reset = page.getByTestId("sketch-tools-nose").getByRole("button", { name: "Reset", exact: true });
+  page.once("dialog", (d) => void d.dismiss());
+  await reset.click();
+  await expect(summary).toContainText("spur to right");
+  page.once("dialog", (d) => void d.accept());
+  await reset.click();
+  await expect(summary).toHaveCount(0);
+  await expect(nose.locator('[data-zone="r_it"]')).toHaveAttribute("fill", "#fff");
+
+  // It prints like the throat pictures: picture plus key.
+  await exam.getByLabel("Inferior turbinate", { exact: true }).nth(1).selectOption("Pale & boggy");
+  await addMedicine(page, "candistin", "3 drop tds re 7d");
+  await page.waitForTimeout(800); // exam autosave debounce
+  await page.getByTestId("finalize").click();
+  const frame = page.frameLocator("[data-testid=print-frame]");
+  await expect(frame.getByText("L inferior turbinate pale / boggy")).toBeVisible();
+  await expect(frame.locator("figure.diagram", { hasText: "Nose & sinuses" })).toHaveCount(1);
+  await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Pale / boggy" })).toHaveCount(1);
+});
+
 test("ENT doctor can always print blank TM maps and throat/neck pictures, to mark by pen", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
