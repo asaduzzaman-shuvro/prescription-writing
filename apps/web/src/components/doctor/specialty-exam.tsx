@@ -151,6 +151,12 @@ function EardrumField({ value, onChange, disabled }: { value: LateralValue<Eardr
     if (window.confirm(`Clear everything marked on the ${side} eardrum?`)) setEar(side, { perforation: [], retraction: [] });
   }
 
+  function reset() {
+    if (!window.confirm("Reset both TM maps? Everything drawn on the right and left eardrums will be cleared.")) return;
+    setUndo(value ?? {});
+    onChange({});
+  }
+
   const btn = (on: boolean) => `rounded px-2 py-0.5 ${on ? "bg-slate-800 text-white" : "bg-slate-100"}`;
   return (
     <div>
@@ -165,6 +171,7 @@ function EardrumField({ value, onChange, disabled }: { value: LateralValue<Eardr
             </select>
           )}
           <button type="button" className="btn-ghost px-1 text-xs" disabled={!undo} onClick={() => { onChange(undo ?? {}); setUndo(null); }}>Undo</button>
+          <button type="button" className="rounded px-1 text-xs font-medium text-red-600 hover:bg-red-50" onClick={reset}>Reset</button>
           <span className="text-slate-400">
             {tool === "perforation" || tool === "retraction" ? "Tap quadrants: attic, AS, AI, PS, PI" : tool === "mark" ? "Tap where it is" : tool === "pen" ? "Draw on the drum" : tool === "eraser" ? "Tap a mark or line" : "Tap a drum"}
           </span>

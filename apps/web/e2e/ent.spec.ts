@@ -75,7 +75,7 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/ent-print.png`, fullPage: true });
 });
 
-test("TM answer draws on the TM map", async ({ page }) => {
+test("TM answer draws on the TM map; Reset clears both maps after confirming", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
   await registerPatient(page, { name: `ENT TM ${uniq()}`, age: "35", sex: "Male", mobile: mobile() });
@@ -92,6 +92,16 @@ test("TM answer draws on the TM map", async ({ page }) => {
   await expect(right.locator('[data-zone="ai"]')).toHaveAttribute("fill", "url(#hatch)");
   await tm.nth(1).selectOption("Not visible");
   await expect(left.locator('circle[fill="#bbb"]')).toHaveCount(1);
+
+  const reset = page.getByTestId("eardrum-tools").getByRole("button", { name: "Reset", exact: true });
+  page.once("dialog", (d) => void d.dismiss());
+  await reset.click();
+  await expect(right.locator('[data-zone="ai"]')).toHaveAttribute("fill", "url(#hatch)");
+  page.once("dialog", (d) => void d.accept());
+  await reset.click();
+  await expect(right.locator('[data-zone="ai"]')).toHaveAttribute("fill", "#f8fafc");
+  await expect(left.locator('circle[fill="#bbb"]')).toHaveCount(0);
+  await expect(tm.nth(0)).toHaveValue("Retracted"); // answers stay; only the maps are reset
 });
 
 test("ENT doctor can always print blank TM maps and throat/neck pictures, to mark by pen", async ({ page }) => {
