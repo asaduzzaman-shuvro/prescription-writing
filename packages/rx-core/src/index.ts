@@ -10,6 +10,7 @@ export * from "./forms";
 export * from "./drawing";
 export * from "./sketches";
 export * from "./specialty";
+export * from "./sketch-presets";
 export * from "./ent-template";
 export * from "./specialty-templates";
 export * from "./fhir";

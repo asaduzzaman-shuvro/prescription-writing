@@ -15,6 +15,7 @@ import {
   hearingGrade,
   normalizeEardrum,
   ptaAverage,
+  syncSketchMaps,
   syncTmMap,
   type AudiogramEar,
   type AudiogramValue,
@@ -290,8 +291,8 @@ export function SpecialtyExam({ encounterId, specialtyCode, readOnly, onFlatten 
   if (!schema || findings === null) return null;
 
   function update(id: string, v: unknown) {
-    // A TM / perforation answer also redraws that ear's TM map.
-    const next = syncTmMap(schema!, findings!, { ...findings, [id]: v });
+    // A TM / perforation answer redraws that ear's TM map; a throat or neck answer redraws its picture.
+    const next = syncSketchMaps(schema!, findings!, syncTmMap(schema!, findings!, { ...findings, [id]: v }));
     setFindings(next);
     pending.current = next;
     clearTimeout(timer.current);
