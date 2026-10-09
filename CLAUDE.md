@@ -26,12 +26,15 @@ pnpm --filter @rx/core test test/dose.test.ts          # one test file
 pnpm --filter @rx/core exec vitest run -t "shortcut"   # by test name
 pnpm --filter @rx/db generate                          # drizzle-kit: SQL migration from schema diff
 
+./scripts/e2e-db.sh                                    # e2e DB + its PowerSync; once, and after new migrations
 cd apps/web && pnpm build && pnpm e2e                  # Playwright vs `next start` on :3100
 cd apps/web && pnpm e2e e2e/ent.spec.ts                # one e2e spec
 ```
 
-E2E runs against a **production build**, because the offline spec needs the service worker. It needs infra up and
-the dev seed loaded, and it writes into the dev DB. Set `E2E_BASE_URL` to point at an already-running server.
+E2E runs against a **production build**, because the offline spec needs the service worker. It uses its own
+database, `prescription_service_e2e`, and its own PowerSync on :8081 (compose service `powersync-e2e`, profile `e2e`),
+never the dev ones; `./scripts/e2e-db.sh` sets both up (re-run after new migrations). Set `E2E_BASE_URL` to point at
+an already-running server; it then uses whatever database that server was started with.
 The `packages/db/test/rls.test.ts` integration test also needs the local Postgres (`prescription_service` database on `localhost:5432`).
 Full local setup (setup.sql, env files, shared PowerSync JWT secret) is in README.md "Run locally".
 
