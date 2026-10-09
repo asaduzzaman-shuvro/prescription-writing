@@ -6,16 +6,21 @@ import {
   labPanel,
   labRange,
   labResult,
+  labTrend,
   labValueText,
   OTHER_PANEL,
+  panelForInvestigation,
+  panelOfTest,
+  parseLabShorthand,
   OTHER_REPORT_TITLES,
   type LabResult,
   type LabTest,
   type Sex,
+  type TrendPoint,
 } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
-import { useState } from "react";
-import { deleteLabReport, saveLabReport } from "@/lib/doctor/data";
+import { Fragment, useEffect, useState } from "react";
+import { deleteLabReport, lastFinalDoc, saveLabReport } from "@/lib/doctor/data";
 import { parseJson, today } from "@/lib/doctor/util";
 
 export interface LabReportView {
@@ -62,13 +67,89 @@ export function LabReportSummary({ r }: { r: LabReportView }) {
   );
 }
 
+/** A test's numeric values over time, oldest first. */
+export function trendSeries(reports: LabReportView[], code: string): TrendPoint[] {
+  // Reports come newest first; reversed, two reports of the same day keep the order they were entered in.
+  return [...reports]
+    .reverse()
+    .flatMap((r) => r.results.filter((x) => x.code === code && x.value !== undefined).map((x) => ({ date: r.reportDate, value: x.value!, flag: x.flag })))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+const DOT: Record<string, string> = { H: "#b91c1c", L: "#1d4ed8" };
+
+/** A small line chart of one test's values, with the normal range shaded. */
+export function LabTrendChart({ code, points, sex, testId }: { code: string; points: TrendPoint[]; sex: Sex | null; testId?: string }) {
+  const test = LAB_TEST_BY_CODE[code];
+  if (!test || !points.length) return null;
+  const w = 240, h = 64;
+  const { points: pts, band } = labTrend(points, labRange(test, sex), w, h);
+  return (
+    <div className="inline-block" data-testid={testId}>
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`${test.short} trend`} className="rounded bg-white">
+        {band && <rect x={0} y={band.top} width={w} height={Math.max(0, band.bottom - band.top)} fill="#ecfdf5" />}
+        <polyline points={pts.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="#64748b" strokeWidth={1.5} />
+        {pts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={3} fill={p.flag ? DOT[p.flag] ?? "#b45309" : "#334155"}>
+            <title>{`${p.value} ${test.unit} · ${shortDate(p.date)}`}</title>
+          </circle>
+        ))}
+      </svg>
+      <div className="text-xs text-slate-600">
+        {points.map((p) => p.value).join(" → ")} {test.unit}
+        <span className="text-slate-400"> · {shortDate(points[0]!.date)} – {shortDate(points[points.length - 1]!.date)}</span>
+      </div>
+    </div>
+  );
+}
+
 /** The visit's Reports card: add the paper reports the patient brought; ticked values print on the prescription. */
 export function LabReports({ encounterId, patientId, sex }: { encounterId: string; patientId: string; sex: Sex | null }) {
   const db = usePowerSync();
   const reports = useLabReports(patientId);
-  const [editing, setEditing] = useState<{ panel: string; report?: LabReportView } | null>(null);
+  const [editing, setEditing] = useState<{ panel: string; report?: LabReportView; title?: string } | null>(null);
+  const [quick, setQuick] = useState("");
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const [ordered, setOrdered] = useState<string[]>([]);
   const thisVisit = reports.filter((r) => r.encounterId === encounterId);
   const earlier = reports.filter((r) => r.encounterId !== encounterId);
+  const lastLab = reports.find((r) => r.labName)?.labName ?? "";
+
+  // What the doctor asked for last time is usually what the patient brings: offer those first.
+  useEffect(() => {
+    void lastFinalDoc(db, patientId, encounterId).then((d) => setOrdered(d?.investigations ?? []));
+  }, [db, patientId, encounterId]);
+  // One chip per panel ("RBS, HbA1c" → Blood sugar); hidden once this visit has that report.
+  const orderedChips: { key: string; panel: string; title?: string; names: string[] }[] = [];
+  for (const name of ordered) {
+    const p = panelForInvestigation(name);
+    const key = p.title ? `${OTHER_PANEL}:${p.title}` : p.panel;
+    const chip = orderedChips.find((c) => c.key === key);
+    if (chip) chip.names.push(name);
+    else if (!thisVisit.some((r) => (p.title ? r.panel === OTHER_PANEL && r.title === p.title : r.panel === p.panel))) orderedChips.push({ key, ...p, names: [name] });
+  }
+
+  /** "hb 9.2 wbc 11800 rbs 11.4": one report per panel, dated today, from the last lab. */
+  async function saveQuick() {
+    const parsed = parseLabShorthand(quick);
+    if (parsed.unknown.length) return setQuickError(`Didn't recognise: ${parsed.unknown.join(", ")}`);
+    if (!parsed.results.length) return;
+    const byPanel = new Map<string, LabResult[]>();
+    for (const x of parsed.results) {
+      const test = LAB_TEST_BY_CODE[x.code]!;
+      const panel = panelOfTest(x.code)?.id ?? OTHER_PANEL;
+      byPanel.set(panel, [...(byPanel.get(panel) ?? []).filter((r) => r.code !== x.code), labResult(test, x, sex)]);
+    }
+    try {
+      for (const [panel, results] of byPanel) {
+        await saveLabReport(db, { patientId, encounterId, reportDate: today(), labName: lastLab, panel, title: labPanel(panel)?.name ?? "Reports", results, conclusion: "" });
+      }
+      setQuick("");
+      setQuickError(null);
+    } catch (e) {
+      setQuickError((e as Error).message);
+    }
+  }
 
   async function remove(r: LabReportView) {
     if (!confirm(`Delete the ${r.title} report of ${shortDate(r.reportDate)}?`)) return;
@@ -85,11 +166,28 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
           </button>
         ))}
       </div>
+      {orderedChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="lab-ordered">
+          <span className="text-slate-500">Ordered last visit:</span>
+          {orderedChips.map((c) => (
+            <button key={c.key} className="rounded-full border border-brand-200 bg-brand-50 px-2.5 py-0.5 text-brand-700 hover:bg-brand-100"
+              onClick={() => setEditing({ panel: c.panel, title: c.title })} data-testid="lab-ordered-chip">
+              + {c.names.join(", ")}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <input className="input min-w-0 flex-1 py-1 text-sm" value={quick} placeholder="Quick entry: hb 9.2 wbc 11800 rbs 11.4 hbsag neg — Enter to save"
+          onChange={(e) => { setQuick(e.target.value); setQuickError(null); }} onKeyDown={(e) => e.key === "Enter" && void saveQuick()} data-testid="lab-quick" />
+      </div>
+      {quickError && <p className="text-sm text-red-700" data-testid="lab-quick-error">{quickError}</p>}
       {editing && (
         <LabReportEditor
-          key={editing.report?.id ?? editing.panel}
+          key={editing.report?.id ?? `${editing.panel}:${editing.title ?? ""}`}
           panel={editing.panel}
           report={editing.report}
+          initialTitle={editing.title}
           patientId={patientId}
           encounterId={encounterId}
           sex={sex}
@@ -140,9 +238,10 @@ function rangeHint(test: LabTest, sex: Sex | null) {
   return (test.normal ?? []).join("/");
 }
 
-function LabReportEditor({ panel, report, patientId, encounterId, sex, reports, onDone }: {
+function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, sex, reports, onDone }: {
   panel: string;
   report?: LabReportView;
+  initialTitle?: string;
   patientId: string;
   encounterId: string;
   sex: Sex | null;
@@ -157,7 +256,7 @@ function LabReportEditor({ panel, report, patientId, encounterId, sex, reports, 
   // (worked out on each render, since a report saved a moment ago may still be on its way into the list).
   const [typedLab, setLabName] = useState<string | null>(report ? (report.labName ?? "") : null);
   const labName = typedLab ?? reports.find((r) => r.labName)?.labName ?? "";
-  const [title, setTitle] = useState(report?.title ?? (isOther ? "" : (labPanel(panel)?.name ?? "")));
+  const [title, setTitle] = useState(report?.title ?? initialTitle ?? (isOther ? "" : (labPanel(panel)?.name ?? "")));
   const [conclusion, setConclusion] = useState(report?.conclusion ?? "");
   const [showRange, setShowRange] = useState(Boolean(report?.results.some((r) => r.low !== undefined || r.high !== undefined)));
   const [rows, setRows] = useState<Record<string, RowInput>>(() =>
@@ -167,6 +266,7 @@ function LabReportEditor({ panel, report, patientId, encounterId, sex, reports, 
     })),
   );
   const [error, setError] = useState<string | null>(null);
+  const [trendOf, setTrendOf] = useState<string | null>(null);
 
   const resultOf = (test: LabTest): LabResult | null => {
     const row = rows[test.code]!;
@@ -232,7 +332,8 @@ function LabReportEditor({ panel, report, patientId, encounterId, sex, reports, 
               const res = resultOf(test);
               const prev = previous(c);
               return (
-                <tr key={c} className="align-top">
+                <Fragment key={c}>
+                <tr className="align-top">
                   <td className="py-0.5 pr-2 text-slate-600" title={test.name}>{test.short}</td>
                   <td className="py-0.5 pr-2">
                     {test.kind === "coded" ? (
@@ -243,7 +344,12 @@ function LabReportEditor({ panel, report, patientId, encounterId, sex, reports, 
                     ) : (
                       <input className="input w-24 py-1" inputMode="decimal" value={row.value} onChange={(e) => set(c, { value: e.target.value })} data-testid={`lab-value-${c}`} />
                     )}
-                    {prev && <div className="text-[11px] text-slate-400" data-testid={`lab-prev-${c}`}>{prev}</div>}
+                    {prev && (
+                      <button type="button" className="block text-left text-[11px] text-slate-400 hover:text-brand-700" title="Show the trend"
+                        onClick={() => setTrendOf(trendOf === c ? null : c)} data-testid={`lab-prev-${c}`}>
+                        {prev} ↗
+                      </button>
+                    )}
                   </td>
                   <td className="py-1 pr-2 text-xs text-slate-500">{test.unit}</td>
                   <td className="py-1 pr-2 text-xs text-slate-400">{rangeHint(test, sex)}</td>
@@ -268,6 +374,17 @@ function LabReportEditor({ panel, report, patientId, encounterId, sex, reports, 
                     )}
                   </td>
                 </tr>
+                {trendOf === c && (
+                  <tr>
+                    <td />
+                    <td colSpan={6} className="pb-2">
+                      <LabTrendChart code={c} sex={sex} testId={`lab-trend-${c}`}
+                        points={[...trendSeries(reports.filter((r) => r.id !== report?.id), c), ...(res?.value !== undefined ? [{ date, value: res.value, flag: res.flag }] : [])]
+                          .sort((a, b) => a.date.localeCompare(b.date))} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>

@@ -1,13 +1,13 @@
 "use client";
 
-import type { PrescriptionDoc } from "@rx/core";
+import { LAB_TESTS, type PrescriptionDoc, type Sex } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
 import { startVisit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, parseJson } from "@/lib/doctor/util";
-import { LabReportSummary, useLabReports } from "./lab-reports";
+import { LabReportSummary, LabTrendChart, trendSeries, useLabReports } from "./lab-reports";
 
 export function PatientDetail({ patientId }: { patientId: string }) {
   const db = usePowerSync();
@@ -27,6 +27,8 @@ export function PatientDetail({ patientId }: { patientId: string }) {
   const p = pts[0];
   if (!p) return <div className="text-sm text-slate-500">Loading patient…</div>;
   const allergies = parseJson<string[]>(p.allergies, []);
+  // A trend needs at least two values of a test.
+  const trends = LAB_TESTS.map((test) => ({ test, points: trendSeries(labs, test.code) })).filter((t) => t.points.length >= 2);
   const isDoctor = session.tenantRole === "doctor";
 
   async function visit() {
@@ -85,6 +87,19 @@ export function PatientDetail({ patientId }: { patientId: string }) {
           <h2 className="font-semibold">Lab reports</h2>
           <div className="card divide-y divide-slate-100" data-testid="patient-lab-reports">
             {labs.map((r) => <div key={r.id} className="p-3"><LabReportSummary r={r} /></div>)}
+          </div>
+        </>
+      )}
+      {trends.length > 0 && (
+        <>
+          <h2 className="font-semibold">Trends</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {trends.map(({ test, points }) => (
+              <div key={test.code} className="card p-3">
+                <div className="mb-1 text-sm font-medium">{test.name}</div>
+                <LabTrendChart code={test.code} points={points} sex={(p.sex as Sex | null) ?? null} testId={`patient-trend-${test.code}`} />
+              </div>
+            ))}
           </div>
         </>
       )}
