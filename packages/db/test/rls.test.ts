@@ -23,6 +23,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await owner.execute(sql`delete from audit_log where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from lab_report where tenant_id in (${A}::uuid, ${B}::uuid)`);
+  await owner.execute(sql`delete from lab_file where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from patient where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from chamber where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from app_user where id = ${userA}::uuid`);
@@ -86,6 +87,17 @@ describe("row-level security", () => {
     ).rejects.toThrow();
     await expect(withTenant(app, { tenantId: B, userId: userA }, (tx) => tx.execute(sql`delete from lab_report where id = ${id}::uuid`)))
       .rejects.toMatchObject({ cause: { message: expect.stringMatching(/permission denied/) } });
+  });
+
+  it("keeps report photos inside their clinic", async () => {
+    const id = randomUUID();
+    await owner.insert(s.labFile).values({
+      id, tenantId: B, patientId: patientB, labReportId: randomUUID(), contentType: "image/jpeg", sizeBytes: 3, sha256: "x", data: Buffer.from([0xff, 0xd8, 0xff]),
+    });
+    const seenByA = await withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.select({ id: s.labFile.id }).from(s.labFile));
+    expect(seenByA.find((r) => r.id === id)).toBeUndefined();
+    const seenByB = await withTenant(app, { tenantId: B, userId: userA }, (tx) => tx.select().from(s.labFile).where(sql`id = ${id}::uuid`));
+    expect(seenByB[0]?.data).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
   });
 
   it("cannot read password hashes", async () => {
