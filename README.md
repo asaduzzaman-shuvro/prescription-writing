@@ -41,6 +41,13 @@ Re-running `pnpm db:seed:dev` on an existing dev database adds any new specialti
 and publishes a new ENT exam template version when the curated one in code has changed (admin-edited ones are left alone).
 To try the eye or vascular exam, change a doctor's specialty in Admin → Doctors.
 
+The lab test catalogue (`packages/rx-core/src/lab-catalogue/`) is our own curated data, not MedEx-derived:
+`pnpm db:seed:labs` writes it to any database, production included (`db:seed:dev` runs it too). Re-run it after the
+catalogue changes; rows the platform admin edited are left alone, and clinics' own changes are separate rows.
+The platform admin edits it in Admin → Lab catalogue; a clinic adjusts ranges and units, hides tests and adds its
+own in Settings → Lab settings, which also sets the lab report's heading and signatories. The clinic lab itself is
+the **Lab** screen of the doctor app (all roles): pick the patient's tests, enter results, print.
+
 Demo logins (dev seed): `admin@rx.local / admin123`, `doctor@rx.local / doctor123` (ENT),
 `assistant@rx.local / assist123`.
 
@@ -94,6 +101,8 @@ check-in → waiting-room display → fees/reports, SMS credit charging, FHIR ex
 | Legal | PDPA 2026 (consent, data residency in BD, retention) needs a lawyer's review. Host in a BD data centre or keep a BD replica. |
 | Sync scope | Every device downloads the tenant's full history; there's no date window on the `tenant_data` stream yet. Fine for one chamber, but add a window before large clinics. |
 | Test isolation | The e2e suite uses its own database (`prescription_service_e2e`, see Tests), where runs accumulate. Use a throwaway DB in CI. |
+| Lab catalogue | Ranges and units come from Bangladeshi lab menus and textbook values; several (DC, RBC indices, LFT, electrolytes, hormones) are from non-BD sources. **A pathologist must review** them before the production seed, and codes are permanent once released. |
+| Lab sign-off | Reports print as soon as they are entered, with the clinic's signatories at the foot and no verification step (by design, for now). Decide with a pathologist whether that wording is acceptable or a "verified by" step is needed. |
 | BMDC lookup | The "Look up on BMDC site" link URL on the tenant page is a guess and unverified. |
 | Auth hardening | No login rate limiting or lockout yet; no password reset by email/OTP (admins reset passwords). |
 | Ops | Production secrets, HTTPS, backups, PowerSync JWT via JWKS/RS256 instead of the shared HS256 dev secret. |

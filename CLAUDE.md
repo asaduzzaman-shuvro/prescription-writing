@@ -45,7 +45,8 @@ Full local setup (setup.sql, env files, shared PowerSync JWT secret) is in READM
 - `appDb` (`DATABASE_URL_APP`, `rx_app` role) handles anything a clinic user triggers. Always wrap queries in
   `withTenant(appDb, {tenantId, userId}, tx => …)` (`packages/db/src/tenant-context.ts`). It sets `app.tenant_id`,
   and the `tenant_isolation` RLS policies read that setting. `rx_app` has column-level grants: it cannot read
-  password hashes or write the catalogue.
+  password hashes or write the medicine catalogue. The lab catalogue (`lab_test`, `lab_panel`) is the exception:
+  platform rows have `tenant_id` NULL and are read-only, and a clinic writes only its own rows (RLS, like `rx_template`).
 - Sessions are an HS256 JWT cookie (`lib/session.ts`). Use `requireAdmin()` for `/admin` and `requireClinic(roles)` for clinic routes.
 
 **Doctor app is offline-first and client-side.** `/doctor` is a single page with hash routing
@@ -88,6 +89,16 @@ Answers are stored in `encounter.exam_findings`. `flattenFindings` turns them in
 `rx-core/src/ent-template.ts` and `specialty-templates.ts`. When the curated ENT template changes, re-run
 `pnpm db:seed:dev`: it publishes a new version, unless an admin has edited the template. Encounters keep the
 template version they used. New specialties should not need a migration.
+
+**Lab reports** share one table, `lab_report`: outside reports typed in at a visit (`source` external) and the
+clinic lab's own (`in_house`: one row per panel, grouped by `request_id`, Lab No assigned on upload). The test
+catalogue is data: curated in `rx-core/src/lab-catalogue/`, written by `pnpm db:seed:labs`, adjusted per clinic in
+the DB, and merged on devices by `buildLabCatalogue` (`useLabCatalogue`). A clinic row with a platform code overrides
+it (null columns and missing spec keys inherit; `labTestOverride` writes only the differences); clinic rows get derived
+ids (`labRowId`) so two offline devices editing one test converge. Clinics edit in `#/settings/lab`
+(`lab-settings.tsx`), the platform in `/admin/lab-catalogue` (marks rows `source` admin so the seed leaves them).
+Results keep the test's name and printed range (`LabResult.name`/`ref`), so later catalogue edits never change old
+reports. Test codes are permanent.
 
 **Catalogue import** (`packages/db/src/import`): CSV goes through normalize, then plan (a dry-run diff of
 new/changed/conflict/invalid), then apply. Rows merge on DAR number or company+brand+form+strength. Rows are
