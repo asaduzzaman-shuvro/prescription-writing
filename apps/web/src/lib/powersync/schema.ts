@@ -4,7 +4,7 @@
  * Types on the client are only text / integer / real: uuid, numeric, date, timestamptz, jsonb and
  * arrays arrive as text (jsonb/arrays as JSON strings), booleans as 0/1.
  */
-import { column, Schema, Table } from "@powersync/web";
+import { AttachmentTable, column, Schema, Table } from "@powersync/web";
 
 const brand_product = new Table(
   {
@@ -68,6 +68,7 @@ const patient = new Table(
     allergies: column.text,
     notes: column.text,
     consent_at: column.text,
+    report_files_consent_at: column.text,
     guardian_name: column.text,
     created_by: column.text,
     deleted_at: column.text,
@@ -127,6 +128,7 @@ const lab_report = new Table(
     title: column.text,
     results: column.text,
     conclusion: column.text,
+    files: column.text,
     created_by: column.text,
     deleted_at: column.text,
     ...timestamps,
@@ -225,6 +227,8 @@ export const AppSchema = new Schema({
   doctor_profile,
   rx_template,
   doctor_favorite,
+  // Device-only queue of lab report photos/PDFs (lab-files.ts); never synced.
+  attachments: new AttachmentTable(),
 });
 
 export type Database = (typeof AppSchema)["types"];

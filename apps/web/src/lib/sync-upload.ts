@@ -37,7 +37,7 @@ const SPECS: Record<string, TableSpec> = {
     roles: ["doctor", "assistant", "clinic_admin"],
     columns: {
       name: "text", dob: "date", dob_estimated: "bool", sex: "enum:sex", mobile: "text", address: "text", nid: "text",
-      brn: "text", health_id: "text", allergies: "textarr", notes: "text", consent_at: "ts", guardian_name: "text",
+      brn: "text", health_id: "text", allergies: "textarr", notes: "text", consent_at: "ts", guardian_name: "text", report_files_consent_at: "ts",
       birth_weight_kg: "num", gestational_age_weeks: "int",
       deleted_at: "ts", created_at: "ts",
     },
@@ -63,7 +63,7 @@ const SPECS: Record<string, TableSpec> = {
     roles: ["doctor", "assistant", "clinic_admin"],
     columns: {
       patient_id: "uuid", encounter_id: "uuid", report_date: "date", lab_name: "text", panel: "text", title: "text",
-      results: "jsonb", conclusion: "text", deleted_at: "ts", created_at: "ts",
+      results: "jsonb", conclusion: "text", files: "jsonb", deleted_at: "ts", created_at: "ts",
     },
   },
   chamber: {
@@ -211,16 +211,16 @@ const todayBd = () => new Date(Date.now() + 6 * 3600_000).toISOString().slice(0,
 
 /** Same checks the lab report card runs before saving (labReportProblem), plus the row must make sense. */
 async function checkLabReport(tx: Tx, op: CrudOp, data: Record<string, unknown>, before: Record<string, unknown> | undefined) {
-  let results = data.results;
-  if (typeof results === "string") {
+  const json = (v: unknown, what: string) => {
+    if (typeof v !== "string") return v;
     try {
-      results = JSON.parse(results);
+      return JSON.parse(v) as unknown;
     } catch {
-      throw new Rejection("results must be a list");
+      throw new Rejection(`${what} must be a list`);
     }
-  }
+  };
   const problem = labReportProblem(
-    { results, title: data.title, labName: data.lab_name, conclusion: data.conclusion, reportDate: data.report_date },
+    { results: json(data.results, "results"), files: json(data.files, "files"), title: data.title, labName: data.lab_name, conclusion: data.conclusion, reportDate: data.report_date },
     todayBd(),
   );
   if (problem) throw new Rejection(problem);

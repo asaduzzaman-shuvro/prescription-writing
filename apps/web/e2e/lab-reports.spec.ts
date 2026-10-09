@@ -146,3 +146,61 @@ test("quick entry, what was ordered last visit, and the trend across visits", as
   await page.getByRole("link", { name }).first().click();
   await expect(page.getByTestId("patient-trend-4548-4")).toContainText("8.1 → 7.4 %");
 });
+
+// A 2×2 PNG: the app re-encodes photos as JPEG before keeping them.
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==", "base64");
+
+test("report photos: taken offline, uploaded later, viewable, removable; the server checks every file", async ({ page, context, playwright }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  await registerPatient(page, { name: `E2E Labs Photo ${uniq()}`, age: "33", sex: "Female", mobile: mobile() });
+  await expect(page.getByTestId("sync-status")).toHaveText("Synced", { timeout: 60_000 });
+  const card = page.getByTestId("lab-reports");
+
+  // Offline: the photo is kept on the device and shows straight away.
+  await context.setOffline(true);
+  await card.getByTestId("lab-add-cbc").click();
+  await card.getByTestId("lab-value-718-7").fill("10.1");
+  page.once("dialog", (d) => d.accept()); // the patient's consent, asked once
+  await card.getByTestId("lab-file-input").setInputFiles({ name: "cbc.png", mimeType: "image/png", buffer: PNG });
+  await expect(card.getByTestId("lab-editor").getByTestId("lab-file")).toHaveCount(1);
+  await card.getByTestId("lab-save").click();
+  const tile = card.getByTestId("lab-report").getByTestId("lab-file");
+  await expect(tile.locator("img")).toBeVisible();
+  const fileId = (await tile.getAttribute("data-file-id"))!;
+  await tile.click();
+  await expect(page.getByTestId("lab-file-viewer").locator("img")).toBeVisible();
+  await page.getByTestId("lab-file-viewer").click();
+
+  // Back online it uploads, as a JPEG, served only as a download that runs nothing.
+  const uploaded = page.waitForResponse((r) => r.url().endsWith("/api/lab-files") && r.request().method() === "POST" && r.status() === 201, { timeout: 60_000 });
+  await context.setOffline(false);
+  await uploaded;
+  const got = await page.request.get(`/api/lab-files/${fileId}`);
+  expect(got.status()).toBe(200);
+  expect(got.headers()["content-type"]).toBe("image/jpeg");
+  expect(got.headers()["content-disposition"]).toMatch(/^attachment/);
+  expect(got.headers()["x-content-type-options"]).toBe("nosniff");
+  expect((await got.body()).subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+
+  // Not signed in to a clinic: nothing.
+  const stranger = await playwright.request.newContext({ baseURL: new URL(page.url()).origin });
+  expect((await stranger.get(`/api/lab-files/${fileId}`)).status()).toBe(401);
+  await stranger.dispose();
+
+  // The server judges files by their bytes and size, and waits for the patient to sync.
+  const post = (buffer: Buffer, patientId = crypto.randomUUID()) =>
+    page.request.post("/api/lab-files", {
+      multipart: { file: { name: "x.jpg", mimeType: "image/jpeg", buffer }, id: crypto.randomUUID(), patient_id: patientId, lab_report_id: crypto.randomUUID() },
+    });
+  expect((await post(Buffer.from("<svg onload=alert(1)>"))).status()).toBe(415);
+  expect((await post(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(5 * 1024 * 1024)]))).status()).toBe(413);
+  expect((await post(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).status()).toBe(409);
+
+  // Removing the photo deletes it on the server too.
+  await card.getByTestId("lab-report").getByRole("button", { name: "Edit" }).click();
+  await card.getByTestId("lab-editor").getByTestId("lab-file-remove").click();
+  await card.getByTestId("lab-save").click();
+  await expect(card.getByTestId("lab-report").getByTestId("lab-file")).toHaveCount(0);
+  await expect.poll(async () => (await page.request.get(`/api/lab-files/${fileId}`)).status(), { timeout: 60_000 }).toBe(404);
+});

@@ -4,6 +4,7 @@ import { PowerSyncContext } from "@powersync/react";
 import { PowerSyncDatabase } from "@powersync/web";
 import { Suspense, type ReactNode } from "react";
 import { BackendConnector } from "./connector";
+import { startLabFileQueue, stopLabFileQueue } from "./lab-files";
 import { AppSchema } from "./schema";
 
 let db: PowerSyncDatabase | null = null;
@@ -16,12 +17,14 @@ export function getDb(userId: string): PowerSyncDatabase {
     database: { dbFilename: `rxpad-${userId}.db`, disableSSRWarning: true },
   });
   db.connect(new BackendConnector());
+  if (typeof window !== "undefined") startLabFileQueue(db, userId);
   return db;
 }
 
 /** Called on sign-out so the next user on this browser never sees the previous user's data. */
 export async function disconnectAndClear() {
   if (!db) return;
+  await stopLabFileQueue();
   await db.disconnectAndClear();
   db = null;
 }
