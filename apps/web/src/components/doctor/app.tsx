@@ -4,6 +4,7 @@ import { useStatus } from "@powersync/react";
 import { useHashRoute } from "@/lib/doctor/router";
 import { BookingsScreen } from "./bookings";
 import { DisplayScreen } from "./display";
+import { LabScreen } from "./lab";
 import { PatientDetail } from "./patient-detail";
 import { ReportsScreen } from "./reports";
 import { PatientEdit } from "./patient-form";
@@ -40,6 +41,8 @@ export function DoctorApp() {
       return <BookingsScreen />;
     case "display":
       return <DisplayScreen />;
+    case "lab":
+      return <LabScreen route={r} />;
     case "reports":
       return <ReportsScreen />;
     case "templates":

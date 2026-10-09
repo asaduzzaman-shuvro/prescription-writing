@@ -73,6 +73,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
     { to: "/", label: "Today", match: route.length === 0 },
     { to: "/patients", label: "Patients", match: route[0] === "patients" },
     { to: "/bookings", label: "Bookings", match: route[0] === "bookings" },
+    { to: "/lab", label: "Lab", match: route[0] === "lab" },
     ...(session.tenantRole !== "assistant" ? [{ to: "/reports", label: "Reports", match: route[0] === "reports" }] : []),
     ...(isDoctor ? [{ to: "/templates", label: "Templates", match: route[0] === "templates" }] : []),
     ...(session.tenantRole !== "assistant" ? [{ to: "/settings", label: "Settings", match: route[0] === "settings" }] : []),
