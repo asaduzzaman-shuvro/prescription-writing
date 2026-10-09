@@ -5,6 +5,7 @@ import { useHashRoute } from "@/lib/doctor/router";
 import { BookingsScreen } from "./bookings";
 import { DisplayScreen } from "./display";
 import { LabScreen } from "./lab";
+import { LabSettingsScreen } from "./lab-settings";
 import { PatientDetail } from "./patient-detail";
 import { ReportsScreen } from "./reports";
 import { PatientEdit } from "./patient-form";
@@ -48,7 +49,7 @@ export function DoctorApp() {
     case "templates":
       return <TemplatesScreen />;
     case "settings":
-      return <SettingsScreen />;
+      return r[1] === "lab" ? <LabSettingsScreen /> : <SettingsScreen />;
     default:
       return <div className="text-sm text-slate-500">Not found.</div>;
   }

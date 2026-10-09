@@ -27,6 +27,7 @@ export function LabScreen({ route }: { route: string[] }) {
 const shortTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
 
 function LabWorklist() {
+  const session = useSession();
   const { data } = useQuery<{ request_id: string; lab_no: string | null; collected_at: string | null; titles: string; name: string; code: string | null; abnormal: number }>(
     `SELECT r.request_id, max(r.lab_no) AS lab_no, min(r.collected_at) AS collected_at, group_concat(r.title, ', ') AS titles, p.name, p.code,
             sum(r.results LIKE '%"flag":%') AS abnormal
@@ -38,7 +39,10 @@ function LabWorklist() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Lab</h1>
-        <Link to="/lab/new" className="btn-primary">+ New lab report</Link>
+        <span className="flex items-center gap-2">
+          {session.tenantRole !== "assistant" && <a href="#/settings/lab" className="btn-ghost text-sm" data-testid="lab-settings-link">Lab settings</a>}
+          <Link to="/lab/new" className="btn-primary">+ New lab report</Link>
+        </span>
       </div>
       <div className="card divide-y divide-slate-100" data-testid="lab-worklist">
         {data.map((r) => (

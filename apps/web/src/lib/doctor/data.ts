@@ -4,8 +4,8 @@
  * Local-database access for the doctor app. Reads and writes go to the browser SQLite managed by
  * PowerSync; writes are queued and uploaded to /api/sync/upload when online.
  */
-import type { ChamberSlot, LabFileRef, LabResult, PrescriptionDoc, PrintSettings, RxItem, Vitals } from "@rx/core";
-import { DEFAULT_PRINT_SETTINGS, labLine, labReportProblem } from "@rx/core";
+import type { ChamberSlot, LabFileRef, LabResult, LabSignatory, PrescriptionDoc, PrintSettings, RxItem, Vitals } from "@rx/core";
+import { DEFAULT_PRINT_SETTINGS, labCatalogueRowProblem, labLine, labReportProblem, labRowId } from "@rx/core";
 import type { AbstractPowerSyncDatabase } from "@powersync/web";
 import { nowIso, parseJson, randomToken, today, uuid } from "./util";
 
@@ -396,6 +396,75 @@ export async function lastFinalDoc(db: Db, patientId: string, excludeEncounterId
     [patientId, excludeEncounterId ?? null],
   );
   return row ? parseJson<PrescriptionDoc | null>(row.doc, null) : null;
+}
+
+// ---------------------------------------------------------------------------
+// The clinic's lab: its catalogue changes and report heading
+// ---------------------------------------------------------------------------
+
+/**
+ * Writes the clinic's row for a test (lab_test, by code) or panel (lab_panel, by key): changes the row it has,
+ * else adds one under the derived id (labRowId). A null column follows the platform's value; rows are never
+ * deleted (is_active 0 hides). Same checks as the server.
+ */
+export async function saveLabCatalogueRow(
+  db: Db,
+  tenantId: string,
+  table: "lab_test" | "lab_panel",
+  code: string,
+  cols: { name?: string | null; short?: string | null; unit?: string | null; kind?: string | null; department?: string | null; sort_order?: number | null; is_active?: boolean; spec?: unknown },
+) {
+  const idCol = table === "lab_test" ? "code" : "key";
+  const problem = labCatalogueRowProblem(table, { ...cols, [idCol]: code });
+  if (problem) throw new Error(problem);
+  const values: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(cols)) {
+    if (v === undefined) continue;
+    values[k] = k === "spec" ? JSON.stringify(v ?? {}) : typeof v === "boolean" ? (v ? 1 : 0) : v;
+  }
+  const now = nowIso();
+  const existing = await db.getOptional<{ id: string }>(`SELECT id FROM ${table} WHERE tenant_id = ? AND ${idCol} = ?`, [tenantId, code]);
+  if (existing) {
+    const keys = Object.keys(values);
+    if (!keys.length) return;
+    await db.execute(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = ? WHERE id = ?`, [...keys.map((k) => values[k]), now, existing.id]);
+    return;
+  }
+  // A new row states is_active and spec: the server's columns are NOT NULL.
+  const row: Record<string, unknown> = { is_active: 1, spec: "{}", ...values, id: labRowId(tenantId, table, code), tenant_id: tenantId, [idCol]: code, source: "clinic", created_at: now, updated_at: now };
+  const keys = Object.keys(row);
+  await db.execute(`INSERT INTO ${table} (${keys.join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`, keys.map((k) => row[k]));
+}
+
+export interface LabProfileInput {
+  labName: string;
+  address: string;
+  phone: string;
+  logoDataUrl: string | null;
+  signatories: LabSignatory[];
+  footerText: string;
+}
+
+/** The limits the server keeps to (sync-upload lab_profile). */
+export const LAB_PROFILE_LIMITS = { logoChars: 400_000, signatoriesChars: 4000 };
+
+/** The clinic's lab report heading; one row, whose id is the clinic's. */
+export async function saveLabProfile(db: Db, tenantId: string, p: LabProfileInput) {
+  const signatories = JSON.stringify(p.signatories.filter((x) => x.name.trim()).map((x) => ({ name: x.name.trim(), ...(x.degrees?.trim() ? { degrees: x.degrees.trim() } : {}), ...(x.title?.trim() ? { title: x.title.trim() } : {}) })));
+  if (signatories.length > LAB_PROFILE_LIMITS.signatoriesChars) throw new Error("too many signatories");
+  if (p.logoDataUrl && p.logoDataUrl.length > LAB_PROFILE_LIMITS.logoChars) throw new Error("logo image too large (max 300 KB)");
+  const blank = (v: string) => v.trim() || null;
+  const cols = [blank(p.labName), blank(p.address), blank(p.phone), p.logoDataUrl, signatories, blank(p.footerText)];
+  const now = nowIso();
+  const existing = await db.getOptional<{ id: string }>(`SELECT id FROM lab_profile WHERE id = ?`, [tenantId]);
+  if (existing) {
+    await db.execute(`UPDATE lab_profile SET lab_name = ?, address = ?, phone = ?, logo_data_url = ?, signatories = ?, footer_text = ?, updated_at = ? WHERE id = ?`, [...cols, now, tenantId]);
+  } else {
+    await db.execute(
+      `INSERT INTO lab_profile (id, tenant_id, lab_name, address, phone, logo_data_url, signatories, footer_text, print_settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)`,
+      [tenantId, tenantId, ...cols, now, now],
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
