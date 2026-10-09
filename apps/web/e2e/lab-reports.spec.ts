@@ -99,3 +99,50 @@ test("the assistant can add a report; the server rejects tampered or future-date
   body = await upload({ ...base, report_date: iso(new Date(Date.now() + 3 * 86_400_000)), results: "[]" });
   expect(body.rejected[0].reason).toMatch(/future/);
 });
+
+test("quick entry, what was ordered last visit, and the trend across visits", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  const name = `E2E Labs Trend ${uniq()}`;
+  await registerPatient(page, { name, age: "55", sex: "Male", mobile: mobile() });
+  const card = page.getByTestId("lab-reports");
+
+  // Visit 1: HbA1c by quick entry; order tests for next time.
+  await card.getByTestId("lab-quick").fill("hba1c 8.1");
+  await card.getByTestId("lab-quick").press("Enter");
+  await expect(card.getByTestId("lab-report")).toHaveCount(1);
+  for (const ix of ["CBC with ESR", "HbA1c", "X-ray chest P/A view"]) {
+    await page.getByTestId("ix-input").fill(ix);
+    await page.getByTestId("ix-input").press("Enter");
+  }
+  await addMedicine(page, "napa extend", "1+0+1 af 5d");
+  await page.waitForTimeout(800); // autosave debounce
+  await page.getByTestId("finalize").click();
+  await expect(page.getByTestId("print-frame")).toBeVisible();
+
+  // Visit 2: the ordered tests are offered; quick entry splits values into one report per panel.
+  await page.goto("/doctor#/");
+  await page.getByRole("link", { name }).first().click();
+  await page.getByRole("button", { name: "Start visit" }).click();
+  await expect(card.getByTestId("lab-ordered-chip")).toHaveText(["+ CBC with ESR", "+ HbA1c", "+ X-ray chest P/A view"]);
+  await card.getByTestId("lab-quick").fill("hba1c 7.4 hb 12.1 xyz 3");
+  await card.getByTestId("lab-quick").press("Enter");
+  await expect(card.getByTestId("lab-quick-error")).toHaveText("Didn't recognise: xyz 3");
+  await card.getByTestId("lab-quick").fill("hba1c 7.4 hb 12.1");
+  await card.getByTestId("lab-quick").press("Enter");
+  await expect(card.getByTestId("lab-report")).toHaveCount(2);
+  await expect(card.getByTestId("lab-ordered-chip")).toHaveText(["+ X-ray chest P/A view"]);
+  await card.getByTestId("lab-ordered-chip").click();
+  await expect(card.getByTestId("lab-title")).toHaveValue("X-ray chest P/A view");
+  await card.getByTestId("lab-conclusion").fill("NAD");
+  await card.getByTestId("lab-save").click();
+  await expect(card.getByTestId("lab-ordered")).toHaveCount(0);
+
+  // The trend: from the report editor, and on the patient's page.
+  await card.getByTestId("lab-report").filter({ hasText: "HbA1c" }).getByRole("button", { name: "Edit" }).click();
+  await card.getByTestId("lab-prev-4548-4").click();
+  await expect(card.getByTestId("lab-trend-4548-4")).toContainText("8.1 → 7.4 %");
+  await card.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("link", { name }).first().click();
+  await expect(page.getByTestId("patient-trend-4548-4")).toContainText("8.1 → 7.4 %");
+});
