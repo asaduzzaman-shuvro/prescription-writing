@@ -16,6 +16,7 @@ import { DEV_DATABASE_URL } from "../dev-urls";
 import { applyPlan, buildPlan, guessMapping, loadSnapshot, parseCsv, parseMedexGenerics, rowsToProducts } from "../import";
 import { hashPassword } from "../password";
 import * as s from "../schema";
+import { seedLabCatalogue } from "../seed/lab-catalogue";
 import { ADVICE, COMPLAINTS, DIAGNOSES, INSTRUCTIONS, INVESTIGATIONS, SPECIALTIES } from "../seed/libraries";
 
 const url = process.env.DATABASE_URL ?? DEV_DATABASE_URL;
@@ -223,6 +224,7 @@ async function seedEnt() {
 }
 
 await seedLibraries();
+console.log("lab catalogue:", await seedLabCatalogue(db));
 await seedMedicines();
 await seedDemoTenant();
 await seedEnt();

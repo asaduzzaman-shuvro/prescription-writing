@@ -23,6 +23,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await owner.execute(sql`delete from audit_log where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from lab_report where tenant_id in (${A}::uuid, ${B}::uuid)`);
+  await owner.execute(sql`delete from lab_test where tenant_id in (${A}::uuid, ${B}::uuid) or code like 'rls-%'`);
+  await owner.execute(sql`delete from lab_profile where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from lab_file where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from patient where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from chamber where tenant_id in (${A}::uuid, ${B}::uuid)`);
@@ -87,6 +89,34 @@ describe("row-level security", () => {
     ).rejects.toThrow();
     await expect(withTenant(app, { tenantId: B, userId: userA }, (tx) => tx.execute(sql`delete from lab_report where id = ${id}::uuid`)))
       .rejects.toMatchObject({ cause: { message: expect.stringMatching(/permission denied/) } });
+  });
+
+  it("lab catalogue: every clinic reads the platform's rows, but writes and reads only its own", async () => {
+    const platform = randomUUID(), ownB = randomUUID();
+    const code = `rls-${randomUUID().slice(0, 8)}`;
+    await owner.insert(s.labTest).values({ id: platform, code, name: "Platform test", short: "PT", kind: "numeric", source: "rx-curated" });
+    await owner.insert(s.labTest).values({ id: ownB, tenantId: B, code, unit: "g/L" });
+    const seenByA = await withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.select().from(s.labTest).where(sql`code = ${code}`));
+    expect(seenByA.map((r) => r.id)).toEqual([platform]);
+    // A clinic can't change the platform's row, add one, or touch another clinic's.
+    await withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.execute(sql`update lab_test set name = 'hacked' where id in (${platform}::uuid, ${ownB}::uuid)`));
+    const after = await owner.select().from(s.labTest).where(sql`code = ${code}`);
+    expect(after.map((r) => r.name).sort()).toEqual(["Platform test", null]);
+    await expect(withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.insert(s.labTest).values({ id: randomUUID(), tenantId: null, code: `${code}x`, name: "x", short: "x", kind: "numeric" })))
+      .rejects.toThrow();
+    // Its own override is fine, once per code.
+    await withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.insert(s.labTest).values({ id: randomUUID(), tenantId: A, code, isActive: false }));
+    await expect(withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.insert(s.labTest).values({ id: randomUUID(), tenantId: A, code })))
+      .rejects.toThrow();
+    await expect(withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.execute(sql`delete from lab_test where tenant_id = ${A}::uuid`)))
+      .rejects.toMatchObject({ cause: { message: expect.stringMatching(/permission denied/) } });
+  });
+
+  it("keeps the lab profile inside its clinic", async () => {
+    await owner.insert(s.labProfile).values({ id: B, tenantId: B, labName: "B's lab" });
+    expect(await withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.select().from(s.labProfile))).toEqual([]);
+    await expect(withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.insert(s.labProfile).values({ id: randomUUID(), tenantId: B, labName: "sneaky" })))
+      .rejects.toThrow();
   });
 
   it("keeps report photos inside their clinic", async () => {
