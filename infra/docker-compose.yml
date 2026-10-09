@@ -1,6 +1,7 @@
 # Local dev infrastructure: the PowerSync service. Postgres runs on your machine (localhost:5432, wal_level=logical).
 #   docker compose -f infra/docker-compose.yml up -d
 # First run only: see README "Run locally" (prescription_service user + database, infra/powersync/setup.sql), then pnpm db:migrate.
+# E2E has its own instance (powersync-e2e, profile e2e): scripts/e2e-db.sh sets it up.
 name: rx
 services:
   powersync:
@@ -22,8 +23,31 @@ services:
       - ./powersync/sync-config.yaml:/config/sync-config.yaml:ro
     ports:
       - "8080:8080"
-    healthcheck:
+    healthcheck: &healthcheck
       test: ["CMD", "node", "-e", "fetch('http://localhost:8080/probes/liveness').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 5s
       timeout: 2s
       retries: 20
+
+  # E2E only, on its own databases so Playwright never writes into the dev one. Set up by scripts/e2e-db.sh; not
+  # started by a plain `up`. Fixed URIs on purpose: infra/.env overrides are for the dev instance.
+  powersync-e2e:
+    image: journeyapps/powersync-service:1.26.1
+    command: ["start", "-r", "unified"]
+    profiles: ["e2e"]
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/service.yaml
+      NODE_OPTIONS: --max-old-space-size=1000
+      PS_PORT: "8080"
+      PS_DATA_SOURCE_URI: postgresql://powersync_role:powersync_dev@host.docker.internal:5432/prescription_service_e2e
+      PS_STORAGE_SOURCE_URI: postgresql://powersync_storage_user:storage_dev@host.docker.internal:5432/powersync_storage_e2e
+      PS_JWT_SECRET: ${PS_JWT_SECRET}
+      PS_JWT_KID: ${PS_JWT_KID:-powersync-dev}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./powersync/service.yaml:/config/service.yaml:ro
+      - ./powersync/sync-config.yaml:/config/sync-config.yaml:ro
+    ports:
+      - "8081:8080"
+    healthcheck: *healthcheck

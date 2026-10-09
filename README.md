@@ -48,8 +48,13 @@ Demo logins (dev seed): `admin@rx.local / admin123`, `doctor@rx.local / doctor12
 ```bash
 pnpm typecheck
 pnpm test                       # rx-core + db unit tests, incl. RLS isolation against the dev DB
-cd apps/web && pnpm build && pnpm e2e   # Playwright against a production build (needs infra + seed)
+./scripts/e2e-db.sh                     # once, and after new migrations: e2e database + its PowerSync (:8081)
+cd apps/web && pnpm build && pnpm e2e   # Playwright against a production build
 ```
+
+E2E doesn't touch the dev database: the server Playwright starts uses `prescription_service_e2e` and the `powersync-e2e`
+service (compose profile `e2e`). Test patients pile up there; drop `prescription_service_e2e` and
+`powersync_storage_e2e` and re-run the script to start clean.
 
 The e2e suite covers: bilingual prescription + PDF + QR verification, offline write → reconnect →
 sync, assistant restrictions (server rejects tampered uploads), CSV import dry-run/commit, ENT exam
@@ -87,7 +92,7 @@ check-in → waiting-room display → fees/reports, SMS credit charging, FHIR ex
 | FHIR | Bundle export is tested structurally. Only resources that meet DGHS IG mandatory elements claim the profile; the rest are reported as gaps (UHID, religion, parent RelatedPerson…). Not validated against the DGHS sandbox. |
 | Legal | PDPA 2026 (consent, data residency in BD, retention) needs a lawyer's review. Host in a BD data centre or keep a BD replica. |
 | Sync scope | Every device downloads the tenant's full history; there's no date window on the `tenant_data` stream yet. Fine for one chamber, but add a window before large clinics. |
-| Test isolation | The e2e suite writes into the dev database (patients, payments, a test interaction accumulate). Use a throwaway DB in CI. |
+| Test isolation | The e2e suite uses its own database (`prescription_service_e2e`, see Tests), where runs accumulate. Use a throwaway DB in CI. |
 | BMDC lookup | The "Look up on BMDC site" link URL on the tenant page is a guess and unverified. |
 | Auth hardening | No login rate limiting or lockout yet; no password reset by email/OTP (admins reset passwords). |
 | Ops | Production secrets, HTTPS, backups, PowerSync JWT via JWKS/RS256 instead of the shared HS256 dev secret. |
