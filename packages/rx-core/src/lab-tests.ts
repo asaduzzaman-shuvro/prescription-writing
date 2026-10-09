@@ -216,14 +216,37 @@ export function labLine(report: LabReport, opts: { onlyPrinted: boolean }): { ti
   return { title: report.title, date, text: `${report.title} (${formatDateDmy(date, "en", "/").replace(/\/(\d{2})(\d{2})$/, "/$2")}): ${parts.join(", ")}` };
 }
 
-export const LAB_LIMITS = { results: 60, text: 200, title: 120, labName: 120, conclusion: 2000 } as const;
+export const LAB_LIMITS = { results: 60, text: 200, title: 120, labName: 120, conclusion: 2000, files: 10 } as const;
+
+/** A photo or PDF of the paper report, kept on the server (never printed). */
+export interface LabFileRef {
+  id: string;
+  type: LabFileType;
+}
+
+export const LAB_FILE_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
+export type LabFileType = (typeof LAB_FILE_TYPES)[number];
+/** Photos are shrunk on the device first (about 150–300 KB a page); a scanned PDF may be larger. */
+export const LAB_FILE_MAX_BYTES = 5 * 1024 * 1024;
+
+/** The file's real type from its first bytes (never trust the name or the browser's claim). */
+export function sniffLabFileType(b: Uint8Array): LabFileType | null {
+  const at = (i: number, ...xs: number[]) => xs.every((x, k) => b[i + k] === x);
+  if (at(0, 0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return "image/webp";
+  if (at(0, 0x25, 0x50, 0x44, 0x46, 0x2d)) return "application/pdf";
+  return null;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Checks a lab report before it's saved. The client runs it before writing and the upload endpoint runs it
  * again, so a report the doctor saw saved is never rejected later. Returns the problem, or null.
  * Only the fields present are checked (an upload may change a few of them).
  */
-export function labReportProblem(r: { results?: unknown; title?: unknown; labName?: unknown; conclusion?: unknown; reportDate?: unknown }, today: string): string | null {
+export function labReportProblem(r: { results?: unknown; title?: unknown; labName?: unknown; conclusion?: unknown; reportDate?: unknown; files?: unknown }, today: string): string | null {
   const str = (v: unknown, max: number, what: string) =>
     v === undefined || v === null ? null : typeof v !== "string" ? `${what} must be text` : v.length > max ? `${what} is too long (max ${max})` : null;
   const problem = str(r.title, LAB_LIMITS.title, "title") ?? str(r.labName, LAB_LIMITS.labName, "lab name") ?? str(r.conclusion, LAB_LIMITS.conclusion, "conclusion");
@@ -231,6 +254,13 @@ export function labReportProblem(r: { results?: unknown; title?: unknown; labNam
   if (r.reportDate !== undefined && r.reportDate !== null) {
     if (typeof r.reportDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(r.reportDate)) return "report date must be YYYY-MM-DD";
     if (r.reportDate > today) return "report date is in the future";
+  }
+  if (r.files !== undefined && r.files !== null) {
+    if (!Array.isArray(r.files)) return "files must be a list";
+    if (r.files.length > LAB_LIMITS.files) return `too many files (max ${LAB_LIMITS.files})`;
+    for (const f of r.files as Record<string, unknown>[]) {
+      if (!f || typeof f.id !== "string" || !UUID_RE.test(f.id) || !LAB_FILE_TYPES.includes(f.type as LabFileType)) return "invalid file";
+    }
   }
   if (r.results === undefined || r.results === null) return null;
   if (!Array.isArray(r.results)) return "results must be a list";
