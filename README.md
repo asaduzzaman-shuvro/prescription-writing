@@ -26,6 +26,7 @@ createdb -O prescription_service prescription_service
 psql -d prescription_service -f infra/powersync/setup.sql             # once, as a superuser: replication role + storage DB
 pnpm db:migrate
 ./scripts/fetch-dev-seed.sh && pnpm db:seed:dev                        # DEV ONLY data, see below
+#   CSVs kept elsewhere (gitignored, e.g. resources/archive): SEED_DIR=resources/archive pnpm db:seed:dev
 cp infra/.env.example infra/.env && cp apps/web/.env.example apps/web/.env.local
 #   put the same base64url secret in infra/.env (PS_JWT_SECRET) and apps/web/.env.local (POWERSYNC_JWT_SECRET)
 docker compose -f infra/docker-compose.yml up -d

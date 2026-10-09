@@ -3,6 +3,7 @@ docs/plans/
 
 # dev-only seed data (MedEx-derived; must not be redistributed)
 data/dev-seed/
+resources/archive/
 
 node_modules/
 .next/
