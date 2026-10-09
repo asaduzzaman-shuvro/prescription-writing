@@ -102,8 +102,10 @@ export interface RenderInput {
   footerNote?: string;
 }
 
-const esc = (s: string | undefined | null): string =>
+/** Text for HTML (element content or a quoted attribute). */
+export const escapeHtml = (s: string | undefined | null): string =>
   (s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+const esc = escapeHtml;
 
 export function paperDimensions(paper: PaperSize): { widthMm: number; heightMm: number } {
   if (typeof paper === "object") return paper;
