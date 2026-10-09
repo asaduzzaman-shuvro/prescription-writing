@@ -1,10 +1,10 @@
 "use client";
 
-import { LAB_TESTS, type PrescriptionDoc, type Sex } from "@rx/core";
+import type { PrescriptionDoc, Sex } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
 import { startVisit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
-import { useChambers, useDoctors } from "@/lib/doctor/hooks";
+import { useChambers, useDoctors, useLabCatalogue } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, parseJson } from "@/lib/doctor/util";
 import { LabReportSummary, LabTrendChart, trendSeries, useLabReports } from "./lab-reports";
@@ -24,11 +24,12 @@ export function PatientDetail({ patientId }: { patientId: string }) {
     [patientId],
   );
   const labs = useLabReports(patientId);
+  const labCatalogue = useLabCatalogue();
   const p = pts[0];
   if (!p) return <div className="text-sm text-slate-500">Loading patient…</div>;
   const allergies = parseJson<string[]>(p.allergies, []);
   // A trend needs at least two values of a test.
-  const trends = LAB_TESTS.map((test) => ({ test, points: trendSeries(labs, test.code) })).filter((t) => t.points.length >= 2);
+  const trends = labCatalogue.tests.map((test) => ({ test, points: trendSeries(labs, test.code) })).filter((t) => t.points.length >= 2);
   const isDoctor = session.tenantRole === "doctor";
 
   async function visit() {

@@ -1,12 +1,12 @@
 "use client";
 
 import {
+  LAB_DEPARTMENTS,
   LAB_FILE_MAX_BYTES,
   LAB_LIMITS,
-  LAB_PANELS,
-  LAB_TEST_BY_CODE,
   labPanel,
   labRange,
+  labRefText,
   labResult,
   labTrend,
   labValueText,
@@ -15,6 +15,7 @@ import {
   panelOfTest,
   parseLabShorthand,
   OTHER_REPORT_TITLES,
+  type LabCatalogue,
   type LabFileRef,
   type LabResult,
   type LabTest,
@@ -24,8 +25,10 @@ import {
 import { usePowerSync, useQuery } from "@powersync/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { deleteLabReport, lastFinalDoc, recordReportFilesConsent, saveLabReport } from "@/lib/doctor/data";
+import { useLabCatalogue } from "@/lib/doctor/hooks";
 import { parseJson, today, uuid } from "@/lib/doctor/util";
 import { addLabFile, readLabFile, removeLabFile } from "@/lib/powersync/lab-files";
+import { EMPTY_ROW, FLAG_STYLE, LabValueInput, rowFromResult, rowResult, type RowInput } from "./lab-entry";
 
 export interface LabReportView {
   id: string;
@@ -123,11 +126,11 @@ function LabFileTile({ file, onOpen, onRemove }: { file: LabFileRef; onOpen: (v:
   );
 }
 
-const FLAG_STYLE: Record<string, string> = { H: "text-red-700", L: "text-blue-700", A: "text-amber-700" };
 const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" });
 
 /** One report as a line of values; abnormal ones coloured, the ones that print in bold. */
 export function LabReportSummary({ r }: { r: LabReportView }) {
+  const cat = useLabCatalogue();
   return (
     <span className="text-sm">
       <b>{r.title}</b> <span className="text-slate-500">· {shortDate(r.reportDate)}{r.labName ? ` · ${r.labName}` : ""}</span>
@@ -135,7 +138,7 @@ export function LabReportSummary({ r }: { r: LabReportView }) {
       {r.results.map((x, i) => (
         <span key={x.code}>
           {i > 0 && ", "}
-          <span className={`${x.flag ? FLAG_STYLE[x.flag] : "text-slate-700"} ${x.print ? "font-semibold" : ""}`} data-testid={`lab-result-${x.code}`}>{labValueText(x)}</span>
+          <span className={`${x.flag ? FLAG_STYLE[x.flag] : "text-slate-700"} ${x.print ? "font-semibold" : ""}`} data-testid={`lab-result-${x.code}`}>{labValueText(x, cat)}</span>
         </span>
       ))}
       {r.conclusion && <span className="text-slate-700">{r.results.length ? " · " : ": "}{r.conclusion}</span>}
@@ -157,7 +160,7 @@ const DOT: Record<string, string> = { H: "#b91c1c", L: "#1d4ed8" };
 
 /** A small line chart of one test's values, with the normal range shaded. */
 export function LabTrendChart({ code, points, sex, testId }: { code: string; points: TrendPoint[]; sex: Sex | null; testId?: string }) {
-  const test = LAB_TEST_BY_CODE[code];
+  const test = useLabCatalogue().byCode[code];
   if (!test || !points.length) return null;
   const w = 240, h = 64;
   const { points: pts, band } = labTrend(points, labRange(test, sex), w, h);
@@ -183,6 +186,7 @@ export function LabTrendChart({ code, points, sex, testId }: { code: string; poi
 /** The visit's Reports card: add the paper reports the patient brought; ticked values print on the prescription. */
 export function LabReports({ encounterId, patientId, sex }: { encounterId: string; patientId: string; sex: Sex | null }) {
   const db = usePowerSync();
+  const cat = useLabCatalogue();
   const reports = useLabReports(patientId);
   const [editing, setEditing] = useState<{ panel: string; report?: LabReportView; title?: string } | null>(null);
   const [quick, setQuick] = useState("");
@@ -200,7 +204,7 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
   // One chip per panel ("RBS, HbA1c" → Blood sugar); hidden once this visit has that report.
   const orderedChips: { key: string; panel: string; title?: string; names: string[] }[] = [];
   for (const name of ordered) {
-    const p = panelForInvestigation(name);
+    const p = panelForInvestigation(name, cat);
     const key = p.title ? `${OTHER_PANEL}:${p.title}` : p.panel;
     const chip = orderedChips.find((c) => c.key === key);
     if (chip) chip.names.push(name);
@@ -209,18 +213,18 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
 
   /** "hb 9.2 wbc 11800 rbs 11.4": one report per panel, dated today, from the last lab. */
   async function saveQuick() {
-    const parsed = parseLabShorthand(quick);
+    const parsed = parseLabShorthand(quick, cat);
     if (parsed.unknown.length) return setQuickError(`Didn't recognise: ${parsed.unknown.join(", ")}`);
     if (!parsed.results.length) return;
     const byPanel = new Map<string, LabResult[]>();
     for (const x of parsed.results) {
-      const test = LAB_TEST_BY_CODE[x.code]!;
-      const panel = panelOfTest(x.code)?.id ?? OTHER_PANEL;
+      const test = cat.byCode[x.code]!;
+      const panel = panelOfTest(x.code, cat)?.id ?? OTHER_PANEL;
       byPanel.set(panel, [...(byPanel.get(panel) ?? []).filter((r) => r.code !== x.code), labResult(test, x, sex)]);
     }
     try {
       for (const [panel, results] of byPanel) {
-        await saveLabReport(db, { patientId, encounterId, reportDate: today(), labName: lastLab, panel, title: labPanel(panel)?.name ?? "Reports", results, conclusion: "" });
+        await saveLabReport(db, { patientId, encounterId, reportDate: today(), labName: lastLab, panel, title: labPanel(panel, cat)?.name ?? "Reports", results, conclusion: "" });
       }
       setQuick("");
       setQuickError(null);
@@ -239,11 +243,18 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
     <section className="space-y-2" data-testid="lab-reports">
       <div className="flex flex-wrap items-center gap-1.5">
         <h3 className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Reports</h3>
-        {[...LAB_PANELS.map((p) => ({ id: p.id, name: p.name })), { id: OTHER_PANEL, name: "Imaging / other" }].map((p) => (
+        {[...cat.panels.filter((p) => CHIP_PANELS.includes(p.id)).map((p) => ({ id: p.id, name: p.name })), { id: OTHER_PANEL, name: "Imaging / other" }].map((p) => (
           <button key={p.id} className="rounded-full border border-slate-300 px-2.5 py-0.5 text-xs hover:bg-slate-50" onClick={() => setEditing({ panel: p.id })} data-testid={`lab-add-${p.id}`}>
             + {p.name}
           </button>
         ))}
+        <select className="input w-auto py-0.5 text-xs" value="" onChange={(e) => e.target.value && setEditing({ panel: e.target.value })} aria-label="More tests" data-testid="lab-add-more">
+          <option value="">+ More tests…</option>
+          {LAB_DEPARTMENTS.map((d) => {
+            const panels = cat.panels.filter((p) => p.department === d.id && !CHIP_PANELS.includes(p.id));
+            return panels.length ? <optgroup key={d.id} label={d.name}>{panels.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup> : null;
+          })}
+        </select>
       </div>
       {orderedChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="lab-ordered">
@@ -271,6 +282,7 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
           encounterId={encounterId}
           sex={sex}
           reports={reports}
+          cat={cat}
           filesConsented={Boolean(consent[0]?.c)}
           onDone={() => setEditing(null)}
         />
@@ -299,29 +311,10 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
   );
 }
 
-interface RowInput {
-  value: string;
-  text: string;
-  low: string;
-  high: string;
-  /** Unset: follow the flag (abnormal values print). */
-  print?: boolean;
-}
+/** The panels offered as chips; the rest of the catalogue is under "More tests". */
+const CHIP_PANELS = ["cbc", "sugar", "rft", "lft", "lipid", "thyroid", "urine", "electrolytes", "serology"];
 
-const toNum = (s: string) => {
-  const n = Number(s.replace(/,/g, "").trim());
-  return s.trim() !== "" && Number.isFinite(n) ? n : undefined;
-};
-
-function rangeHint(test: LabTest, sex: Sex | null) {
-  const { low, high } = labRange(test, sex);
-  if (low !== undefined && high !== undefined) return `${low}–${high}`;
-  if (low !== undefined) return `>${low}`;
-  if (high !== undefined) return `<${high}`;
-  return (test.normal ?? []).join("/");
-}
-
-function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, sex, reports, filesConsented, onDone }: {
+function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, sex, reports, cat, filesConsented, onDone }: {
   panel: string;
   report?: LabReportView;
   initialTitle?: string;
@@ -330,24 +323,28 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
   encounterId: string;
   sex: Sex | null;
   reports: LabReportView[];
+  /** The card's catalogue, already loaded (the editor's state starts from it). */
+  cat: LabCatalogue;
   onDone: () => void;
 }) {
   const db = usePowerSync();
+  const byCode = cat.byCode;
   const isOther = panel === OTHER_PANEL;
-  const codes = [...new Set([...(labPanel(panel)?.tests ?? []), ...(report?.results.map((r) => r.code) ?? [])])].filter((c) => LAB_TEST_BY_CODE[c]);
+  const codes = [...new Set([...(labPanel(panel, cat)?.tests ?? []), ...(report?.results.map((r) => r.code) ?? [])])].filter((c) => byCode[c]);
+  // Results this device's catalogue doesn't know (a test added since) are shown and kept as they are.
+  const kept = report?.results.filter((r) => !byCode[r.code]) ?? [];
+  const sectionOf = Object.fromEntries((labPanel(panel, cat)?.sections ?? []).flatMap((s) => s.tests.map((c) => [c, s.title])));
   const [date, setDate] = useState(report?.reportDate ?? today());
   // The clinic's patients mostly use one or two labs: until the field is touched, show the last one typed
   // (worked out on each render, since a report saved a moment ago may still be on its way into the list).
   const [typedLab, setLabName] = useState<string | null>(report ? (report.labName ?? "") : null);
   const labName = typedLab ?? reports.find((r) => r.labName)?.labName ?? "";
-  const [title, setTitle] = useState(report?.title ?? initialTitle ?? (isOther ? "" : (labPanel(panel)?.name ?? "")));
+  const [typedTitle, setTitle] = useState(report?.title ?? initialTitle ?? "");
+  const title = typedTitle || (isOther ? "" : (labPanel(panel, cat)?.name ?? ""));
   const [conclusion, setConclusion] = useState(report?.conclusion ?? "");
   const [showRange, setShowRange] = useState(Boolean(report?.results.some((r) => r.low !== undefined || r.high !== undefined)));
   const [rows, setRows] = useState<Record<string, RowInput>>(() =>
-    Object.fromEntries(codes.map((c) => {
-      const r = report?.results.find((x) => x.code === c);
-      return [c, { value: r?.value !== undefined ? String(r.value) : "", text: r?.text ?? "", low: r?.low !== undefined ? String(r.low) : "", high: r?.high !== undefined ? String(r.high) : "", print: r?.print }];
-    })),
+    Object.fromEntries(codes.map((c) => [c, rowFromResult(byCode[c], report?.results.find((x) => x.code === c))])),
   );
   const [error, setError] = useState<string | null>(null);
   const [trendOf, setTrendOf] = useState<string | null>(null);
@@ -399,13 +396,8 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
     onDone();
   }
 
-  const resultOf = (test: LabTest): LabResult | null => {
-    const row = rows[test.code]!;
-    const value = toNum(row.value);
-    if (value === undefined && !row.text) return null;
-    return labResult(test, { value, text: row.text || undefined, low: toNum(row.low), high: toNum(row.high), print: row.print }, sex);
-  };
-  const set = (code: string, patch: Partial<RowInput>) => setRows((r) => ({ ...r, [code]: { ...r[code]!, ...patch } }));
+  const resultOf = (test: LabTest): LabResult | null => rowResult(test, rows[test.code] ?? EMPTY_ROW, sex, sectionOf[test.code]);
+  const set = (code: string, patch: Partial<RowInput>) => setRows((r) => ({ ...r, [code]: { ...(r[code] ?? EMPTY_ROW), ...patch } }));
 
   /** The patient's last earlier value of a test, e.g. "prev 8.1 · 12 Mar 26". */
   const previous = (code: string) => {
@@ -418,7 +410,8 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
   };
 
   async function save() {
-    const results = codes.map((c) => resultOf(LAB_TEST_BY_CODE[c]!)).filter((x): x is LabResult => x !== null);
+    const entered = codes.map((c) => resultOf(byCode[c]!)).filter((x): x is LabResult => x !== null);
+    const results = [...entered, ...kept];
     if (!results.length && !conclusion.trim() && !files.length) return setError(isOther ? "Write the report's finding." : "Enter at least one value.");
     try {
       await saveLabReport(db, { patientId, encounterId: report ? report.encounterId : encounterId, reportDate: date, labName, panel, title, results, conclusion, files }, reportId);
@@ -458,24 +451,21 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
       {!isOther && (
         <table className="w-full text-sm">
           <tbody>
-            {codes.map((c) => {
-              const test = LAB_TEST_BY_CODE[c]!;
-              const row = rows[c]!;
+            {codes.map((c, i, shown) => {
+              const test = byCode[c]!;
+              const row = rows[c] ?? EMPTY_ROW;
               const res = resultOf(test);
               const prev = previous(c);
+              const heading = sectionOf[c] && sectionOf[c] !== sectionOf[shown[i - 1] ?? ""] ? sectionOf[c] : null;
               return (
                 <Fragment key={c}>
+                {heading && (
+                  <tr><td colSpan={7} className="pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{heading}</td></tr>
+                )}
                 <tr className="align-top">
                   <td className="py-0.5 pr-2 text-slate-600" title={test.name}>{test.short}</td>
                   <td className="py-0.5 pr-2">
-                    {test.kind === "coded" ? (
-                      <select className="input w-28 py-1" value={row.text} onChange={(e) => set(c, { text: e.target.value })} data-testid={`lab-value-${c}`}>
-                        <option value="">—</option>
-                        {test.options!.map((o) => <option key={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <input className="input w-24 py-1" inputMode="decimal" value={row.value} onChange={(e) => set(c, { value: e.target.value })} data-testid={`lab-value-${c}`} />
-                    )}
+                    <LabValueInput test={test} row={row} onChange={(patch) => set(c, patch)} testId={`lab-value-${c}`} />
                     {prev && (
                       <button type="button" className="block text-left text-[11px] text-slate-400 hover:text-brand-700" title="Show the trend"
                         onClick={() => setTrendOf(trendOf === c ? null : c)} data-testid={`lab-prev-${c}`}>
@@ -484,7 +474,7 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
                     )}
                   </td>
                   <td className="py-1 pr-2 text-xs text-slate-500">{test.unit}</td>
-                  <td className="py-1 pr-2 text-xs text-slate-400">{rangeHint(test, sex)}</td>
+                  <td className="py-1 pr-2 text-xs text-slate-400">{labRefText(test, sex)}</td>
                   {showRange && (
                     <td className="py-0.5 pr-2 whitespace-nowrap">
                       {test.kind === "numeric" && (
@@ -519,6 +509,11 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
                 </Fragment>
               );
             })}
+            {kept.map((r) => (
+              <tr key={r.code} data-testid={`lab-kept-${r.code}`}>
+                <td colSpan={7} className="py-0.5 text-xs text-slate-500">{labValueText(r, cat)} <span className="text-slate-400">(kept as entered)</span></td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}

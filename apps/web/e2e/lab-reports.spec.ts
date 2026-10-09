@@ -204,3 +204,40 @@ test("report photos: taken offline, uploaded later, viewable, removable; the ser
   await expect(card.getByTestId("lab-report").getByTestId("lab-file")).toHaveCount(0);
   await expect.poll(async () => (await page.request.get(`/api/lab-files/${fileId}`)).status(), { timeout: 60_000 }).toBe(404);
 });
+
+test("the full menu: stool R/M/E by section, written counts, text results and Widal titres", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  await registerPatient(page, { name: `E2E Labs Menu ${uniq()}`, age: "30", sex: "Male", mobile: mobile() });
+  const card = page.getByTestId("lab-reports");
+
+  // Panels beyond the chips are under "More tests", grouped by department.
+  await card.getByTestId("lab-add-more").selectOption({ label: "Stool R/M/E" });
+  const editor = card.getByTestId("lab-editor");
+  await expect(editor.getByText("Microscopic examination")).toBeVisible();
+  await card.getByTestId("lab-value-bd-stool-consistency").selectOption("Loose");
+  await expect(card.getByTestId("lab-flag-bd-stool-consistency")).toHaveText("A");
+  await card.getByTestId("lab-value-bd-stool-pus").fill("8-10");
+  await expect(card.getByTestId("lab-flag-bd-stool-pus")).toHaveText("H");
+  await card.getByTestId("lab-value-bd-stool-cyst").fill("Entamoeba histolytica");
+  await expect(card.getByTestId("lab-flag-bd-stool-cyst")).toHaveText("A");
+  await card.getByTestId("lab-value-bd-stool-ova").fill("Not found");
+  await expect(card.getByTestId("lab-flag-bd-stool-ova")).toHaveText("");
+  await card.getByTestId("lab-save").click();
+  await expect(card.getByTestId("lab-result-bd-stool-pus")).toHaveText("Pus cells 8-10 /HPF (H)");
+  await expect(card.getByTestId("lab-result-bd-stool-cyst")).toHaveText("Cyst Entamoeba histolytica");
+
+  await card.getByTestId("lab-add-more").selectOption({ label: "Widal test" });
+  await card.getByTestId("lab-value-bd-widal-to").selectOption("1:160");
+  await expect(card.getByTestId("lab-flag-bd-widal-to")).toHaveText("A");
+  await card.getByTestId("lab-value-bd-widal-th").selectOption("1:80");
+  await expect(card.getByTestId("lab-flag-bd-widal-th")).toHaveText("");
+  await card.getByTestId("lab-save").click();
+  await expect(card.getByTestId("lab-report")).toHaveCount(2);
+
+  // Editing keeps what was entered as it was.
+  await card.getByTestId("lab-report").filter({ hasText: "Stool" }).getByRole("button", { name: "Edit" }).click();
+  await expect(card.getByTestId("lab-value-bd-stool-pus")).toHaveValue("8-10");
+  await card.getByTestId("lab-save").click();
+  await expect(card.getByTestId("lab-result-bd-stool-pus")).toHaveText("Pus cells 8-10 /HPF (H)");
+});

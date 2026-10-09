@@ -23,6 +23,9 @@ streams:
       - SELECT id, specialty_code, sort_order, text_bn, text_en, category FROM advice_snippet WHERE is_active = true
       - SELECT id, specialty_code, sort_order, text_bn, text_en FROM instruction_snippet WHERE is_active = true
       - SELECT id, specialty_code, name, version, schema FROM specialty_template WHERE is_active = true
+      # The platform's lab catalogue; each clinic's own rows come with tenant_data.
+      - SELECT * FROM lab_test WHERE tenant_id IS NULL AND is_active = true
+      - SELECT * FROM lab_panel WHERE tenant_id IS NULL AND is_active = true
   shared_templates:
     auto_subscribe: true
     queries:
@@ -34,6 +37,10 @@ streams:
       - SELECT * FROM encounter WHERE tenant_id = auth.parameter('tenant_id')
       - SELECT * FROM prescription WHERE tenant_id = auth.parameter('tenant_id')
       - SELECT * FROM lab_report WHERE tenant_id = auth.parameter('tenant_id') AND deleted_at IS NULL
+      # No is_active filter: a clinic hides a test with an inactive row, which devices must receive.
+      - SELECT * FROM lab_test WHERE tenant_id = auth.parameter('tenant_id')
+      - SELECT * FROM lab_panel WHERE tenant_id = auth.parameter('tenant_id')
+      - SELECT * FROM lab_profile WHERE tenant_id = auth.parameter('tenant_id')
       - SELECT * FROM chamber WHERE tenant_id = auth.parameter('tenant_id')
       - SELECT user_id AS id, tenant_id, name_en, name_bn, degrees_en, degrees_bn, designation, institution, specialty_code, specialty_label, bmdc_number, bmdc_expiry, bmdc_verified_at, signature_data_url FROM doctor_profile WHERE tenant_id = auth.parameter('tenant_id')
       - SELECT * FROM rx_template WHERE tenant_id = auth.parameter('tenant_id')
