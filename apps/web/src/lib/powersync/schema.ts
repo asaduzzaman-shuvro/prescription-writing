@@ -129,12 +129,37 @@ const lab_report = new Table(
     results: column.text,
     conclusion: column.text,
     files: column.text,
+    source: column.text,
+    request_id: column.text,
+    lab_no: column.text,
+    department: column.text,
+    specimen: column.text,
+    collected_at: column.text,
+    referred_by: column.text,
+    prepared_by_name: column.text,
+    comment: column.text,
     created_by: column.text,
     deleted_at: column.text,
     ...timestamps,
   },
-  { indexes: { patient: ["patient_id", "report_date"], encounter: ["encounter_id"] } },
+  { indexes: { patient: ["patient_id", "report_date"], encounter: ["encounter_id"], request: ["request_id"] } },
 );
+
+/** The lab catalogue: platform rows (tenant_id null) and the clinic's own, merged by @rx/core buildLabCatalogue. */
+const labCatalogueCols = { tenant_id: column.text, name: column.text, department: column.text, sort_order: column.integer, is_active: column.integer, spec: column.text, source: column.text, ...timestamps };
+const lab_test = new Table({ ...labCatalogueCols, code: column.text, short: column.text, unit: column.text, kind: column.text });
+const lab_panel = new Table({ ...labCatalogueCols, key: column.text });
+const lab_profile = new Table({
+  tenant_id: column.text,
+  lab_name: column.text,
+  address: column.text,
+  phone: column.text,
+  logo_data_url: column.text,
+  signatories: column.text,
+  footer_text: column.text,
+  print_settings: column.text,
+  ...timestamps,
+});
 
 const chamber = new Table({
   tenant_id: column.text,
@@ -223,6 +248,9 @@ export const AppSchema = new Schema({
   encounter,
   prescription,
   lab_report,
+  lab_test,
+  lab_panel,
+  lab_profile,
   chamber,
   doctor_profile,
   rx_template,
@@ -238,4 +266,4 @@ export type PrescriptionRow = Database["prescription"];
 export type LabReportRow = Database["lab_report"];
 
 /** Tables the client is allowed to write; everything else is read-only on the server side. */
-export const WRITABLE_TABLES = ["appointment", "patient", "encounter", "prescription", "lab_report", "chamber", "rx_template", "doctor_favorite", "doctor_profile"] as const;
+export const WRITABLE_TABLES = ["appointment", "patient", "encounter", "prescription", "lab_report", "lab_test", "lab_panel", "lab_profile", "chamber", "rx_template", "doctor_favorite", "doctor_profile"] as const;

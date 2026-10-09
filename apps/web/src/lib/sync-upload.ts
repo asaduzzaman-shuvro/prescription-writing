@@ -1,5 +1,5 @@
 import "server-only";
-import { formatInstruction, labReportProblem, type PrescriptionDoc } from "@rx/core";
+import { formatInstruction, labCatalogueRowProblem, labReportProblem, type PrescriptionDoc } from "@rx/core";
 import { s, withTenant, type Tx } from "@rx/db";
 import { eq, sql, type SQL } from "drizzle-orm";
 import { appDb } from "./db";
@@ -59,11 +59,33 @@ const SPECS: Record<string, TableSpec> = {
     },
   },
   lab_report: {
-    // The assistant types in the paper reports while the patient waits; removal is a soft delete.
+    // The assistant types in the paper reports while the patient waits, or the clinic lab's own results;
+    // removal is a soft delete. prepared_by_name is always the uploader's (set below); lab_no is the server's.
     roles: ["doctor", "assistant", "clinic_admin"],
     columns: {
       patient_id: "uuid", encounter_id: "uuid", report_date: "date", lab_name: "text", panel: "text", title: "text",
       results: "jsonb", conclusion: "text", files: "jsonb", deleted_at: "ts", created_at: "ts",
+      source: "text", request_id: "uuid", department: "text", specimen: "text", collected_at: "ts", referred_by: "text",
+      comment: "text", prepared_by_name: "text",
+    },
+  },
+  // A clinic's changes to the lab catalogue (never the platform's rows: see checkLabCatalogue).
+  lab_test: {
+    roles: ["doctor", "clinic_admin"],
+    columns: {
+      code: "text", name: "text", short: "text", unit: "text", kind: "text", department: "text", sort_order: "int",
+      is_active: "bool", spec: "jsonb", created_at: "ts",
+    },
+  },
+  lab_panel: {
+    roles: ["doctor", "clinic_admin"],
+    columns: { key: "text", name: "text", department: "text", sort_order: "int", is_active: "bool", spec: "jsonb", created_at: "ts" },
+  },
+  lab_profile: {
+    roles: ["doctor", "clinic_admin"],
+    columns: {
+      lab_name: "text", address: "text", phone: "text", logo_data_url: "text", signatories: "jsonb", footer_text: "text",
+      print_settings: "jsonb", created_at: "ts",
     },
   },
   chamber: {
@@ -149,6 +171,7 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
   const idCol = op.table === "doctor_profile" ? sql.identifier("user_id") : sql.identifier("id");
 
   if (op.table === "doctor_profile" && op.id !== session.userId) throw new Rejection("can only edit own profile");
+  if (op.table === "lab_profile" && op.id !== session.tenantId) throw new Rejection("the lab profile's id is the clinic's");
 
   if (op.op === "DELETE") {
     if (!spec.allowDelete) throw new Rejection(`delete not allowed on ${op.table}; use a soft-delete field`);
@@ -169,7 +192,17 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
     if (before && before.doctor_user_id !== session.userId) throw new Rejection("not your prescription");
   }
   if (op.table === "encounter" && op.op === "PUT" && !data.doctor_user_id) throw new Rejection("doctor_user_id required");
-  if (op.table === "lab_report") await checkLabReport(tx, op, data, before);
+  if (op.table === "lab_report") {
+    await checkLabReport(tx, op, data, before);
+    if (op.op === "PUT" && !before) data.prepared_by_name = session.name;
+    else delete data.prepared_by_name;
+  }
+  if (op.table === "lab_test" || op.table === "lab_panel") await checkLabCatalogue(tx, session.tenantId, op, data, before);
+  if (op.table === "lab_profile") {
+    if (typeof data.logo_data_url === "string" && data.logo_data_url.length > 400_000) throw new Rejection("logo image too large (max 300 KB)");
+    const signatories = typeof data.signatories === "string" ? data.signatories : JSON.stringify(data.signatories ?? []);
+    if (signatories.length > 4000) throw new Rejection("too many signatories");
+  }
   if (op.table === "chamber") {
     if (op.op === "PUT" && !before && session.tenantRole === "doctor") data.doctor_user_id = session.userId;
     if (typeof data.logo_data_url === "string" && data.logo_data_url.length > 400_000) throw new Rejection("logo image too large (max 300 KB)");
@@ -200,6 +233,7 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
 
   // Post-write server logic.
   if (op.table === "patient" && !before) await assignPatientCode(tx, session.tenantId, op.id);
+  if (op.table === "lab_report") await assignLabNo(tx, session.tenantId, op.id);
   if (op.table === "prescription") {
     const [row] = await tx.select().from(s.prescription).where(eq(s.prescription.id, op.id));
     if (row && row.status === "final" && before?.status !== "final") await finalize(tx, session, row);
@@ -220,7 +254,11 @@ async function checkLabReport(tx: Tx, op: CrudOp, data: Record<string, unknown>,
     }
   };
   const problem = labReportProblem(
-    { results: json(data.results, "results"), files: json(data.files, "files"), title: data.title, labName: data.lab_name, conclusion: data.conclusion, reportDate: data.report_date },
+    {
+      results: json(data.results, "results"), files: json(data.files, "files"), title: data.title, labName: data.lab_name, conclusion: data.conclusion,
+      reportDate: data.report_date, source: data.source, requestId: data.request_id, specimen: data.specimen, collectedAt: data.collected_at,
+      referredBy: data.referred_by, comment: data.comment, department: data.department,
+    },
     todayBd(),
   );
   if (problem) throw new Rejection(problem);
@@ -233,6 +271,40 @@ async function checkLabReport(tx: Tx, op: CrudOp, data: Record<string, unknown>,
     const rows = (await tx.execute(sql`select 1 from encounter where id = ${encounterId}::uuid and patient_id = ${patientId}::uuid`)) as unknown as unknown[];
     if (!rows.length) throw new Rejection("the visit belongs to another patient");
   }
+}
+
+/** A clinic may change its own catalogue rows only; a code or key stays what it was created with. */
+async function checkLabCatalogue(tx: Tx, tenantId: string, op: CrudOp, data: Record<string, unknown>, before: Record<string, unknown> | undefined) {
+  const table = op.table as "lab_test" | "lab_panel";
+  const id = table === "lab_test" ? "code" : "key";
+  if (before && before.tenant_id === null) throw new Rejection("the platform's lab catalogue is read-only");
+  const problem = labCatalogueRowProblem(table, data);
+  if (problem) throw new Rejection(problem);
+  if (before && id in data && data[id] !== before[id]) throw new Rejection(`a test's ${id} can't change`);
+  if (!before) {
+    if (!data[id]) throw new Rejection(`${id} is required`);
+    const other = (await tx.execute(sql`select 1 from ${sql.identifier(table)} where tenant_id = ${tenantId}::uuid and ${sql.identifier(id)} = ${String(data[id])} and id <> ${op.id}::uuid`)) as unknown as unknown[];
+    if (other.length) throw new Rejection(`this clinic already has a row for ${String(data[id])}`);
+  }
+}
+
+/** The clinic lab's report number (L-000123), once per request: the request's other panels share it. */
+async function assignLabNo(tx: Tx, tenantId: string, reportId: string) {
+  const [row] = (await tx.execute(sql`select source, request_id, lab_no from lab_report where id = ${reportId}::uuid`)) as unknown as { source: string; request_id: string | null; lab_no: string | null }[];
+  if (!row || row.source !== "in_house" || row.lab_no) return;
+  if (row.request_id) {
+    const [sibling] = (await tx.execute(sql`select lab_no from lab_report where request_id = ${row.request_id}::uuid and lab_no is not null limit 1`)) as unknown as { lab_no: string }[];
+    if (sibling) {
+      await tx.execute(sql`update lab_report set lab_no = ${sibling.lab_no} where id = ${reportId}::uuid and lab_no is null`);
+      return;
+    }
+  }
+  const [t] = await tx
+    .update(s.tenant)
+    .set({ labSeq: sql`${s.tenant.labSeq} + 1` })
+    .where(eq(s.tenant.id, tenantId))
+    .returning({ seq: s.tenant.labSeq });
+  await tx.execute(sql`update lab_report set lab_no = ${`L-${String(t!.seq).padStart(6, "0")}`} where id = ${reportId}::uuid and lab_no is null`);
 }
 
 async function assignPatientCode(tx: Tx, tenantId: string, patientId: string) {
