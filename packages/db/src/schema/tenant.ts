@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import {
   bigserial,
   boolean,
+  customType,
   date,
   index,
   integer,
@@ -169,6 +170,8 @@ export const patient = pgTable(
     notes: text(),
     /** PDPA: explicit consent for storing health data; guardian consent for minors. */
     consentAt: timestamp({ withTimezone: true }),
+    /** Consent to keep photos/PDFs of their reports (asked once, before the first one). */
+    reportFilesConsentAt: timestamp({ withTimezone: true }),
     guardianName: text(),
     createdBy: uuid(),
     deletedAt: timestamp({ withTimezone: true }),
@@ -274,11 +277,42 @@ export const labReport = pgTable(
     title: text().notNull(),
     results: jsonb().notNull().default([]),
     conclusion: text(),
+    /** @rx/core LabFileRef[]: photos/PDFs of the paper report, stored in lab_file. */
+    files: jsonb().notNull().default([]),
     createdBy: uuid(),
     deletedAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
   (t) => [index("lab_report_patient_idx").on(t.patientId, t.reportDate), index("lab_report_encounter_idx").on(t.encounterId)],
+);
+
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
+
+/**
+ * A photo or PDF of a lab report. Server-only: devices upload it through /api/lab-files and fetch it on demand;
+ * it is not synced. lab_report_id has no foreign key because a file taken offline may arrive before its report.
+ * Deleting wipes the bytes and keeps the row for the record.
+ */
+export const labFile = pgTable(
+  "lab_file",
+  {
+    id: uuid().primaryKey(),
+    tenantId: uuid()
+      .notNull()
+      .references(() => tenant.id),
+    patientId: uuid()
+      .notNull()
+      .references(() => patient.id),
+    labReportId: uuid().notNull(),
+    contentType: text().notNull(),
+    sizeBytes: integer().notNull(),
+    sha256: text().notNull(),
+    data: bytea().notNull(),
+    createdBy: uuid(),
+    deletedAt: timestamp({ withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index("lab_file_report_idx").on(t.labReportId)],
 );
 
 /** Flattened Rx lines, written server-side when a prescription is finalised (reporting only). */
