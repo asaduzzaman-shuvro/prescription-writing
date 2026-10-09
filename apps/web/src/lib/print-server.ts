@@ -1,5 +1,20 @@
 import "server-only";
-import { DEFAULT_PRINT_SETTINGS, labLine, printAge, renderPrescriptionHtml, type ChamberHeader, type ChamberSlot, type LabResult, type PrescriptionDoc, type PrintSettings, type Sex } from "@rx/core";
+import {
+  buildLabCatalogue,
+  DEFAULT_PRINT_SETTINGS,
+  labLine,
+  labReportDepartment,
+  printAge,
+  renderLabReportHtml,
+  renderPrescriptionHtml,
+  type ChamberHeader,
+  type ChamberSlot,
+  type LabResult,
+  type LabSignatory,
+  type PrescriptionDoc,
+  type PrintSettings,
+  type Sex,
+} from "@rx/core";
 import { s, withTenant } from "@rx/db";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { readFileSync } from "node:fs";
@@ -81,6 +96,10 @@ export async function prescriptionPdf(ctx: { tenantId: string; userId: string },
     fonts: fonts(),
     footerNote: verifyUrl ? `Verify: ${verifyUrl.replace(/^https?:\/\//, "")}` : "DRAFT — not valid",
   });
+  return htmlToPdf(html);
+}
+
+async function htmlToPdf(html: string): Promise<Buffer> {
   const page = await (await browser()).newPage({ javaScriptEnabled: false });
   try {
     // Everything (fonts, QR, signature) is inline; block all network so injected markup can't call out.
@@ -91,4 +110,47 @@ export async function prescriptionPdf(ctx: { tenantId: string; userId: string },
   } finally {
     await page.close();
   }
+}
+
+/** Server-side render of a clinic lab request to PDF (same renderer as the browser print). */
+export async function labReportPdf(ctx: { tenantId: string; userId: string }, requestId: string): Promise<Buffer | null> {
+  const data = await withTenant(appDb, ctx, async (tx) => {
+    const rows = await tx.select().from(s.labReport)
+      .where(and(eq(s.labReport.requestId, requestId), isNull(s.labReport.deletedAt)))
+      .orderBy(asc(s.labReport.createdAt));
+    if (!rows[0]) return null;
+    const [patient] = await tx.select().from(s.patient).where(eq(s.patient.id, rows[0].patientId));
+    const [profile] = await tx.select().from(s.labProfile);
+    const [chamber] = await tx.select().from(s.chamber).where(eq(s.chamber.isActive, true)).orderBy(asc(s.chamber.createdAt)).limit(1);
+    // The platform's catalogue and this clinic's changes (RLS shows no other clinic's).
+    const tests = await tx.select().from(s.labTest);
+    const panels = await tx.select().from(s.labPanel);
+    return { rows, patient, profile, chamber, tests, panels };
+  });
+  if (!data?.patient) return null;
+  const { rows, patient, profile, chamber } = data;
+  const cat = buildLabCatalogue({ tests: data.tests, panels: data.panels });
+  const labNo = rows.find((r) => r.labNo)?.labNo ?? null;
+  const reportDate = rows.map((r) => r.reportDate).sort().pop()!;
+  const html = renderLabReportHtml({
+    profile: {
+      labName: profile?.labName || chamber?.name || "", address: profile?.address || chamber?.address || undefined, phone: profile?.phone || chamber?.phone || undefined,
+      logoDataUrl: profile?.logoDataUrl || chamber?.logoDataUrl || undefined, signatories: (profile?.signatories as LabSignatory[] | undefined) ?? [],
+      footerText: profile?.footerText || undefined,
+    },
+    patient: { name: patient.name, sex: (patient.sex as Sex) ?? undefined, mobile: patient.mobile ?? undefined, patientCode: patient.code ?? undefined, ...printAge(patient.dob, reportDate) },
+    labNo: labNo ?? `Ref ${requestId.slice(0, 8).toUpperCase()}`,
+    labNoPending: !labNo,
+    referredBy: rows[0]!.referredBy,
+    preparedBy: rows.find((r) => r.preparedByName)?.preparedByName ?? null,
+    reportDate,
+    collectedAt: rows[0]!.collectedAt?.toISOString() ?? null,
+    reports: rows.map((r) => ({
+      title: r.title, department: labReportDepartment(r.panel, r.department, cat), specimen: r.specimen, layout: cat.panelById[r.panel]?.layout,
+      results: r.results as LabResult[], comment: r.comment, conclusion: r.conclusion,
+    })),
+    fonts: fonts(),
+    catalogue: cat,
+  });
+  return htmlToPdf(html);
 }

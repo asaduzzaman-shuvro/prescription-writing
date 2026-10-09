@@ -271,6 +271,73 @@ export async function saveLabReport(db: Db, r: LabReportInput, id?: string): Pro
   return newId;
 }
 
+/** One panel of a clinic lab request, as entered. */
+export interface LabRequestPanel {
+  panel: string;
+  title: string;
+  department: string;
+  specimen: string;
+  results: LabResult[];
+  comment: string;
+}
+
+export interface LabRequestInput {
+  requestId: string;
+  patientId: string;
+  referredBy: string;
+  /** ISO timestamp. */
+  collectedAt: string;
+  panels: LabRequestPanel[];
+}
+
+/**
+ * Save a clinic lab request: one in-house lab_report per panel, sharing the request id (the server gives them one
+ * Lab No) and the header fields. A panel taken off the request is removed (soft delete). A new request joins the
+ * patient's open visit today, if any, so the doctor sees it there. Same checks as the upload endpoint.
+ */
+export async function saveLabRequest(db: Db, r: LabRequestInput) {
+  const date = today();
+  for (const p of r.panels) {
+    const problem = labReportProblem(
+      { results: p.results, title: p.title, source: "in_house", requestId: r.requestId, specimen: p.specimen, collectedAt: r.collectedAt, referredBy: r.referredBy, comment: p.comment, department: p.department || null, reportDate: date },
+      date,
+    );
+    if (problem) throw new Error(`${p.title}: ${problem}`);
+  }
+  const now = nowIso();
+  const lab = await db.getOptional<{ name: string | null }>(
+    `SELECT coalesce((SELECT lab_name FROM lab_profile LIMIT 1), (SELECT name FROM chamber WHERE is_active = 1 OR is_active IS NULL ORDER BY created_at LIMIT 1)) AS name`,
+  );
+  await db.writeTransaction(async (tx) => {
+    const existing = await tx.getAll<{ id: string; panel: string; encounter_id: string | null }>(
+      `SELECT id, panel, encounter_id FROM lab_report WHERE request_id = ? AND deleted_at IS NULL`, [r.requestId]);
+    const visit = existing.find((e) => e.encounter_id)?.encounter_id
+      ?? (await tx.getOptional<{ id: string }>(`SELECT id FROM encounter WHERE patient_id = ? AND visit_date = ? AND status IN ('waiting', 'in_progress') ORDER BY created_at DESC LIMIT 1`, [r.patientId, date]))?.id
+      ?? null;
+    const { tenant_id } = await tx.get<{ tenant_id: string }>(`SELECT tenant_id FROM patient WHERE id = ?`, [r.patientId]);
+    for (const p of r.panels) {
+      const fields = [p.title.trim(), JSON.stringify(p.results), p.department || null, p.specimen.trim() || null, r.collectedAt, r.referredBy.trim() || null, p.comment.trim() || null];
+      const row = existing.find((e) => e.panel === p.panel);
+      if (row) {
+        await tx.execute(
+          `UPDATE lab_report SET title = ?, results = ?, department = ?, specimen = ?, collected_at = ?, referred_by = ?, comment = ?, updated_at = ? WHERE id = ?`,
+          [...fields, now, row.id],
+        );
+      } else {
+        await tx.execute(
+          `INSERT INTO lab_report (id, tenant_id, patient_id, encounter_id, report_date, lab_name, panel, source, request_id, files,
+                                   title, results, department, specimen, collected_at, referred_by, comment, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'in_house', ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [uuid(), tenant_id, r.patientId, visit, date, lab?.name ?? null, p.panel, r.requestId, ...fields, now, now],
+        );
+      }
+    }
+    for (const e of existing.filter((x) => !r.panels.some((p) => p.panel === x.panel))) {
+      await tx.execute(`UPDATE lab_report SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, e.id]);
+    }
+  });
+}
+
 /** The patient agreed to keep photos of their reports (asked once, before the first one). */
 export async function recordReportFilesConsent(db: Db, patientId: string) {
   const now = nowIso();

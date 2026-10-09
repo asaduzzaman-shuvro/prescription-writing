@@ -1,7 +1,7 @@
 /* RxPad offline app shell. The doctor app is a single page (/doctor) with hash routing, so caching
    that page plus Next's static assets and fonts is enough to open it with no network. Patient data
    lives in the browser SQLite managed by PowerSync, not in this cache. */
-const CACHE = "rxpad-shell-v1";
+const CACHE = "rxpad-shell-v2";
 const SHELL = ["/doctor", "/fonts/NotoSansBengali.ttf", "/fonts/NotoSans.ttf", "/manifest.webmanifest", "/icon.svg"];
 
 const isAsset = (path) => path.startsWith("/_next/static/") || path.startsWith("/fonts/");

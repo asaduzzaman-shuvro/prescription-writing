@@ -134,7 +134,8 @@ export function PatientEdit({ patientId }: { patientId?: string }) {
           return;
         }
       }
-      navigate(`/patients/${id}`);
+      // Registered from the Lab screen: back there with this patient.
+      navigate(qs.get("then") === "lab" ? `/lab/new?patient=${id}` : `/patients/${id}`);
     } finally {
       setSaving(false);
     }

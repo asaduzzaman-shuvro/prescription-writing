@@ -56,6 +56,7 @@ export function PatientDetail({ patientId }: { patientId: string }) {
         <div className="flex gap-2">
           <Link to={`/patients/${patientId}/edit`} className="btn-secondary">Edit</Link>
           <button className="btn-primary" onClick={visit}>{isDoctor ? "Start visit" : "Add to queue"}</button>
+          <Link to={`/lab/new?patient=${patientId}`} className="btn-secondary" data-testid="patient-lab-report">Lab report</Link>
         </div>
       </div>
       <h2 className="font-semibold">Visit history</h2>
