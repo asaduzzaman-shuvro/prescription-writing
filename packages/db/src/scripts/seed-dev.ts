@@ -3,12 +3,13 @@
  * reach production), curated clinical libraries, and demo users/tenant.
  *
  *   pnpm db:seed:dev            (expects data/dev-seed/*.csv; run scripts/fetch-dev-seed.sh first)
+ *   SEED_DIR=resources/archive pnpm db:seed:dev   (CSVs elsewhere; relative to the repo root. Keep it gitignored.)
  */
 import { ENT_TEMPLATE, OPHTHALMOLOGY_TEMPLATE, parseShortcut, VASCULAR_TEMPLATE, type RxItem, type SpecialtyTemplateSchema } from "@rx/core";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../client";
 import { DEV_DATABASE_URL } from "../dev-urls";
@@ -25,7 +26,7 @@ if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const seedDir = join(here, "../../../../data/dev-seed");
+const seedDir = resolve(join(here, "../../../.."), process.env.SEED_DIR ?? "data/dev-seed");
 const SOURCE = "medex-kaggle-2022";
 const db = createDb(url, { max: 4 });
 

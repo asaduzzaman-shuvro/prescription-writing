@@ -95,9 +95,10 @@ never hard-deleted and every row carries a `source`.
 
 ## Constraints
 
-- **Dev medicine data must never reach production.** `data/dev-seed/` (gitignored) is scraped from MedEx,
-  whose terms forbid reuse. `seed-dev.ts` refuses non-local hosts; keep that guard. Production data comes in
-  via Admin → Import CSV from a licensed source.
+- **Dev medicine data must never reach production.** `data/dev-seed/` (gitignored; `SEED_DIR` points the seed
+  elsewhere, e.g. the gitignored `resources/archive/`) is scraped from MedEx, whose terms forbid reuse. Never
+  commit it. `seed-dev.ts` refuses non-local hosts; keep that guard. Production data comes in via Admin → Import
+  CSV from a licensed source.
 - Demo logins (dev seed): `admin@rx.local / admin123`, `doctor@rx.local / doctor123` (ENT),
   `assistant@rx.local / assist123`.
 - TS is strict with `noUncheckedIndexedAccess` and `verbatimModuleSyntax`, so use `import type` for types.
