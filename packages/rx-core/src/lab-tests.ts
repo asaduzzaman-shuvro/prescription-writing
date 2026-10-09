@@ -246,3 +246,151 @@ export function labReportProblem(r: { results?: unknown; title?: unknown; labNam
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Quick entry, ordered tests, trends
+// ---------------------------------------------------------------------------
+
+/** What doctors type for each test (compared without spaces/dots, lower-case). */
+const ALIASES: Record<string, string[]> = {
+  "718-7": ["hb", "hgb", "hb%", "haemoglobin", "hemoglobin"],
+  "30341-2": ["esr"],
+  "6690-2": ["wbc", "tc", "totalcount", "wbccount"],
+  "770-8": ["n", "neut", "neutrophil", "neutrophils", "poly"],
+  "736-9": ["l", "lymph", "lymphocyte", "lymphocytes"],
+  "777-3": ["plt", "platelet", "platelets", "pc"],
+  "14749-6": ["rbs"],
+  "14771-0": ["fbs"],
+  "14761-1": ["2habf", "abf", "ppbs", "2hpp"],
+  "4548-4": ["hba1c", "a1c"],
+  "2160-0": ["cr", "creat", "creatinine", "screatinine", "scr", "screat"],
+  "3091-6": ["urea", "bu", "burea"],
+  "98979-8": ["egfr", "gfr"],
+  "3084-1": ["ua", "uricacid", "suricacid"],
+  "1742-6": ["sgpt", "alt"],
+  "1920-8": ["sgot", "ast"],
+  "1975-2": ["bil", "bili", "bilirubin", "sbilirubin", "tbil"],
+  "2093-3": ["chol", "cholesterol", "tchol", "tcholesterol"],
+  "2571-8": ["tg", "triglyceride", "triglycerides"],
+  "2085-9": ["hdl"],
+  "13457-7": ["ldl"],
+  "3016-3": ["tsh"],
+  "14920-3": ["ft4"],
+  "5821-4": ["pus", "puscell", "puscells"],
+  "13945-1": ["rbc", "urbc"],
+  "20454-5": ["alb", "albumin", "protein", "ualb"],
+  "25428-4": ["usugar", "urinesugar"],
+  "2951-2": ["na", "sodium", "sna"],
+  "2823-3": ["k", "potassium", "sk"],
+  "2075-0": ["cl", "chloride", "scl"],
+  "2028-9": ["hco3", "bicarb", "bicarbonate", "tco2"],
+  "5196-1": ["hbsag"],
+  "16128-1": ["antihcv", "hcv"],
+  "1988-5": ["crp"],
+};
+const norm = (s: string) => s.toLowerCase().replace(/[\s.\-_]/g, "");
+const ALIAS_TO_CODE: Record<string, string> = Object.fromEntries(Object.entries(ALIASES).flatMap(([code, names]) => names.map((n) => [norm(n), code])));
+
+/** Words for a coded result, per kind of test. */
+const CODED_WORDS: Record<string, string> = {
+  pos: "Positive", positive: "Positive", "+ve": "Positive", reactive: "Positive",
+  neg: "Negative", negative: "Negative", "-ve": "Negative", nonreactive: "Negative",
+  nil: "Nil", trace: "Trace", "+": "+", "++": "++", "+++": "+++", "++++": "++++",
+};
+
+export interface ShorthandResult {
+  results: { code: string; value?: number; text?: string }[];
+  /** Pieces that weren't understood, so the doctor can correct them. */
+  unknown: string[];
+}
+
+/**
+ * Quick entry: "hb 9.2 wbc 11800 rbs 11.4 hbsag neg" → results by test code.
+ * Name and value may be joined ("hb9.2") or separated by ":", "=" or ",".
+ */
+export function parseLabShorthand(input: string): ShorthandResult {
+  const tokens = input
+    .split(/[\s,;:=]+/)
+    .filter(Boolean)
+    .flatMap((t) => {
+      const m = /^([a-z][a-z0-9%]*?)(\d+(?:\.\d+)?)$/i.exec(t);
+      return m && ALIAS_TO_CODE[norm(m[1]!)] ? [m[1]!, m[2]!] : [t];
+    });
+  const out: ShorthandResult = { results: [], unknown: [] };
+  let name: string[] = [];
+  for (const tok of tokens) {
+    const n = /^\d+(?:\.\d+)?$/.test(tok) ? Number(tok) : undefined;
+    const word = CODED_WORDS[tok.toLowerCase()];
+    if (n === undefined && word === undefined) {
+      name.push(tok);
+      continue;
+    }
+    const label = name.join(" ");
+    name = [];
+    const code = ALIAS_TO_CODE[norm(label)];
+    const test = code ? LAB_TEST_BY_CODE[code] : undefined;
+    if (!label || !test) {
+      out.unknown.push(`${label} ${tok}`.trim());
+      continue;
+    }
+    if (test.kind === "coded") {
+      if (word && test.options?.includes(word)) out.results.push({ code: test.code, text: word });
+      else out.unknown.push(`${label} ${tok}`);
+    } else if (n !== undefined) out.results.push({ code: test.code, value: n });
+    else out.unknown.push(`${label} ${tok}`);
+  }
+  if (name.length) out.unknown.push(name.join(" "));
+  return out;
+}
+
+/** The panel a test belongs to (the first one listing it). */
+export function panelOfTest(code: string): LabPanel | undefined {
+  return LAB_PANELS.find((p) => p.tests.includes(code));
+}
+
+const ORDERED_PANELS: [RegExp, string][] = [
+  [/urine\s*r\/?m?\/?e|urine routine/i, "urine"],
+  [/\bcbc\b|hb%|haemoglobin|hemoglobin|platelet|eosinophil|\besr\b/i, "cbc"],
+  [/\brbs\b|\bfbs\b|2habf|hba1c|blood sugar|glucose/i, "sugar"],
+  [/creatinine|\burea\b|uric acid|egfr|\brft\b|renal function/i, "rft"],
+  [/sgpt|sgot|\balt\b|\bast\b|bilirubin|\blft\b|liver function/i, "lft"],
+  [/lipid|cholesterol|triglycer/i, "lipid"],
+  [/\btsh\b|\bft4\b|thyroid/i, "thyroid"],
+  [/electrolyte/i, "electrolytes"],
+  [/hbsag|\bhcv\b|\bcrp\b/i, "serology"],
+];
+
+/**
+ * Where to record the result of an ordered investigation: a panel, or a free-text report titled with its name
+ * (imaging, ECG, cultures…).
+ */
+export function panelForInvestigation(name: string): { panel: string; title?: string } {
+  const hit = ORDERED_PANELS.find(([re]) => re.test(name));
+  return hit ? { panel: hit[1] } : { panel: OTHER_PANEL, title: name };
+}
+
+export interface TrendPoint {
+  date: string;
+  value: number;
+  flag?: LabFlag;
+}
+
+/**
+ * A small trend chart's geometry in a w×h box: point positions (oldest left) and the normal band.
+ * The vertical scale covers the values and the range, with a little headroom.
+ */
+export function labTrend(points: TrendPoint[], range: LabRange, w: number, h: number, pad = 6) {
+  const values = [...points.map((p) => p.value), ...[range.low, range.high].filter((x): x is number => x !== undefined)];
+  let lo = Math.min(...values), hi = Math.max(...values);
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const span = hi - lo;
+  lo -= span * 0.1; hi += span * 0.1;
+  const y = (v: number) => Math.round((pad + (1 - (v - lo) / (hi - lo)) * (h - 2 * pad)) * 10) / 10;
+  const x = (i: number) => Math.round((points.length === 1 ? w / 2 : pad + (i * (w - 2 * pad)) / (points.length - 1)) * 10) / 10;
+  return {
+    points: points.map((p, i) => ({ ...p, x: x(i), y: y(p.value) })),
+    band: range.low !== undefined || range.high !== undefined
+      ? { top: range.high !== undefined ? y(range.high) : pad, bottom: range.low !== undefined ? y(range.low) : h - pad }
+      : null,
+  };
+}

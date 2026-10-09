@@ -8,6 +8,10 @@ import {
   labLine,
   labReportProblem,
   labResult,
+  labTrend,
+  panelForInvestigation,
+  panelOfTest,
+  parseLabShorthand,
   renderPrescriptionHtml,
   SAMPLE_CHAMBER,
   SAMPLE_DOC,
@@ -123,5 +127,64 @@ describe("printing lab findings", () => {
   it("prints nothing without findings, or when the section is hidden", () => {
     expect(render()).not.toContain("<h3>Reports</h3>");
     expect(render([{ title: "CBC", date: "2026-10-12", text: "CBC: Hb 9.2" }], ["labs"])).not.toContain("<h3>Reports</h3>");
+  });
+});
+
+describe("parseLabShorthand", () => {
+  it("reads names and values, joined or apart", () => {
+    expect(parseLabShorthand("hb 9.2 wbc 11800, rbs=11.4 hba1c 7.4 cr1.6 na140")).toEqual({
+      results: [
+        { code: "718-7", value: 9.2 },
+        { code: "6690-2", value: 11800 },
+        { code: "14749-6", value: 11.4 },
+        { code: "4548-4", value: 7.4 },
+        { code: "2160-0", value: 1.6 },
+        { code: "2951-2", value: 140 },
+      ],
+      unknown: [],
+    });
+  });
+
+  it("reads coded results and multi-word names", () => {
+    expect(parseLabShorthand("HBsAg neg anti hcv pos alb ++ s. creatinine 1.1").results).toEqual([
+      { code: "5196-1", text: "Negative" },
+      { code: "16128-1", text: "Positive" },
+      { code: "20454-5", text: "++" },
+      { code: "2160-0", value: 1.1 },
+    ]);
+  });
+
+  it("reports what it didn't understand", () => {
+    expect(parseLabShorthand("hb 9.2 xyz 4 tsh").unknown).toEqual(["xyz 4", "tsh"]);
+    expect(parseLabShorthand("hbsag 5").unknown).toEqual(["hbsag 5"]);
+  });
+});
+
+describe("panelForInvestigation", () => {
+  it("maps ordered investigations to panels, others to a titled free-text report", () => {
+    expect(panelForInvestigation("CBC with ESR")).toEqual({ panel: "cbc" });
+    expect(panelForInvestigation("FBS & 2HABF")).toEqual({ panel: "sugar" });
+    expect(panelForInvestigation("Serum creatinine")).toEqual({ panel: "rft" });
+    expect(panelForInvestigation("Lipid profile (fasting)")).toEqual({ panel: "lipid" });
+    expect(panelForInvestigation("Urine R/M/E")).toEqual({ panel: "urine" });
+    expect(panelForInvestigation("Urine C/S")).toEqual({ panel: "other", title: "Urine C/S" });
+    expect(panelForInvestigation("X-ray chest P/A view")).toEqual({ panel: "other", title: "X-ray chest P/A view" });
+    expect(panelOfTest("4548-4")?.id).toBe("sugar");
+  });
+});
+
+describe("labTrend", () => {
+  it("places points oldest-left and the normal band, scaled to values and range", () => {
+    const t = labTrend([{ date: "2026-01-01", value: 8.1 }, { date: "2026-04-01", value: 7.4 }, { date: "2026-07-01", value: 6.9 }], { high: 5.7 }, 200, 60);
+    expect(t.points.map((p) => p.x)).toEqual([6, 100, 194]);
+    expect(t.points[0]!.y).toBeLessThan(t.points[2]!.y); // higher value, higher on the chart
+    expect(t.band).toEqual({ top: expect.any(Number), bottom: 54 });
+    expect(t.band!.top).toBeGreaterThan(t.points[2]!.y);
+  });
+
+  it("handles a single point and no range", () => {
+    const t = labTrend([{ date: "2026-01-01", value: 5 }], {}, 100, 40);
+    expect(t.points[0]).toMatchObject({ x: 50, y: 20 });
+    expect(t.band).toBeNull();
   });
 });
