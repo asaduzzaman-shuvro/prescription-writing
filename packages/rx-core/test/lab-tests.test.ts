@@ -14,6 +14,7 @@ import {
   parseLabShorthand,
   renderPrescriptionHtml,
   SAMPLE_CHAMBER,
+  sniffLabFileType,
   SAMPLE_DOC,
   SAMPLE_DOCTOR,
   SAMPLE_PATIENT,
@@ -186,5 +187,23 @@ describe("labTrend", () => {
     const t = labTrend([{ date: "2026-01-01", value: 5 }], {}, 100, 40);
     expect(t.points[0]).toMatchObject({ x: 50, y: 20 });
     expect(t.band).toBeNull();
+  });
+});
+
+describe("report files", () => {
+  it("knows a file by its first bytes, whatever it's called", () => {
+    expect(sniffLabFileType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe("image/jpeg");
+    expect(sniffLabFileType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe("image/png");
+    expect(sniffLabFileType(new TextEncoder().encode("RIFF\0\0\0\0WEBPVP8 "))).toBe("image/webp");
+    expect(sniffLabFileType(new TextEncoder().encode("%PDF-1.7"))).toBe("application/pdf");
+    expect(sniffLabFileType(new TextEncoder().encode("<svg onload=alert(1)>"))).toBeNull();
+  });
+
+  it("checks the file list on a report", () => {
+    const id = "6f1c2b7e-1d2a-4c3b-9e8f-0a1b2c3d4e5f";
+    expect(labReportProblem({ files: [{ id, type: "image/jpeg" }] }, "2026-10-12")).toBeNull();
+    expect(labReportProblem({ files: [{ id, type: "text/html" }] }, "2026-10-12")).toBe("invalid file");
+    expect(labReportProblem({ files: [{ id: "x", type: "image/jpeg" }] }, "2026-10-12")).toBe("invalid file");
+    expect(labReportProblem({ files: Array.from({ length: 11 }, () => ({ id, type: "image/jpeg" })) }, "2026-10-12")).toMatch(/too many files/);
   });
 });
