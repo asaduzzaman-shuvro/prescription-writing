@@ -168,7 +168,7 @@ describe("panelForInvestigation", () => {
     expect(panelForInvestigation("Serum creatinine")).toEqual({ panel: "rft" });
     expect(panelForInvestigation("Lipid profile (fasting)")).toEqual({ panel: "lipid" });
     expect(panelForInvestigation("Urine R/M/E")).toEqual({ panel: "urine" });
-    expect(panelForInvestigation("Urine C/S")).toEqual({ panel: "other", title: "Urine C/S" });
+    expect(panelForInvestigation("Urine C/S")).toEqual({ panel: "urine-cs" });
     expect(panelForInvestigation("X-ray chest P/A view")).toEqual({ panel: "other", title: "X-ray chest P/A view" });
     expect(panelOfTest("4548-4")?.id).toBe("sugar");
   });

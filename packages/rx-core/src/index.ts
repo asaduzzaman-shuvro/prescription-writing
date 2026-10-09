@@ -16,3 +16,4 @@ export * from "./specialty-templates";
 export * from "./fhir";
 export * from "./sanitize";
 export * from "./lab-tests";
+export * from "./lab-print";
