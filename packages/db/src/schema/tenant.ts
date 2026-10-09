@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import {
   bigserial,
   boolean,
+  check,
   customType,
   date,
   index,
@@ -49,6 +50,8 @@ export const tenant = pgTable("tenant", {
   smsCredits: integer().notNull().default(0),
   /** Running counter used to generate human-friendly patient codes (P-000123). */
   patientSeq: integer().notNull().default(0),
+  /** Running counter for the clinic's own lab reports (L-000123). */
+  labSeq: integer().notNull().default(0),
   ...timestamps,
 });
 
@@ -255,8 +258,9 @@ export const prescription = pgTable(
 );
 
 /**
- * A paper lab report the patient brought (CBC, sugar, X-ray…), entered by the assistant or doctor.
- * Results are @rx/core LabResult[] (LOINC-coded values with units, the lab's range and H/L flags).
+ * A lab report: a paper report the patient brought (CBC, sugar, X-ray…, source "external"), or one the clinic's
+ * own lab made (source "in_house": one row per panel of a request, sharing request_id and lab_no).
+ * Results are @rx/core LabResult[] (coded values with units, the reference range and H/L flags).
  */
 export const labReport = pgTable(
   "lab_report",
@@ -279,12 +283,104 @@ export const labReport = pgTable(
     conclusion: text(),
     /** @rx/core LabFileRef[]: photos/PDFs of the paper report, stored in lab_file. */
     files: jsonb().notNull().default([]),
+    source: text().notNull().default("external"),
+    /** In-house: the request (one patient's tests taken together) this panel belongs to. */
+    requestId: uuid(),
+    /** In-house: assigned by the server on upload, shared by the request's rows. */
+    labNo: text(),
+    /** @rx/core LabDepartment of the panel. */
+    department: text(),
+    specimen: text(),
+    collectedAt: timestamp({ withTimezone: true }),
+    referredBy: text(),
+    /** Who entered it, as printed ("Prepared by"); set by the server. */
+    preparedByName: text(),
+    comment: text(),
     createdBy: uuid(),
     deletedAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
-  (t) => [index("lab_report_patient_idx").on(t.patientId, t.reportDate), index("lab_report_encounter_idx").on(t.encounterId)],
+  (t) => [
+    index("lab_report_patient_idx").on(t.patientId, t.reportDate),
+    index("lab_report_encounter_idx").on(t.encounterId),
+    index("lab_report_request_idx").on(t.requestId),
+  ],
 );
+
+/**
+ * The lab test catalogue. Platform rows (no tenant) are the curated default, written by `pnpm db:seed:labs`;
+ * a clinic's row with the same code changes that test for the clinic (null columns inherit, is_active false hides
+ * it), and one with a new code is the clinic's own test. Devices merge them (@rx/core buildLabCatalogue).
+ */
+export const labTest = pgTable(
+  "lab_test",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: uuid().references(() => tenant.id),
+    code: text().notNull(),
+    name: text(),
+    short: text(),
+    unit: text(),
+    /** @rx/core LabTestKind. */
+    kind: text(),
+    department: text(),
+    sortOrder: integer(),
+    isActive: boolean().notNull().default(true),
+    /** @rx/core LabTestSpec: options, ranges, aliases… */
+    spec: jsonb().notNull().default({}),
+    /** "rx-curated" (the seed keeps it current), "admin" (edited by the platform; the seed leaves it), "clinic". */
+    source: text().notNull().default("clinic"),
+    updatedBy: uuid(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("lab_test_platform_code_uq").on(t.code).where(sql`${t.tenantId} is null`),
+    uniqueIndex("lab_test_tenant_code_uq").on(t.tenantId, t.code).where(sql`${t.tenantId} is not null`),
+    check("lab_test_platform_complete", sql`${t.tenantId} is not null or (${t.name} is not null and ${t.short} is not null and ${t.kind} is not null)`),
+  ],
+);
+
+/** Lab panels (what is reported together), platform and clinic rows as for lab_test, keyed by `key`. */
+export const labPanel = pgTable(
+  "lab_panel",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: uuid().references(() => tenant.id),
+    key: text().notNull(),
+    name: text(),
+    department: text(),
+    sortOrder: integer(),
+    isActive: boolean().notNull().default(true),
+    /** @rx/core LabPanelSpec: sections, specimen, layout… */
+    spec: jsonb().notNull().default({}),
+    source: text().notNull().default("clinic"),
+    updatedBy: uuid(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("lab_panel_platform_key_uq").on(t.key).where(sql`${t.tenantId} is null`),
+    uniqueIndex("lab_panel_tenant_key_uq").on(t.tenantId, t.key).where(sql`${t.tenantId} is not null`),
+    check("lab_panel_platform_complete", sql`${t.tenantId} is not null or ${t.name} is not null`),
+  ],
+);
+
+/** How a clinic's lab reports are headed and signed. One per clinic; its id is the tenant's. */
+export const labProfile = pgTable("lab_profile", {
+  id: uuid().primaryKey(),
+  tenantId: uuid()
+    .notNull()
+    .unique()
+    .references(() => tenant.id),
+  labName: text(),
+  address: text(),
+  phone: text(),
+  logoDataUrl: text(),
+  /** [{ name, degrees, title }] printed at the foot of the report. */
+  signatories: jsonb().notNull().default([]),
+  footerText: text(),
+  printSettings: jsonb().notNull().default({}),
+  ...timestamps,
+});
 
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 

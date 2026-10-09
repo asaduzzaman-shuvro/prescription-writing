@@ -8,7 +8,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "db:migrate": "pnpm --filter @rx/db migrate",
-    "db:seed:dev": "pnpm --filter @rx/db seed:dev"
+    "db:seed:dev": "pnpm --filter @rx/db seed:dev",
+    "db:seed:labs": "pnpm --filter @rx/db seed:labs"
   },
   "devDependencies": {
     "turbo": "^2.11.7",

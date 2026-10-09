@@ -13,6 +13,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/scripts/migrate.ts",
     "seed:dev": "tsx src/scripts/seed-dev.ts",
+    "seed:labs": "tsx src/scripts/seed-labs.ts",
     "bench:search": "tsx src/scripts/bench-search.ts",
     "test": "vitest run"
   },
