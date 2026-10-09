@@ -12,6 +12,7 @@ const NAV = [
   { href: "/admin/libraries/complaints", label: "Libraries" },
   { href: "/admin/templates", label: "Shared Rx templates" },
   { href: "/admin/specialty-templates", label: "Exam templates" },
+  { href: "/admin/lab-catalogue", label: "Lab catalogue" },
   { href: "/admin/interactions", label: "Interactions" },
   { href: "/admin/doctors", label: "Doctors & chambers" },
   { href: "/admin/audit", label: "Audit log" },

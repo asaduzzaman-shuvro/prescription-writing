@@ -103,6 +103,13 @@ export function SettingsScreen() {
       )}
       <BillingPanel />
       <ChamberManager />
+      <section className="card flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+        <div>
+          <h2 className="font-semibold">Lab reports</h2>
+          <p className="text-slate-500">The clinic lab&apos;s report heading and signatories, and its tests: normal ranges, units, hidden tests, your own tests.</p>
+        </div>
+        <a href="#/settings/lab" className="btn-secondary" data-testid="settings-lab">Lab settings</a>
+      </section>
       <section className="card space-y-4 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-semibold">Print layout</h2>
