@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  LAB_FILE_MAX_BYTES,
+  LAB_LIMITS,
   LAB_PANELS,
   LAB_TEST_BY_CODE,
   labPanel,
@@ -13,15 +15,17 @@ import {
   panelOfTest,
   parseLabShorthand,
   OTHER_REPORT_TITLES,
+  type LabFileRef,
   type LabResult,
   type LabTest,
   type Sex,
   type TrendPoint,
 } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
-import { Fragment, useEffect, useState } from "react";
-import { deleteLabReport, lastFinalDoc, saveLabReport } from "@/lib/doctor/data";
-import { parseJson, today } from "@/lib/doctor/util";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { deleteLabReport, lastFinalDoc, recordReportFilesConsent, saveLabReport } from "@/lib/doctor/data";
+import { parseJson, today, uuid } from "@/lib/doctor/util";
+import { addLabFile, readLabFile, removeLabFile } from "@/lib/powersync/lab-files";
 
 export interface LabReportView {
   id: string;
@@ -32,19 +36,91 @@ export interface LabReportView {
   title: string;
   results: LabResult[];
   conclusion: string | null;
+  files: LabFileRef[];
 }
 
 /** A patient's lab reports, newest first. */
 export function useLabReports(patientId: string): LabReportView[] {
-  const { data } = useQuery<{ id: string; encounter_id: string | null; report_date: string; lab_name: string | null; panel: string; title: string; results: string | null; conclusion: string | null }>(
-    `SELECT id, encounter_id, report_date, lab_name, panel, title, results, conclusion FROM lab_report
+  const { data } = useQuery<{ id: string; encounter_id: string | null; report_date: string; lab_name: string | null; panel: string; title: string; results: string | null; conclusion: string | null; files: string | null }>(
+    `SELECT id, encounter_id, report_date, lab_name, panel, title, results, conclusion, files FROM lab_report
       WHERE patient_id = ? AND deleted_at IS NULL ORDER BY report_date DESC, created_at DESC`,
     [patientId],
   );
   return data.map((r) => ({
     id: r.id, encounterId: r.encounter_id, reportDate: r.report_date, labName: r.lab_name, panel: r.panel, title: r.title,
-    results: parseJson<LabResult[]>(r.results, []), conclusion: r.conclusion,
+    results: parseJson<LabResult[]>(r.results, []), conclusion: r.conclusion, files: parseJson<LabFileRef[]>(r.files, []),
   }));
+}
+
+/** Photo: at most 1600 px on the long side, re-encoded as JPEG (which also drops location and camera data). */
+async function shrinkPhoto(file: Blob): Promise<Blob> {
+  const img = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  img.close();
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't read the photo."))), "image/jpeg", 0.7));
+}
+
+/** A report's photos/PDFs as small tiles; tap to view. Loads from this device, or the server when online. */
+export function LabFileTiles({ files, onRemove }: { files: LabFileRef[]; onRemove?: (id: string) => void }) {
+  const [open, setOpen] = useState<{ url: string; type: string } | null>(null);
+  if (!files.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5" data-testid="lab-files">
+      {files.map((f) => <LabFileTile key={f.id} file={f} onOpen={setOpen} onRemove={onRemove} />)}
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setOpen(null)} data-testid="lab-file-viewer">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={open.url} alt="Report" className="max-h-full max-w-full rounded bg-white" />
+          <button className="absolute right-4 top-4 rounded bg-white px-3 py-1 text-sm">Close</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LabFileTile({ file, onOpen, onRemove }: { file: LabFileRef; onOpen: (v: { url: string; type: string }) => void; onRemove?: (id: string) => void }) {
+  const db = usePowerSync();
+  const [url, setUrl] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    let u: string | null = null;
+    let live = true;
+    readLabFile(db, file)
+      .then((b) => {
+        u = URL.createObjectURL(b);
+        if (live) setUrl(u);
+      })
+      .catch((e: Error) => live && setProblem(e.message));
+    return () => {
+      live = false;
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, [db, file.id, file.type]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isPdf = file.type === "application/pdf";
+  const show = () => {
+    if (!url) return;
+    if (isPdf) window.open(url, "_blank", "noopener");
+    else onOpen({ url, type: file.type });
+  };
+  return (
+    <span className="relative inline-block">
+      <button type="button" onClick={show} title={problem ?? (isPdf ? "Open PDF" : "View photo")} data-testid="lab-file" data-file-id={file.id}
+        className="flex h-14 w-14 items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 text-[10px] text-slate-500">
+        {url && !isPdf
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={url} alt="" className="h-full w-full object-cover" />
+          : isPdf ? "PDF" : problem ? "offline" : "…"}
+      </button>
+      {onRemove && (
+        <button type="button" className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-red-600 text-xs leading-5 text-white" onClick={() => onRemove(file.id)}
+          aria-label="Remove file" data-testid="lab-file-remove">×</button>
+      )}
+    </span>
+  );
 }
 
 const FLAG_STYLE: Record<string, string> = { H: "text-red-700", L: "text-blue-700", A: "text-amber-700" };
@@ -63,6 +139,7 @@ export function LabReportSummary({ r }: { r: LabReportView }) {
         </span>
       ))}
       {r.conclusion && <span className="text-slate-700">{r.results.length ? " · " : ": "}{r.conclusion}</span>}
+      {r.files.length > 0 && <span className="text-slate-500"> · 📎 {r.files.length}</span>}
     </span>
   );
 }
@@ -114,6 +191,7 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
   const thisVisit = reports.filter((r) => r.encounterId === encounterId);
   const earlier = reports.filter((r) => r.encounterId !== encounterId);
   const lastLab = reports.find((r) => r.labName)?.labName ?? "";
+  const { data: consent } = useQuery<{ c: string | null }>(`SELECT report_files_consent_at AS c FROM patient WHERE id = ?`, [patientId]);
 
   // What the doctor asked for last time is usually what the patient brings: offer those first.
   useEffect(() => {
@@ -154,6 +232,7 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
   async function remove(r: LabReportView) {
     if (!confirm(`Delete the ${r.title} report of ${shortDate(r.reportDate)}?`)) return;
     await deleteLabReport(db, r.id);
+    for (const f of r.files) await removeLabFile(f.id);
   }
 
   return (
@@ -192,12 +271,16 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
           encounterId={encounterId}
           sex={sex}
           reports={reports}
+          filesConsented={Boolean(consent[0]?.c)}
           onDone={() => setEditing(null)}
         />
       )}
       {thisVisit.map((r) => (
         <div key={r.id} className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-slate-50 px-2 py-1" data-testid="lab-report">
-          <LabReportSummary r={r} />
+          <div className="space-y-1">
+            <LabReportSummary r={r} />
+            <LabFileTiles files={r.files} />
+          </div>
           <span className="flex gap-1">
             <button className="btn-ghost px-2 py-0.5 text-xs" onClick={() => setEditing({ panel: r.panel, report: r })}>Edit</button>
             <button className="btn-ghost px-2 py-0.5 text-xs text-red-700" onClick={() => remove(r)}>Delete</button>
@@ -238,10 +321,11 @@ function rangeHint(test: LabTest, sex: Sex | null) {
   return (test.normal ?? []).join("/");
 }
 
-function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, sex, reports, onDone }: {
+function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, sex, reports, filesConsented, onDone }: {
   panel: string;
   report?: LabReportView;
   initialTitle?: string;
+  filesConsented: boolean;
   patientId: string;
   encounterId: string;
   sex: Sex | null;
@@ -267,6 +351,53 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
   );
   const [error, setError] = useState<string | null>(null);
   const [trendOf, setTrendOf] = useState<string | null>(null);
+  // Photos point at the report, so a new report gets its id now.
+  const [reportId] = useState(() => report?.id ?? uuid());
+  const [files, setFiles] = useState<LabFileRef[]>(report?.files ?? []);
+  const added = useRef<string[]>([]);
+  const removed = useRef<string[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  /** `list` is copied from the input first: clearing the input empties its live FileList. */
+  async function addFiles(list: File[]) {
+    if (!list.length) return;
+    if (!filesConsented) {
+      if (!confirm("Keep photos of this patient's reports?\n\nThey are stored for this clinic only and can be deleted at any time. Ask the patient before continuing.")) return;
+      await recordReportFilesConsent(db, patientId);
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const next = [...files];
+      for (const file of list) {
+        if (next.length >= LAB_LIMITS.files) throw new Error(`At most ${LAB_LIMITS.files} files per report.`);
+        const isPdf = file.type === "application/pdf";
+        if (!isPdf && !file.type.startsWith("image/")) throw new Error("Only photos or PDF files.");
+        const blob = isPdf ? file : await shrinkPhoto(file);
+        if (blob.size > LAB_FILE_MAX_BYTES) throw new Error("That file is over 5 MB.");
+        const ref: LabFileRef = { id: uuid(), type: isPdf ? "application/pdf" : "image/jpeg" };
+        await addLabFile({ id: ref.id, type: ref.type, data: await blob.arrayBuffer(), patientId, labReportId: reportId });
+        added.current.push(ref.id);
+        next.push(ref);
+        setFiles([...next]);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function removeFile(id: string) {
+    setFiles((f) => f.filter((x) => x.id !== id));
+    removed.current.push(id);
+  }
+
+  async function cancel() {
+    // Files added in this editor were never saved on the report: drop them.
+    for (const id of added.current) await removeLabFile(id);
+    onDone();
+  }
 
   const resultOf = (test: LabTest): LabResult | null => {
     const row = rows[test.code]!;
@@ -288,9 +419,10 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
 
   async function save() {
     const results = codes.map((c) => resultOf(LAB_TEST_BY_CODE[c]!)).filter((x): x is LabResult => x !== null);
-    if (!results.length && !conclusion.trim()) return setError(isOther ? "Write the report's finding." : "Enter at least one value.");
+    if (!results.length && !conclusion.trim() && !files.length) return setError(isOther ? "Write the report's finding." : "Enter at least one value.");
     try {
-      await saveLabReport(db, { patientId, encounterId: report ? report.encounterId : encounterId, reportDate: date, labName, panel, title, results, conclusion }, report?.id);
+      await saveLabReport(db, { patientId, encounterId: report ? report.encounterId : encounterId, reportDate: date, labName, panel, title, results, conclusion, files }, reportId);
+      for (const id of removed.current) await removeLabFile(id);
       onDone();
     } catch (e) {
       setError((e as Error).message);
@@ -398,10 +530,22 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
         placeholder={isOther ? "Finding, e.g. Fatty liver grade I" : "Comment (optional, prints)"}
         data-testid="lab-conclusion"
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <LabFileTiles files={files} onRemove={removeFile} />
+        <label className="btn-secondary cursor-pointer px-2 py-1 text-xs">
+          📷 Photo
+          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+        </label>
+        <label className="btn-secondary cursor-pointer px-2 py-1 text-xs">
+          Attach file
+          <input type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} data-testid="lab-file-input" />
+        </label>
+        {busy && <span className="text-xs text-slate-500">Adding…</span>}
+      </div>
       {error && <p className="text-sm text-red-700" data-testid="lab-error">{error}</p>}
       <div className="flex gap-2">
-        <button className="btn-primary px-3 py-1 text-sm" onClick={save} data-testid="lab-save">Save report</button>
-        <button className="btn-ghost px-3 py-1 text-sm" onClick={onDone}>Cancel</button>
+        <button className="btn-primary px-3 py-1 text-sm" onClick={save} disabled={busy} data-testid="lab-save">Save report</button>
+        <button className="btn-ghost px-3 py-1 text-sm" onClick={cancel}>Cancel</button>
       </div>
     </div>
   );
