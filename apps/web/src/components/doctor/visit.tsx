@@ -1,8 +1,6 @@
 "use client";
 
-import { bmi, chamberWorkdays, classifyDosageForm, historyLines, inFreeReportWindow, parseShortcut, type ChamberSlot, type PrescriptionDoc, type RxItem, type Sex, type Vitals } from "@rx/core";
-import { usePowerSync, useQuery } from "@powersync/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useSession } from "@/lib/doctor/context";
 import {
   applyTemplate,
   clearTemplate,
