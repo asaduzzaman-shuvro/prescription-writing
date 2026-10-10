@@ -23,6 +23,7 @@ streams:
     queries:
       - SELECT code AS id, name, name_bn FROM specialty
       - SELECT id, specialty_code, sort_order, name, name_bn FROM complaint WHERE is_active = true
+      - SELECT id, specialty_code, sort_order, name, category FROM history_item WHERE is_active = true
       - SELECT id, specialty_code, sort_order, name, category FROM investigation WHERE is_active = true
       - SELECT id, specialty_code, sort_order, name, icd10, icd11 FROM diagnosis WHERE is_active = true
       - SELECT id, specialty_code, sort_order, text_bn, text_en, category FROM advice_snippet WHERE is_active = true

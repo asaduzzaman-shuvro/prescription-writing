@@ -137,4 +137,9 @@ describe("row-level security", () => {
   it("cannot write the catalogue", async () => {
     await expect(app.execute(sql`update brand_product set brand_name = brand_name where false`)).rejects.toMatchObject({ cause: { message: expect.stringMatching(/permission denied/) } });
   });
+
+  it("reads but cannot write the history library", async () => {
+    await app.execute(sql`select name from history_item limit 1`);
+    await expect(app.execute(sql`update history_item set name = name where false`)).rejects.toMatchObject({ cause: { message: expect.stringMatching(/permission denied/) } });
+  });
 });
