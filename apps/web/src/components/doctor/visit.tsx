@@ -823,6 +823,7 @@ export function VisitScreen({ encounterId, tab = "rx" }: { encounterId: string; 
               allergies={allergies}
               pregnancyStatus={p.pregnancy_status}
               actions={rxActions}
+              testIdSuffix="-context"
             />
           </div>
         </details>
