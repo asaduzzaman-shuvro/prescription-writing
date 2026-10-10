@@ -11,6 +11,15 @@ test("doctor writes, finalises and verifies a bilingual prescription", async ({ 
   await page.getByTestId("vital-weightKg").fill("70");
   await page.getByTestId("cc-input").fill("Ear discharge × 2 months");
   await page.getByTestId("cc-input").press("Enter");
+  // History: before typing, the ENT doctor's list offers general history too.
+  await page.getByTestId("history-input").click();
+  await expect(page.getByRole("button", { name: /^H\/O DM/ })).toBeAttached();
+  // One line picked from the ENT history library, one typed.
+  await page.getByTestId("history-input").fill("tonsil");
+  await expect(page.getByRole("button", { name: /H\/O Tonsillectomy/ })).toBeVisible();
+  await page.getByTestId("history-input").press("Enter");
+  await page.getByTestId("history-input").fill("H/O swimming");
+  await page.getByTestId("history-input").press("Enter");
   await addMedicine(page, "napa extend", "1+0+1 af 5d");
   await addMedicine(page, "moxacil", "1+1+1 af 7d");
   await addMedicine(page, "candistin", "2 drop tds re 7d"); // an Ear Drop in the catalogue
@@ -27,6 +36,7 @@ test("doctor writes, finalises and verifies a bilingual prescription", async ({ 
   await expect(frame.locator(".drug b").first()).toHaveText(/^NAPA EXTEND$/);
   await expect(frame.locator(".course")).toHaveText("সম্পূর্ণ কোর্স শেষ করুন"); // amoxicillin is an antibiotic
   await expect(frame.locator(".bmdc")).toContainText("A-12345");
+  await expect(frame.locator("section", { hasText: "History" }).locator("li")).toHaveText(["H/O Tonsillectomy", "H/O swimming"]);
 
   // After sync, the QR verification link resolves on the server.
   await expect(page.getByTestId("sync-status")).toHaveText("Synced", { timeout: 60_000 });

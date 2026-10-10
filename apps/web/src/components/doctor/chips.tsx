@@ -25,6 +25,7 @@ export function ChipList({
   testId,
   multiline,
   voice,
+  maxSuggestions = 8,
 }: {
   title: string;
   values: string[];
@@ -36,6 +37,8 @@ export function ChipList({
   multiline?: boolean;
   /** Show dictation buttons (Bangla / English). */
   voice?: boolean;
+  /** How many suggestions the dropdown lists; it scrolls past about eight. */
+  maxSuggestions?: number;
 }) {
   const db = usePowerSync();
   const [text, setText] = useState("");
@@ -50,7 +53,7 @@ export function ChipList({
     const t = setTimeout(async () => {
       const rows = await db.getAll<Suggestion>(query, [...params, `%${text.trim()}%`]);
       if (!cancelled) {
-        setSugs(rows.filter((r) => !values.includes(r.value)).slice(0, 8));
+        setSugs(rows.filter((r) => !values.includes(r.value)).slice(0, maxSuggestions));
         setActive(0);
       }
     }, 80);
