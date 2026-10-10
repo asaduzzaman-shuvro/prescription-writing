@@ -5,7 +5,7 @@ import {
   BarChart3,
   CalendarDays,
   ClipboardPlus,
-  FlaskConical,
+  // FlaskConical,
   LayoutDashboard,
   LayoutTemplate,
   Menu,
@@ -281,7 +281,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
     { to: "/bookings", label: "Bookings", match: route[0] === "bookings", icon: <CalendarDays className="h-4 w-4 shrink-0" /> },
   ];
   const clinical: NavItem[] = [
-    { to: "/lab", label: "Lab", match: route[0] === "lab", icon: <FlaskConical className="h-4 w-4 shrink-0" /> },
+    // { to: "/lab", label: "Lab", match: route[0] === "lab", icon: <FlaskConical className="h-4 w-4 shrink-0" /> },
     { to: "/investigations", label: "Investigations", match: route[0] === "investigations", icon: <Microscope className="h-4 w-4 shrink-0" /> },
     { to: "/medicines", label: "Medicines", match: route[0] === "medicines", icon: <Pill className="h-4 w-4 shrink-0" /> },
   ];
@@ -361,12 +361,18 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
           </a>
         </div>
       </nav>
-      <div className="border-t border-white/10 p-2">
+      <div className="relative overflow-hidden border-t border-white/10 p-2">
         <button
           type="button"
           disabled={signingOut}
           onClick={() => void signOut()}
-          className="w-full rounded-md px-2 py-1 text-left text-xs text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-50"
+          autoComplete="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          data-testid="sign-out"
+          className="relative z-0 w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-50 [&::-webkit-credentials-auto-fill-button]:hidden [&::-webkit-contacts-auto-fill-button]:hidden"
         >
           {signingOut ? "Signing out…" : "Sign out"}
         </button>
@@ -415,8 +421,10 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <PlanBanner />
-        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-y-auto overflow-x-hidden p-2 sm:p-2.5 lg:p-3">
-          {children}
+        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-x-hidden overflow-y-auto p-2 sm:p-2.5 lg:h-0 lg:p-3 lg:[&:has([data-visit-fill])]:overflow-hidden">
+          <div className="flex flex-col lg:min-h-0 lg:flex-1 lg:[&:has([data-visit-fill])]:overflow-hidden">
+            {children}
+          </div>
         </main>
       </div>
     </div>

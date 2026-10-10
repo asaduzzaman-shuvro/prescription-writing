@@ -125,28 +125,28 @@ export function VisitSidePanel({
         >
           <p className="px-0.5 text-[10px] leading-snug text-slate-400">Ctrl+Enter · Ctrl+P · /</p>
           {actions.readOnly ? (
-            <div className="grid grid-cols-2 gap-1">
-              <button type="button" className="btn-secondary py-1.5" onClick={actions.editVersion}>
-                Edit v{actions.version + 1}
-              </button>
-              <Link to={`/rx/${actions.prescriptionId}/print`} className="btn-primary py-1.5 text-center">
-                Print
+            <div className="flex flex-col gap-1">
+              <Link to={`/rx/${actions.prescriptionId}/print`} className="btn-primary w-full py-1.5 text-center">
+                Print / PDF
               </Link>
+              <button type="button" className="btn-secondary w-full py-1.5" onClick={actions.editVersion}>
+                Edit (v{actions.version + 1})
+              </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-1">
-              <Link to={`/rx/${actions.prescriptionId}/print`} className="btn-secondary py-1.5 text-center" title="Ctrl+P">
+            <div className="flex flex-col gap-1">
+              <Link to={`/rx/${actions.prescriptionId}/print`} className="btn-secondary w-full py-1.5 text-center" title="Ctrl+P">
                 Preview
               </Link>
               <button
                 type="button"
-                className="btn-primary py-1.5"
+                className="btn-primary w-full py-1.5"
                 onClick={actions.finalize}
                 disabled={actions.blocked}
                 data-testid="finalize"
                 title="Ctrl+Enter"
               >
-                Finalise
+                Finalise & print
               </button>
             </div>
           )}
