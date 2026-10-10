@@ -42,6 +42,7 @@ const generic_interaction = new Table(
 const specialty = new Table({ name: column.text, name_bn: column.text });
 const lib = { specialty_code: column.text, sort_order: column.integer };
 const complaint = new Table({ ...lib, name: column.text, name_bn: column.text });
+const history_item = new Table({ ...lib, name: column.text, category: column.text });
 const investigation = new Table({ ...lib, name: column.text, category: column.text });
 const diagnosis = new Table({ ...lib, name: column.text, icd10: column.text, icd11: column.text });
 const advice_snippet = new Table({ ...lib, text_bn: column.text, text_en: column.text, category: column.text });
@@ -242,6 +243,7 @@ export const AppSchema = new Schema({
   generic_interaction,
   specialty,
   complaint,
+  history_item,
   investigation,
   diagnosis,
   advice_snippet,

@@ -24,6 +24,7 @@ export function VisitSidePanel({
   pregnancyStatus,
   patientCard,
   actions,
+  testIdSuffix = "",
 }: {
   patientId: string;
   encounterId: string;
@@ -32,6 +33,8 @@ export function VisitSidePanel({
   /** Patient identity / fee / visit type — rendered above Alerts. */
   patientCard?: ReactNode;
   actions?: VisitRxActions | null;
+  /** Keeps test ids unique when the panel is drawn twice (desktop rail and the mobile "History & labs"). */
+  testIdSuffix?: string;
 }) {
   const { data: visits } = useQuery<{ id: string; visit_date: string; status: string; doc: string | null; rx_id: string | null }>(
     `SELECT e.id, e.visit_date, e.status,
@@ -51,7 +54,7 @@ export function VisitSidePanel({
   return (
     <aside
       className="flex h-full min-h-0 flex-col"
-      data-testid="visit-side-panel"
+      data-testid={`visit-side-panel${testIdSuffix}`}
     >
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-y-contain pr-0.5">
         {patientCard}
@@ -121,7 +124,7 @@ export function VisitSidePanel({
       {actions && (
         <div
           className="mt-1 shrink-0 space-y-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-sm print:hidden"
-          data-testid="visit-side-actions"
+          data-testid={`visit-side-actions${testIdSuffix}`}
         >
           <p className="px-0.5 text-[10px] leading-snug text-slate-400">Ctrl+Enter · Ctrl+P · /</p>
           {actions.readOnly ? (
@@ -143,7 +146,7 @@ export function VisitSidePanel({
                 className="btn-primary w-full py-1.5"
                 onClick={actions.finalize}
                 disabled={actions.blocked}
-                data-testid="finalize"
+                data-testid={`finalize${testIdSuffix}`}
                 title="Ctrl+Enter"
               >
                 Finalise & print

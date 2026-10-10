@@ -17,7 +17,7 @@ import { applyPlan, buildPlan, guessMapping, loadSnapshot, parseCsv, parseMedexG
 import { hashPassword } from "../password";
 import * as s from "../schema";
 import { seedLabCatalogue } from "../seed/lab-catalogue";
-import { ADVICE, COMPLAINTS, DIAGNOSES, INSTRUCTIONS, INVESTIGATIONS, SPECIALTIES } from "../seed/libraries";
+import { ADVICE, COMPLAINTS, DIAGNOSES, HISTORIES, INSTRUCTIONS, INVESTIGATIONS, SPECIALTIES } from "../seed/libraries";
 
 const url = process.env.DATABASE_URL ?? DEV_DATABASE_URL;
 const host = new URL(url).hostname;
@@ -38,6 +38,12 @@ async function seedLibraries() {
   await db.insert(s.specialty).values(SPECIALTIES).onConflictDoNothing();
   const src = { source: "rx-curated" };
   const withOrder = <T extends object>(rows: T[]) => rows.map((r, i) => ({ ...r, sortOrder: i, ...src }));
+  // The history list came after the others, so it is seeded on its own: older dev DBs return early below.
+  const histories = await db.select({ n: sql<number>`count(*)::int` }).from(s.historyItem);
+  if (histories[0]!.n === 0) {
+    await db.insert(s.historyItem).values(withOrder(HISTORIES));
+    console.log("libraries: seeded history");
+  }
   const existing = await db.select({ n: sql<number>`count(*)::int` }).from(s.complaint);
   if (existing[0]!.n > 0) {
     // Already seeded: top up specialties added since (their pick-lists are tagged with the code).

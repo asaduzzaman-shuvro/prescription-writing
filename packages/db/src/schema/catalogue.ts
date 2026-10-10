@@ -242,6 +242,13 @@ export const complaint = pgTable("complaint", {
   nameBn: text(),
 });
 
+/** Common history lines (H/O DM, Smoker…) suggested in the visit's History list. */
+export const historyItem = pgTable("history_item", {
+  ...libraryCols,
+  name: text().notNull(),
+  category: text(), // "Past", "Drug", "Family", "Social", "Surgical", "Obstetric"
+});
+
 export const adviceSnippet = pgTable("advice_snippet", {
   ...libraryCols,
   textBn: text().notNull(),

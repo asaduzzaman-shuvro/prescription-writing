@@ -143,6 +143,11 @@ function list(items: string[]): string {
   return clean.length ? `<ul>${clean.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
 }
 
+/** History as editable lines: the legacy free-text history first (one line per line of text), then the picked lines. */
+export function historyLines(doc: Pick<PrescriptionDoc, "history" | "histories">): string[] {
+  return [...(doc.history ?? "").split("\n"), ...(doc.histories ?? [])].map((s) => s.trim()).filter(Boolean);
+}
+
 function oeBlock(doc: PrescriptionDoc): string {
   const v = doc.vitals;
   const rows: string[] = [];
@@ -284,7 +289,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     barcodeSvg ? `<div class="barcode">${barcodeSvg}<div>*${esc(patient.patientCode!.toUpperCase())}*</div></div>` : "",
     doc.visitNo ? `<div class="visit-no">Visit No: ${doc.visitNo}</div>` : "",
     sec("cc", list(doc.chiefComplaints)),
-    sec("history", doc.history ? `<p class="pre">${esc(doc.history)}</p>` : ""),
+    sec("history", (doc.history?.trim() ? `<p class="pre">${esc(doc.history.trim())}</p>` : "") + list(doc.histories ?? [])),
     sec("oe", oeBlock(doc)),
     specialty,
     diagrams ? `<section class="diagrams">${diagrams}</section>` : "",

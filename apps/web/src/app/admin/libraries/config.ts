@@ -2,6 +2,7 @@ import { s } from "@rx/db";
 
 export const LIBRARIES = {
   complaints: { title: "Chief complaints", table: s.complaint, fields: [{ key: "name", label: "Complaint (English)" }, { key: "nameBn", label: "বাংলা" }] },
+  histories: { title: "History", table: s.historyItem, fields: [{ key: "name", label: "History (H/O DM, Smoker…)" }, { key: "category", label: "Category" }] },
   investigations: { title: "Investigations", table: s.investigation, fields: [{ key: "name", label: "Investigation" }, { key: "category", label: "Category" }] },
   diagnoses: { title: "Diagnoses", table: s.diagnosis, fields: [{ key: "name", label: "Diagnosis" }, { key: "icd10", label: "ICD-10" }, { key: "icd11", label: "ICD-11" }] },
   advice: { title: "Advice snippets", table: s.adviceSnippet, fields: [{ key: "textBn", label: "উপদেশ (বাংলা)" }, { key: "textEn", label: "English" }, { key: "category", label: "Category" }] },

@@ -1,6 +1,8 @@
 "use client";
 
-import { useSession } from "@/lib/doctor/context";
+import { bmi, chamberWorkdays, classifyDosageForm, historyLines, inFreeReportWindow, parseShortcut, type ChamberSlot, type PrescriptionDoc, type RxItem, type Sex, type Vitals } from "@rx/core";
+import { usePowerSync, useQuery } from "@powersync/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyTemplate,
   clearTemplate,
@@ -240,21 +242,27 @@ function shortcutForFavorite(it: RxItem): string {
   return parts.join(" ");
 }
 
-const OE_LABELS = [
-  "Pulse",
-  "BP",
-  "Anaemia",
-  "Jaundice",
-  "Oedema",
-  "Cyanosis",
-  "Heart",
-  "Lungs",
-  "Abdomen",
-  "Skin condition",
-  "Fundus",
-  "Throat",
-  "Lymph nodes",
-];
+/**
+ * History suggestions for ChipList, params [specialty, doctor, patient, LIKE pattern]. This patient's earlier
+ * lines come first (chronic history repeats every visit), then this doctor's own lines by how often they were
+ * used, then the whole history library (specialty rows, then general ones), so the dropdown scrolls through it.
+ */
+const HISTORY_QUERY = `
+  SELECT value AS label, value, CASE min(rank) WHEN 0 THEN 'previous visit' WHEN 1 THEN 'yours' ELSE max(category) END AS hint
+  FROM (
+    SELECT j.value AS value, 0 AS rank, count(*) AS uses, 0 AS ord, NULL AS category
+      FROM prescription p, json_each(p.doc, '$.histories') j WHERE p.patient_id = ?3 AND j.type = 'text' GROUP BY j.value
+    UNION ALL
+    SELECT j.value, 1, count(*), 0, NULL
+      FROM prescription p, json_each(p.doc, '$.histories') j WHERE p.doctor_user_id = ?2 AND j.type = 'text' GROUP BY j.value
+    UNION ALL
+    SELECT name, 2, 0, (specialty_code IS NULL) * 100000 + sort_order, category
+      FROM history_item WHERE specialty_code IS NULL OR specialty_code = ?1
+  )
+  WHERE value LIKE ?4 AND trim(value) != ''
+  GROUP BY value ORDER BY min(rank), max(uses) DESC, min(ord) LIMIT 100`;
+
+const OE_LABELS = ["Pulse", "BP", "Anaemia", "Jaundice", "Oedema", "Cyanosis", "Heart", "Lungs", "Abdomen", "Skin condition", "Fundus", "Throat", "Lymph nodes"];
 
 /** Builds a Plan line such as "Refd to Paediatric ophthalmology Dept., BSMMU, Dhaka — Dr. Tarek Reza Ali (01766683417)". */
 function ReferralForm({ onAdd }: { onAdd: (line: string) => void }) {
@@ -744,40 +752,14 @@ function RxEditor({
               ))}
             </datalist>
           </label>
-          <ChipList
-            title="C/C — Chief complaints"
-            values={doc.chiefComplaints}
-            onChange={(v) => update((d) => ({ ...d, chiefComplaints: v }))}
-            query={libQuery("complaint", "name", "name", "name_bn")}
-            params={spec}
-            placeholder="Fever × 3 days"
-            testId="cc-input"
-            multiline
-            voice
-          />
+          <ChipList title="C/C — Chief complaints" values={doc.chiefComplaints} onChange={(v) => update((d) => ({ ...d, chiefComplaints: v }))}
+            query={libQuery("complaint", "name", "name", "name_bn")} params={spec} placeholder="Fever × 3 days" testId="cc-input" multiline voice />
           <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              History
-            </h3>
-            <textarea
-              className="input"
-              rows={2}
-              disabled={readOnly}
-              value={doc.history ?? ""}
-              onChange={(e) =>
-                update((d) => ({ ...d, history: e.target.value || undefined }))
-              }
-              placeholder="P/H, D/H, F/H…"
-            />
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</h3>
+            <textarea className="input" rows={2} disabled={readOnly} value={doc.history ?? ""} onChange={(e) => update((d) => ({ ...d, history: e.target.value || undefined }))} placeholder="P/H, D/H, F/H…" />
           </section>
-          <KeyValueList
-            title="O/E — Findings"
-            values={doc.oeFindings ?? []}
-            suggestions={OE_LABELS}
-            readOnly={readOnly}
-            onChange={(v) => update((d) => ({ ...d, oeFindings: v }))}
-            testId="oe"
-          />
+          <KeyValueList title="O/E — Findings" values={doc.oeFindings ?? []} suggestions={OE_LABELS} readOnly={readOnly}
+            onChange={(v) => update((d) => ({ ...d, oeFindings: v }))} testId="oe" />
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Examination notes
@@ -1471,28 +1453,24 @@ export function VisitScreen({
             )}
           </>
         )}
-        <div className="shrink-0 xl:hidden">
-          <details className="card group" data-testid="visit-context-mobile">
-            <summary className="cursor-pointer list-none px-2.5 py-2 text-sm font-medium text-slate-700">
-              History & labs
-              {allergies.length > 0 && (
-                <span className="ml-2 badge bg-red-100 text-alert">Allergy</span>
-              )}
-              <span className="float-right text-xs font-normal text-slate-400 group-open:hidden">
-                Show
-              </span>
-            </summary>
-            <div className="border-t border-slate-100 p-2">
-              <VisitSidePanel
-                patientId={p.id}
-                encounterId={encounterId}
-                allergies={allergies}
-                pregnancyStatus={p.pregnancy_status}
-                actions={rxActions}
-              />
-            </div>
-          </details>
-        </div>
+      </div>
+      <div className="shrink-0 xl:hidden">
+        <details className="card group" data-testid="visit-context-mobile">
+          <summary className="cursor-pointer list-none px-2.5 py-2 text-sm font-medium text-slate-700">
+            History & labs
+            {allergies.length > 0 && <span className="ml-2 badge bg-red-100 text-alert">Allergy</span>}
+            <span className="float-right text-xs font-normal text-slate-400 group-open:hidden">Show</span>
+          </summary>
+          <div className="border-t border-slate-100 p-2">
+            <VisitSidePanel
+              patientId={p.id}
+              encounterId={encounterId}
+              allergies={allergies}
+              pregnancyStatus={p.pregnancy_status}
+              actions={rxActions}
+            />
+          </div>
+        </details>
       </div>
       <div className="hidden min-h-0 xl:flex xl:flex-col">{sidePanel}</div>
       <NewPatientModal
