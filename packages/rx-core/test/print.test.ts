@@ -8,6 +8,7 @@ import {
   followUpDate,
   formatDateDmy,
   formatInstructionParts,
+  historyLines,
   printAge,
   renderPrescriptionHtml,
   SAMPLE_CHAMBER,
@@ -132,12 +133,26 @@ describe("renderPrescriptionHtml", () => {
     expect(html).not.toContain(`class="rx-note`);
   });
 
+  it("prints picked history lines as a list after any legacy free text", () => {
+    expect(render({ history: undefined, histories: ["H/O DM", "Smoker"] })).toContain("<h3>History</h3><ul><li>H/O DM</li><li>Smoker</li></ul>");
+    expect(render({ history: "P/H: DM\nD/H: Metformin", histories: undefined })).toContain(`<h3>History</h3><p class="pre">P/H: DM\nD/H: Metformin</p></section>`);
+    expect(render({ history: "Old note", histories: ["H/O HTN"] })).toContain(`<p class="pre">Old note</p><ul><li>H/O HTN</li></ul>`);
+    expect(render({ history: undefined, histories: [" "] })).not.toContain("<h3>History</h3>");
+  });
+
+  it("merges legacy and picked history into editable lines", () => {
+    expect(historyLines({ history: " P/H: DM ", histories: ["Smoker", ""] })).toEqual(["P/H: DM", "Smoker"]);
+    expect(historyLines({ history: "P/H: DM\n\nD/H: Metformin" })).toEqual(["P/H: DM", "D/H: Metformin"]);
+    expect(historyLines({})).toEqual([]);
+  });
+
   it("renames and hides sections from the print settings", () => {
     const html = render({ plan: ["Review with reports"] }, {}, {
       ...DEFAULT_PRINT_SETTINGS,
       sectionLabels: { dx: "Δ", ix: "Investigations", followUp: "ফলোআপঃ" },
       hiddenSections: ["history", "plan"],
     });
+    expect(render({ histories: ["H/O DM"] }, {}, { ...DEFAULT_PRINT_SETTINGS, hiddenSections: ["history"] })).not.toContain("H/O DM");
     expect(html).toContain("<h3>Δ</h3>");
     expect(html).toContain("<h3>Investigations</h3>");
     expect(html).not.toContain("<h3>Dx</h3>");

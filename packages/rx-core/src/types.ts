@@ -104,7 +104,10 @@ export interface PrescriptionDoc {
   /** Referring doctor, printed as "Ref By: Dr. X". */
   referredBy?: string;
   chiefComplaints: string[];
+  /** Legacy free-text history; older prescriptions keep it. New edits write `histories`. */
   history?: string;
+  /** History lines (H/O DM, Smoker…), picked from the history library or typed. */
+  histories?: string[];
   vitals: Vitals;
   /** General O/E findings as "Label : value" lines (Pulse : Normal, Fundus : NAD). */
   oeFindings?: ExamFindingLine[];
