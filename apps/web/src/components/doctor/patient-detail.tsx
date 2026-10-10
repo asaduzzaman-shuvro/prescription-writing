@@ -43,14 +43,19 @@ export function PatientDetail({ patientId }: { patientId: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">{p.name}</h1>
+          <h1 className="text-lg font-semibold">{p.name}</h1>
           <p className="text-sm text-slate-500">
             {p.code ?? "ID pending sync"} · {ageLabel(p.dob)} {p.sex} · {p.mobile} {p.address && `· ${p.address}`}
           </p>
           {allergies.length > 0 && <p className="mt-1 text-sm font-medium text-red-700">⚠ Allergies: {allergies.join(", ")}</p>}
+          {p.pregnancy_status && p.pregnancy_status !== "none" && (
+            <p className="mt-1 text-sm font-medium text-pink-800">
+              {p.pregnancy_status === "both" ? "Pregnant and lactating" : p.pregnancy_status === "pregnant" ? "Pregnant" : "Lactating"}
+            </p>
+          )}
           {p.guardian_name && <p className="text-sm text-slate-500">Guardian: {p.guardian_name}</p>}
         </div>
         <div className="flex gap-2">
@@ -64,7 +69,7 @@ export function PatientDetail({ patientId }: { patientId: string }) {
         {visits.map((v) => {
           const doc = parseJson<PrescriptionDoc | null>(v.doc, null);
           return (
-            <div key={v.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
+            <div key={v.id} className="flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1.5 text-sm">
               <div>
                 <b>{v.visit_date}</b> <span className="text-slate-500">· {v.doctor}</span>
                 {v.rx_status && <span className={`badge ml-2 ${v.rx_status === "final" ? "bg-green-50 text-green-700" : "bg-slate-100"}`}>{v.rx_status}{(v.version ?? 1) > 1 ? ` v${v.version}` : ""}</span>}
@@ -82,22 +87,22 @@ export function PatientDetail({ patientId }: { patientId: string }) {
             </div>
           );
         })}
-        {!visits.length && <p className="p-3 text-sm text-slate-500">No visits yet.</p>}
+        {!visits.length && <p className="px-2.5 py-2 text-sm text-slate-500">No visits yet.</p>}
       </div>
       {labs.length > 0 && (
         <>
           <h2 className="font-semibold">Lab reports</h2>
           <div className="card divide-y divide-slate-100" data-testid="patient-lab-reports">
-            {labs.map((r) => <div key={r.id} className="p-3"><LabReportSummary r={r} /></div>)}
+            {labs.map((r) => <div key={r.id} className="px-2.5 py-1.5"><LabReportSummary r={r} /></div>)}
           </div>
         </>
       )}
       {trends.length > 0 && (
         <>
           <h2 className="font-semibold">Trends</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
             {trends.map(({ test, points }) => (
-              <div key={test.code} className="card p-3">
+              <div key={test.code} className="card p-2">
                 <div className="mb-1 text-sm font-medium">{test.name}</div>
                 <LabTrendChart code={test.code} points={points} sex={(p.sex as Sex | null) ?? null} testId={`patient-trend-${test.code}`} />
               </div>

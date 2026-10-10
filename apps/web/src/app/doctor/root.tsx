@@ -21,7 +21,7 @@ export function DoctorRoot({ session, children }: { session: ClientSession; chil
   }, []);
   return (
     <SessionProvider value={session}>
-      <PowerSyncProvider userId={session.userId}>
+      <PowerSyncProvider userId={session.userId} tenantId={session.tenantId}>
         <DoctorShell>{children}</DoctorShell>
       </PowerSyncProvider>
     </SessionProvider>

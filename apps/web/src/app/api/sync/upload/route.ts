@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { applyUpload } from "@/lib/sync-upload";
+import { assertTenantWritable, TenantAccessError } from "@/lib/tenant-access";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,12 @@ const Body = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session?.tenantId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  try {
+    await assertTenantWritable(session.tenantId);
+  } catch (e) {
+    if (e instanceof TenantAccessError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const result = await applyUpload(session as typeof session & { tenantId: string }, parsed.data.batch);

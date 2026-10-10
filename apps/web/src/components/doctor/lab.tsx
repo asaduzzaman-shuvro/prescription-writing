@@ -4,7 +4,7 @@ import { LAB_DEPARTMENTS, labRefText, type LabCatalogue, type LabPanel, type Lab
 import { usePowerSync, useQuery } from "@powersync/react";
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/doctor/context";
-import { saveLabRequest } from "@/lib/doctor/data";
+import { saveLabRequest, verifyLabRequest } from "@/lib/doctor/data";
 import { useLabCatalogue } from "@/lib/doctor/hooks";
 import { buildLabPrintHtml, provisionalLabRef } from "@/lib/doctor/lab-print";
 import { Link, navigate } from "@/lib/doctor/router";
@@ -28,38 +28,42 @@ const shortTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString("e
 
 function LabWorklist() {
   const session = useSession();
-  const { data } = useQuery<{ request_id: string; lab_no: string | null; collected_at: string | null; titles: string; name: string; code: string | null; abnormal: number }>(
+  const { data } = useQuery<{ request_id: string; lab_no: string | null; collected_at: string | null; titles: string; name: string; code: string | null; abnormal: number; verified: number }>(
     `SELECT r.request_id, max(r.lab_no) AS lab_no, min(r.collected_at) AS collected_at, group_concat(r.title, ', ') AS titles, p.name, p.code,
-            sum(r.results LIKE '%"flag":%') AS abnormal
+            sum(r.results LIKE '%"flag":%') AS abnormal,
+            sum(CASE WHEN r.verified_at IS NOT NULL AND r.verified_at <> '' THEN 1 ELSE 0 END) AS verified
        FROM lab_report r JOIN patient p ON p.id = r.patient_id
       WHERE r.source = 'in_house' AND r.request_id IS NOT NULL AND r.deleted_at IS NULL
       GROUP BY r.request_id ORDER BY max(r.created_at) DESC LIMIT 100`,
   );
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Lab</h1>
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-1.5">
           {session.tenantRole !== "assistant" && <a href="#/settings/lab" className="btn-ghost text-sm" data-testid="lab-settings-link">Lab settings</a>}
           <Link to="/lab/new" className="btn-primary">+ New lab report</Link>
         </span>
       </div>
       <div className="card divide-y divide-slate-100" data-testid="lab-worklist">
         {data.map((r) => (
-          <div key={r.request_id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm" data-testid="lab-request">
+          <div key={r.request_id} className="flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1.5 text-sm" data-testid="lab-request">
             <Link to={`/lab/${r.request_id}`} className="min-w-0 hover:underline">
               <b>{r.name}</b> <span className="text-slate-500">{r.code}</span>
               <span className="ml-2 text-slate-700">{r.titles}</span>
               {r.abnormal > 0 && <span className="ml-2 text-xs font-semibold text-red-700">abnormal</span>}
+              {r.verified > 0
+                ? <span className="ml-2 text-xs font-semibold text-green-700">verified</span>
+                : <span className="ml-2 text-xs text-amber-700">unverified</span>}
             </Link>
-            <span className="flex items-center gap-3 text-xs text-slate-500">
+            <span className="flex items-center gap-2 text-xs text-slate-500">
               <span data-testid="lab-no">{r.lab_no ?? provisionalLabRef(r.request_id)}</span>
               <span>{shortTime(r.collected_at)}</span>
               <Link to={`/lab/${r.request_id}/print`} className="btn-secondary px-2 py-0.5 text-xs">Print</Link>
             </span>
           </div>
         ))}
-        {!data.length && <p className="px-3 py-4 text-sm text-slate-500">No lab reports yet. Start with “New lab report”.</p>}
+        {!data.length && <p className="px-2.5 py-3 text-sm text-slate-500">No lab reports yet. Start with “New lab report”.</p>}
       </div>
     </div>
   );
@@ -164,14 +168,14 @@ function LabRequestEditor({ requestId }: { requestId?: string }) {
   const offered = cat.panels.filter((p) => !words || `${p.name} ${(p.aliases ?? []).join(" ")}`.toLowerCase().includes(words));
 
   return (
-    <div className="space-y-3" data-testid="lab-request-editor">
+    <div className="space-y-2" data-testid="lab-request-editor">
       <div className="flex items-center gap-2">
         <Link to="/lab" className="btn-ghost">← Lab</Link>
         <h1 className="text-lg font-semibold">{requestId ? "Lab report" : "New lab report"}</h1>
       </div>
 
       {patient ? (
-        <div className="card flex flex-wrap items-center gap-3 p-3 text-sm" data-testid="lab-patient">
+        <div className="card flex flex-wrap items-center gap-2 p-2 text-sm" data-testid="lab-patient">
           <b>{patient.name}</b>
           <span className="text-slate-500">{ageLabel(patient.dob)} {patient.sex?.[0]?.toUpperCase()} · {patient.mobile} · {patient.code}</span>
           {!requestId && <button className="btn-ghost px-2 py-0.5 text-xs" onClick={() => setPatientId(null)}>Change</button>}
@@ -183,7 +187,7 @@ function LabRequestEditor({ requestId }: { requestId?: string }) {
         </div>
       )}
 
-      <div className="card flex flex-wrap items-end gap-3 p-3">
+      <div className="card flex flex-wrap items-end gap-2 p-2">
         <label className="flex flex-col text-xs text-slate-500">
           Referred by
           <input className="input w-64" value={referredBy} onChange={(e) => setReferredBy(e.target.value)} placeholder="Dr. … (blank: Self)" data-testid="lab-referred-by" />
@@ -194,7 +198,7 @@ function LabRequestEditor({ requestId }: { requestId?: string }) {
         </label>
       </div>
 
-      <div className="card space-y-2 p-3" data-testid="lab-test-picker">
+      <div className="card space-y-1.5 p-2" data-testid="lab-test-picker">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold">Tests</h2>
           <input className="input max-w-xs py-1 text-sm" placeholder="Find a test…" value={filter} onChange={(e) => setFilter(e.target.value)} data-testid="lab-test-filter" />
@@ -245,8 +249,8 @@ function PanelResults({ cat, state, who, onRow, onPanel, onRemove }: {
   const sectionOf = Object.fromEntries((p?.sections ?? []).flatMap((s) => s.tests.map((c) => [c, s.title])));
   const codes = [...new Set([...(p?.tests ?? []), ...Object.keys(state.rows)])].filter((c) => cat.byCode[c]);
   return (
-    <section className="card space-y-2 p-3" data-testid={`lab-panel-${state.panel}`}>
-      <div className="flex flex-wrap items-end gap-3">
+    <section className="card space-y-1.5 p-2" data-testid={`lab-panel-${state.panel}`}>
+      <div className="flex flex-wrap items-end gap-2">
         <h2 className="pb-1.5 font-semibold">{p?.name ?? state.panel}</h2>
         <label className="flex flex-col text-xs text-slate-500">
           Specimen
@@ -294,10 +298,12 @@ function LabPrintView({ requestId }: { requestId: string }) {
   const session = useSession();
   const cat = useLabCatalogue();
   const frame = useRef<HTMLIFrameElement>(null);
-  const [bundle, setBundle] = useState<{ html: string; labNo: string | null } | null | undefined>(undefined);
-  // Rebuild when the request changes, or its Lab No arrives from the server.
+  const [bundle, setBundle] = useState<{ html: string; labNo: string | null; verified: boolean } | null | undefined>(undefined);
+  const [verifying, setVerifying] = useState(false);
+  const canVerify = session.tenantRole === "doctor" || session.tenantRole === "clinic_admin";
+  // Rebuild when the request changes, or its Lab No / verification arrives from the server.
   const { data: watch } = useQuery<{ k: string }>(
-    `SELECT max(updated_at) || coalesce(max(lab_no), '') || count(*) AS k FROM lab_report WHERE request_id = ? AND deleted_at IS NULL`, [requestId]);
+    `SELECT max(updated_at) || coalesce(max(lab_no), '') || coalesce(max(verified_at), '') || count(*) AS k FROM lab_report WHERE request_id = ? AND deleted_at IS NULL`, [requestId]);
   const { data: profile } = useQuery<{ k: string }>(`SELECT coalesce(max(updated_at), '') AS k FROM lab_profile`);
   useEffect(() => {
     void buildLabPrintHtml(db, requestId, { cat, userName: session.name }).then(setBundle);
@@ -311,18 +317,37 @@ function LabPrintView({ requestId }: { requestId: string }) {
     w.print();
   }
 
+  async function toggleVerify() {
+    if (!bundle || !canVerify) return;
+    setVerifying(true);
+    try {
+      await verifyLabRequest(db, requestId, !bundle.verified);
+      setBundle(await buildLabPrintHtml(db, requestId, { cat, userName: session.name }));
+    } finally {
+      setVerifying(false);
+    }
+  }
+
   if (bundle === undefined) return <div className="text-sm text-slate-500">Preparing print…</div>;
   if (bundle === null) return <div className="text-sm text-slate-500">This lab report isn't on this device.</div>;
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 print:hidden">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5 print:hidden">
         <Link to={`/lab/${requestId}`} className="btn-ghost">← Edit</Link>
         <Link to="/lab" className="btn-ghost">Lab</Link>
+        {canVerify && (
+          <button type="button" className={bundle.verified ? "btn-secondary" : "btn-primary"} disabled={verifying} onClick={toggleVerify} data-testid="lab-verify">
+            {bundle.verified ? "Clear verification" : "Mark verified"}
+          </button>
+        )}
         <button className="btn-primary" onClick={print} data-testid="lab-print">Print</button>
         <a className="btn-secondary" href={`/api/print/lab/${requestId}/pdf`} target="_blank" rel="noreferrer" data-testid="lab-pdf">Download PDF (online)</a>
         <span className="text-xs text-slate-500" data-testid="lab-print-no">{bundle.labNo ? `Lab No ${bundle.labNo}` : `${provisionalLabRef(requestId)} · Lab No once synced`}</span>
+        <span className={`text-xs ${bundle.verified ? "text-green-700" : "text-amber-700"}`} data-testid="lab-verify-status">
+          {bundle.verified ? "Verified" : "Not verified"}
+        </span>
       </div>
-      <div className="overflow-auto rounded bg-slate-200 p-4">
+      <div className="overflow-auto rounded bg-slate-200 p-2">
         <iframe ref={frame} title="Lab report preview" srcDoc={bundle.html} sandbox="allow-same-origin allow-modals"
           className="mx-auto block bg-white shadow" style={{ width: "226mm", height: "317mm", border: 0 }} data-testid="lab-print-frame" />
       </div>

@@ -6,6 +6,16 @@ import { useEffect, useState } from "react";
 import { printSettingsOf, savePrintSettings, saveSignature } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useMyProfile } from "@/lib/doctor/hooks";
+import {
+  bumpUiPref,
+  DEFAULT_UI_PREFS,
+  loadUiPrefs,
+  saveUiPrefs,
+  UI_PREF_MAX,
+  UI_PREF_MIN,
+  UI_PREF_STEP,
+  type UiPrefs,
+} from "@/lib/doctor/ui-prefs";
 import { BillingPanel } from "./billing";
 import { ChamberManager } from "./chambers";
 
@@ -23,6 +33,189 @@ function calibrationHtml(s: PrintSettings): string {
   <rect x="${left}" y="${top}" width="${w - left - s.marginRightMm + s.offsetXmm}" height="${h - top - s.marginBottomMm - (s.mode === "pad" ? s.padFooterMm : 0) + s.offsetYmm}" fill="none" stroke="#0f6f67" stroke-width="0.6" stroke-dasharray="2 1"/>
   <line x1="${left - 5}" y1="${top}" x2="${left + 5}" y2="${top}" stroke="red" stroke-width="0.4"/><line x1="${left}" y1="${top - 5}" x2="${left}" y2="${top + 5}" stroke="red" stroke-width="0.4"/>
   <text x="${left + 2}" y="${top + 6}" font-size="3" fill="red">Body starts here (x ${left} mm, y ${top} mm)</text></svg></body></html>`;
+}
+
+function PrefStepper({
+  label,
+  value,
+  onChange,
+  testId,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  testId: string;
+}) {
+  return (
+    <div data-testid={testId}>
+      <span className="label">{label}</span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className="btn-secondary min-w-8 px-2"
+          aria-label={`Decrease ${label}`}
+          disabled={value <= UI_PREF_MIN}
+          onClick={() => onChange(bumpUiPref(value, -UI_PREF_STEP))}
+        >
+          −
+        </button>
+        <input
+          type="number"
+          className="input w-16 text-center tabular-nums"
+          min={UI_PREF_MIN}
+          max={UI_PREF_MAX}
+          step={UI_PREF_STEP}
+          value={value}
+          aria-label={label}
+          onChange={(e) => onChange(bumpUiPref(Number(e.target.value), 0))}
+        />
+        <button
+          type="button"
+          className="btn-secondary min-w-8 px-2"
+          aria-label={`Increase ${label}`}
+          disabled={value >= UI_PREF_MAX}
+          onClick={() => onChange(bumpUiPref(value, UI_PREF_STEP))}
+        >
+          +
+        </button>
+      </div>
+      <p className="mt-0.5 text-[11px] text-slate-400">Step {UI_PREF_STEP} · {UI_PREF_MIN}–{UI_PREF_MAX}</p>
+    </div>
+  );
+}
+
+/** On-device font / padding / gap — stored in localStorage, not synced. */
+function DisplayPrefsPanel() {
+  const [prefs, setPrefs] = useState<UiPrefs>(DEFAULT_UI_PREFS);
+
+  useEffect(() => {
+    setPrefs(loadUiPrefs());
+  }, []);
+
+  function update(patch: Partial<UiPrefs>) {
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    saveUiPrefs(next);
+  }
+
+  const changed = prefs.font !== 1 || prefs.padding !== 1 || prefs.gap !== 1;
+
+  return (
+    <section className="card space-y-2 p-2.5 text-sm" data-testid="display-prefs">
+      <div>
+        <h2 className="font-semibold">Display</h2>
+        <p className="text-slate-500">
+          Font size, padding and gaps on this device. 1 is the default. Use + / − to change by {UI_PREF_STEP}. Does not change printed prescriptions.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <PrefStepper label="Font size" testId="ui-pref-font" value={prefs.font} onChange={(font) => update({ font })} />
+        <PrefStepper label="Padding" testId="ui-pref-padding" value={prefs.padding} onChange={(padding) => update({ padding })} />
+        <PrefStepper label="Gap" testId="ui-pref-gap" value={prefs.gap} onChange={(gap) => update({ gap })} />
+      </div>
+      {changed && (
+        <button type="button" className="btn-ghost text-xs" data-testid="ui-pref-reset" onClick={() => update(DEFAULT_UI_PREFS)}>
+          Reset to default (1)
+        </button>
+      )}
+    </section>
+  );
+}
+
+function MfaPanel() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [setup, setSetup] = useState<{ secret: string; qrDataUrl: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void fetch("/api/auth/mfa")
+      .then((r) => r.json())
+      .then((j) => setEnabled(!!j.enabled))
+      .catch(() => setEnabled(false));
+  }, []);
+
+  async function startSetup() {
+    setBusy(true);
+    setMsg(undefined);
+    try {
+      const j = await fetch("/api/auth/mfa?setup=1").then((r) => r.json());
+      if (j.enabled) setEnabled(true);
+      else if (j.secret) setSetup({ secret: j.secret, qrDataUrl: j.qrDataUrl });
+      else setMsg(j.error ?? "Could not start MFA setup");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm(action: "enable" | "disable") {
+    setBusy(true);
+    setMsg(undefined);
+    try {
+      const res = await fetch("/api/auth/mfa", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, code }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(j.error ?? "Failed");
+        return;
+      }
+      setEnabled(!!j.enabled);
+      setSetup(null);
+      setCode("");
+      setMsg(j.enabled ? "Authenticator enabled." : "Authenticator disabled.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card space-y-2 p-2.5 text-sm" data-testid="mfa-settings">
+      <h2 className="font-semibold">Two-factor authentication (MFA)</h2>
+      <p className="text-slate-500">Protect sign-in with Google Authenticator, Authy, or any TOTP app.</p>
+      {enabled === null && <p className="text-slate-400">Loading…</p>}
+      {enabled === true && (
+        <div className="space-y-2">
+          <p className="text-green-700">MFA is on for this account.</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-sm">
+              <span className="label">Code to disable</span>
+              <input className="input w-32" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} maxLength={6} />
+            </label>
+            <button type="button" className="btn-secondary" disabled={busy || code.length < 6} onClick={() => confirm("disable")}>
+              Disable MFA
+            </button>
+          </div>
+        </div>
+      )}
+      {enabled === false && !setup && (
+        <button type="button" className="btn-secondary" disabled={busy} onClick={startSetup}>
+          Set up authenticator
+        </button>
+      )}
+      {enabled === false && setup && (
+        <div className="space-y-2">
+          <img src={setup.qrDataUrl} alt="MFA QR code" className="h-40 w-40 border border-slate-200" />
+          <p className="text-xs text-slate-500">
+            Or enter secret manually: <code className="rounded bg-slate-100 px-1">{setup.secret}</code>
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-sm">
+              <span className="label">Confirm with code</span>
+              <input className="input w-32" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} maxLength={6} data-testid="mfa-enable-code" />
+            </label>
+            <button type="button" className="btn-primary" disabled={busy || code.length < 6} onClick={() => confirm("enable")} data-testid="mfa-enable">
+              Enable MFA
+            </button>
+          </div>
+        </div>
+      )}
+      {msg && <p className="text-sm text-slate-700">{msg}</p>}
+    </section>
+  );
 }
 
 export function SettingsScreen() {
@@ -86,14 +279,15 @@ export function SettingsScreen() {
 
   const p = prof[0];
   return (
-    <div className="space-y-5">
-      <h1 className="text-xl font-semibold">Settings</h1>
+    <div className="space-y-2.5">
+      <h1 className="text-lg font-semibold">Settings</h1>
+      <DisplayPrefsPanel />
       {p && (
-        <section className="card p-4 text-sm">
+        <section className="card p-2.5 text-sm">
           <h2 className="mb-1 font-semibold">Profile (printed on header)</h2>
           <p>{p.name_en} · BMDC {p.bmdc_number} · {p.bmdc_verified_at ? <span className="text-green-700">verified</span> : <span className="text-amber-700">verification pending</span>}{p.bmdc_expiry && ` · valid to ${p.bmdc_expiry}`}</p>
           <p className="text-slate-500">Name, degrees and BMDC number are verified by RxPad admin. Ask support to change them.</p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <span className="label mb-0">Signature image</span>
             {profile?.signature_data_url && <img src={profile.signature_data_url} alt="Signature" className="h-10 border border-slate-200 bg-white" />}
             <input type="file" accept="image/png,image/jpeg" onChange={(e) => onSignature(e.target.files?.[0])} className="text-xs" />
@@ -102,15 +296,16 @@ export function SettingsScreen() {
         </section>
       )}
       <BillingPanel />
+      <MfaPanel />
       <ChamberManager />
-      <section className="card flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+      <section className="card flex flex-wrap items-center justify-between gap-2 p-2.5 text-sm">
         <div>
           <h2 className="font-semibold">Lab reports</h2>
           <p className="text-slate-500">The clinic lab&apos;s report heading and signatories, and its tests: normal ranges, units, hidden tests, your own tests.</p>
         </div>
         <a href="#/settings/lab" className="btn-secondary" data-testid="settings-lab">Lab settings</a>
       </section>
-      <section className="card space-y-4 p-4">
+      <section className="card space-y-2.5 p-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-semibold">Print layout</h2>
           {chambers.length > 1 && (
@@ -120,7 +315,7 @@ export function SettingsScreen() {
           )}
           {current && chambers.length === 1 && <span className="text-sm text-slate-500">{current.name}</span>}
         </div>
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-4">
           <label className="text-sm"><span className="label">Mode</span>
             <select className="input" value={s.mode} onChange={(e) => set("mode", e.target.value as PrintSettings["mode"])}>
               <option value="letterhead">Full letterhead (plain paper)</option><option value="pad">Pre-printed pad (body only)</option>

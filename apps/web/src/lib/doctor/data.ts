@@ -69,6 +69,8 @@ export async function productGenericIds(db: Db, productId: string): Promise<stri
 // Patients
 // ---------------------------------------------------------------------------
 
+export type PregnancyStatus = "none" | "pregnant" | "lactating" | "both";
+
 export interface PatientInput {
   name: string;
   dob: string | null;
@@ -77,6 +79,7 @@ export interface PatientInput {
   mobile: string;
   address: string;
   allergies: string[];
+  pregnancyStatus: PregnancyStatus | null;
   guardianName: string;
   nid: string;
   brn: string;
@@ -91,12 +94,12 @@ export async function createPatient(db: Db, userId: string, tenantId: string, p:
   const id = uuid();
   const now = nowIso();
   await db.execute(
-    `INSERT INTO patient (id, tenant_id, name, dob, dob_estimated, sex, mobile, address, allergies, guardian_name, nid, brn, health_id,
+    `INSERT INTO patient (id, tenant_id, name, dob, dob_estimated, sex, mobile, address, allergies, pregnancy_status, guardian_name, nid, brn, health_id,
                           notes, consent_at, birth_weight_kg, gestational_age_weeks, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id, tenantId, p.name.trim(), p.dob, p.dobEstimated ? 1 : 0, p.sex, p.mobile || null, p.address || null,
-      JSON.stringify(p.allergies), p.guardianName || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null,
+      JSON.stringify(p.allergies), p.pregnancyStatus, p.guardianName || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null,
       p.consent ? now : null, p.birthWeightKg, p.gestationalAgeWeeks, userId, now, now,
     ],
   );
@@ -105,11 +108,11 @@ export async function createPatient(db: Db, userId: string, tenantId: string, p:
 
 export async function updatePatient(db: Db, id: string, p: PatientInput) {
   await db.execute(
-    `UPDATE patient SET name = ?, dob = ?, dob_estimated = ?, sex = ?, mobile = ?, address = ?, allergies = ?, guardian_name = ?,
+    `UPDATE patient SET name = ?, dob = ?, dob_estimated = ?, sex = ?, mobile = ?, address = ?, allergies = ?, pregnancy_status = ?, guardian_name = ?,
             nid = ?, brn = ?, health_id = ?, notes = ?, consent_at = COALESCE(consent_at, ?), birth_weight_kg = ?, gestational_age_weeks = ?,
             updated_at = ? WHERE id = ?`,
     [
-      p.name.trim(), p.dob, p.dobEstimated ? 1 : 0, p.sex, p.mobile || null, p.address || null, JSON.stringify(p.allergies),
+      p.name.trim(), p.dob, p.dobEstimated ? 1 : 0, p.sex, p.mobile || null, p.address || null, JSON.stringify(p.allergies), p.pregnancyStatus,
       p.guardianName || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null, p.consent ? nowIso() : null,
       p.birthWeightKg, p.gestationalAgeWeeks, nowIso(), id,
     ],
@@ -338,6 +341,24 @@ export async function saveLabRequest(db: Db, r: LabRequestInput) {
   });
 }
 
+/** Mark every panel of an in-house request as verified (server overwrites the name from the session). */
+export async function verifyLabRequest(db: Db, requestId: string, verified: boolean) {
+  const now = nowIso();
+  if (verified) {
+    await db.execute(
+      `UPDATE lab_report SET verified_at = ?, verified_by_name = coalesce(verified_by_name, ''), updated_at = ?
+        WHERE request_id = ? AND deleted_at IS NULL`,
+      [now, now, requestId],
+    );
+  } else {
+    await db.execute(
+      `UPDATE lab_report SET verified_at = NULL, verified_by_name = NULL, updated_at = ?
+        WHERE request_id = ? AND deleted_at IS NULL`,
+      [now, requestId],
+    );
+  }
+}
+
 /** The patient agreed to keep photos of their reports (asked once, before the first one). */
 export async function recordReportFilesConsent(db: Db, patientId: string) {
   const now = nowIso();
@@ -503,19 +524,26 @@ export async function deleteTemplate(db: Db, id: string) {
   await db.execute(`DELETE FROM rx_template WHERE id = ?`, [id]);
 }
 
-/** Merge a template into a doc without duplicating lines already present. */
+/**
+ * Replace the template-owned sections of a prescription (complaints, Ix, Dx, Rx, advice, follow-up).
+ * Leaves referral, history, O/E, specialty exam, notes and plan untouched.
+ * Pass an empty payload (or use clearTemplate) for “No template”.
+ */
 export function applyTemplate(doc: PrescriptionDoc, t: TemplatePayload): PrescriptionDoc {
-  const merge = (a: string[], b: string[] = []) => [...a, ...b.filter((x) => !a.includes(x))];
-  const haveProducts = new Set(doc.items.map((i) => i.productId ?? i.brandName));
   return {
     ...doc,
-    chiefComplaints: merge(doc.chiefComplaints, t.chiefComplaints),
-    investigations: merge(doc.investigations, t.investigations),
-    diagnoses: merge(doc.diagnoses, t.diagnoses),
-    advice: merge(doc.advice, t.advice),
-    items: [...doc.items, ...(t.items ?? []).filter((i) => !haveProducts.has(i.productId ?? i.brandName)).map((i) => ({ ...i, id: uuid() }))],
-    followUp: doc.followUp && doc.followUp.kind !== "none" ? doc.followUp : (t.followUp ?? doc.followUp),
+    chiefComplaints: [...(t.chiefComplaints ?? [])],
+    investigations: [...(t.investigations ?? [])],
+    diagnoses: [...(t.diagnoses ?? [])],
+    advice: [...(t.advice ?? [])],
+    items: (t.items ?? []).map((i) => ({ ...i, id: uuid() })),
+    followUp: t.followUp ?? { kind: "none" },
   };
+}
+
+/** Clear complaints / Ix / Dx / medicines / advice / follow-up (keeps exam notes and referral). */
+export function clearTemplate(doc: PrescriptionDoc): PrescriptionDoc {
+  return applyTemplate(doc, {});
 }
 
 // ---------------------------------------------------------------------------

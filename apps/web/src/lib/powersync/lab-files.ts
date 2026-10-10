@@ -96,9 +96,18 @@ export function labFileQueue(): AttachmentQueue {
   return queue;
 }
 
-/** Sign-out: forget this user's files on the device. */
+/** Stop the upload loop (chamber switch / disconnect). Does not delete local files. */
 export async function stopLabFileQueue() {
   if (!queue) return;
+  await queue.stopSync();
+  queue = null;
+}
+
+/** Sign-out wipe: drop this user's lab photos/PDFs from the device. */
+export async function clearLabFileQueue() {
+  if (!queue) {
+    return;
+  }
   await queue.stopSync();
   await queue.localStorage.clear();
   queue = null;

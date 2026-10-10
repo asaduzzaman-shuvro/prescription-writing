@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addMedicine, login, mobile, registerPatient, uniq, waitSynced } from "./helpers";
+import { addMedicine, login, mobile, openVisitReports, registerPatient, uniq, waitSynced } from "./helpers";
 
 const iso = (d: Date) => d.toLocaleDateString("en-CA");
 const dmy = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}`;
@@ -9,6 +9,7 @@ test("doctor records lab reports: H/L flags, previous value, and the ticked valu
   await waitSynced(page);
   const name = `E2E Labs ${uniq()}`;
   await registerPatient(page, { name, age: "40", sex: "Female", mobile: mobile() });
+  await openVisitReports(page);
   const card = page.getByTestId("lab-reports");
   const today = iso(new Date());
   const earlier = iso(new Date(Date.now() - 60 * 86_400_000));
@@ -51,6 +52,7 @@ test("doctor records lab reports: H/L flags, previous value, and the ticked valu
   await expect(card.getByTestId("lab-error")).toHaveText("Enter at least one value.");
   await card.getByRole("button", { name: "Cancel" }).click();
 
+  await page.getByTestId("visit-tab-rx").click();
   await addMedicine(page, "napa extend", "1+0+1 af 5d");
   await page.getByTestId("finalize").click();
   const frame = page.frameLocator("[data-testid=print-frame]");
@@ -65,6 +67,7 @@ test("doctor records lab reports: H/L flags, previous value, and the ticked valu
   // Reports stay editable after printing, but the printed prescription keeps the values it was printed with.
   const printedUrl = page.url();
   await page.getByRole("link", { name: "← Back to visit" }).click();
+  await openVisitReports(page);
   await card.getByTestId("lab-report").filter({ hasText: "CBC" }).getByRole("button", { name: "Edit" }).click();
   await card.getByTestId("lab-value-718-7").fill("10.5");
   await card.getByTestId("lab-save").click();
@@ -82,6 +85,7 @@ test("the assistant can add a report; the server rejects tampered or future-date
   await login(page, "assistant@rx.local", "assist123");
   await waitSynced(page);
   await registerPatient(page, { name: `E2E Labs Asst ${uniq()}`, age: "52", sex: "Male", mobile: mobile() });
+  await openVisitReports(page);
   const card = page.getByTestId("lab-reports");
   await card.getByTestId("lab-add-rft").click();
   await card.getByTestId("lab-value-2160-0").fill("1.6");
@@ -105,12 +109,14 @@ test("quick entry, what was ordered last visit, and the trend across visits", as
   await waitSynced(page);
   const name = `E2E Labs Trend ${uniq()}`;
   await registerPatient(page, { name, age: "55", sex: "Male", mobile: mobile() });
+  await openVisitReports(page);
   const card = page.getByTestId("lab-reports");
 
   // Visit 1: HbA1c by quick entry; order tests for next time.
   await card.getByTestId("lab-quick").fill("hba1c 8.1");
   await card.getByTestId("lab-quick").press("Enter");
   await expect(card.getByTestId("lab-report")).toHaveCount(1);
+  await page.getByTestId("visit-tab-rx").click();
   for (const ix of ["CBC with ESR", "HbA1c", "X-ray chest P/A view"]) {
     await page.getByTestId("ix-input").fill(ix);
     await page.getByTestId("ix-input").press("Enter");
@@ -124,6 +130,7 @@ test("quick entry, what was ordered last visit, and the trend across visits", as
   await page.goto("/doctor#/");
   await page.getByRole("link", { name }).first().click();
   await page.getByRole("button", { name: "Start visit" }).click();
+  await openVisitReports(page);
   await expect(card.getByTestId("lab-ordered-chip")).toHaveText(["+ CBC with ESR", "+ HbA1c", "+ X-ray chest P/A view"]);
   await card.getByTestId("lab-quick").fill("hba1c 7.4 hb 12.1 xyz 3");
   await card.getByTestId("lab-quick").press("Enter");
@@ -155,6 +162,7 @@ test("report photos: taken offline, uploaded later, viewable, removable; the ser
   await waitSynced(page);
   await registerPatient(page, { name: `E2E Labs Photo ${uniq()}`, age: "33", sex: "Female", mobile: mobile() });
   await expect(page.getByTestId("sync-status")).toHaveText("Synced", { timeout: 60_000 });
+  await openVisitReports(page);
   const card = page.getByTestId("lab-reports");
 
   // Offline: the photo is kept on the device and shows straight away.
@@ -209,6 +217,7 @@ test("the full menu: stool R/M/E by section, written counts, text results and Wi
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
   await registerPatient(page, { name: `E2E Labs Menu ${uniq()}`, age: "30", sex: "Male", mobile: mobile() });
+  await openVisitReports(page);
   const card = page.getByTestId("lab-reports");
 
   // Panels beyond the chips are under "More tests", grouped by department.

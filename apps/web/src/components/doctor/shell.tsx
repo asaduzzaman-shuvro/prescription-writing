@@ -1,11 +1,31 @@
 "use client";
 
-import { useQuery, useStatus } from "@powersync/react";
-import { useEffect, useState } from "react";
+import { usePowerSync, useQuery, useStatus } from "@powersync/react";
+import {
+  BarChart3,
+  CalendarDays,
+  ClipboardPlus,
+  FlaskConical,
+  LayoutDashboard,
+  LayoutTemplate,
+  Menu,
+  Microscope,
+  Monitor,
+  Pill,
+  Settings,
+  Users,
+  X,
+} from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { startVisit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
-import { Link, useHashRoute } from "@/lib/doctor/router";
+import { useChambers, useDoctors, useMyProfile } from "@/lib/doctor/hooks";
+import { Link, navigate, useHashRoute } from "@/lib/doctor/router";
+import { today } from "@/lib/doctor/util";
 import type { Rejected } from "@/lib/powersync/connector";
-import { disconnectAndClear } from "@/lib/powersync/provider";
+import { disconnectForChamberSwitch, disconnectSession } from "@/lib/powersync/provider";
+import { clinicDataReady, downloadPercent } from "@/lib/powersync/sync-ready";
+import { usePatientSearch } from "./patient-search";
 
 function RejectedNotice() {
   const [items, setItems] = useState<Rejected[]>([]);
@@ -17,7 +37,7 @@ function RejectedNotice() {
   if (!items.length) return null;
   return (
     <details className="relative" data-testid="sync-rejected">
-      <summary className="badge cursor-pointer bg-red-100 text-red-800">{items.length} change{items.length > 1 ? "s" : ""} not saved on server</summary>
+      <summary className="badge cursor-pointer bg-red-100 text-alert">{items.length} change{items.length > 1 ? "s" : ""} not saved</summary>
       <div className="absolute right-0 z-40 mt-1 w-80 rounded-md border border-red-200 bg-white p-2 text-xs shadow-lg">
         <ul className="space-y-1">{items.map((r, i) => <li key={i}><b>{r.table}</b>: {r.reason}</li>)}</ul>
         <button className="btn-ghost mt-1 text-xs" onClick={() => setItems([])}>Dismiss</button>
@@ -42,13 +62,106 @@ function SyncBadge() {
     };
   }, []);
   const connected = status.connected && online;
-  const label = !status.hasSynced ? "Downloading data…" : connected ? (pending ? `Syncing ${pending}…` : "Synced") : pending ? `Offline · ${pending} unsynced` : "Offline";
-  const color = !connected ? "bg-amber-100 text-amber-800" : pending || !status.hasSynced ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800";
+  const clinicReady = clinicDataReady(status);
+  const fullSynced = !!status.hasSynced;
+  const pct = downloadPercent(status);
+  const label = !clinicReady
+    ? pct != null ? `Clinic ${pct}%…` : "Loading clinic…"
+    : !fullSynced
+      ? pct != null ? `Medicines ${pct}%…` : "Loading medicines…"
+      : connected
+        ? pending ? `Syncing ${pending}…` : "Synced"
+        : pending ? `Offline · ${pending}` : "Offline";
+  const color = !connected
+    ? "bg-amber-100 text-warn"
+    : pending || !fullSynced
+      ? "bg-blue-100 text-blue-800"
+      : "bg-green-100 text-green-800";
   return (
     <span data-testid="sync-status" className={`badge ${color}`} title={status.dataFlowStatus?.uploadError?.message ?? ""}>
       <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${connected ? "bg-current" : "bg-amber-500"}`} />
       {label}
     </span>
+  );
+}
+
+function LiveClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const date = today();
+  const time = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="hidden text-right text-xs text-slate-500 sm:block">
+      <div className="font-medium tabular-nums text-slate-700">{time}</div>
+      <div className="tabular-nums">{date}</div>
+    </div>
+  );
+}
+
+function HeaderSearch() {
+  const db = usePowerSync();
+  const session = useSession();
+  const { current: chamber } = useChambers();
+  const doctors = useDoctors();
+  const [q, setQ] = useState("");
+  const { data } = usePatientSearch(q, 6);
+  const isDoctor = session.tenantRole === "doctor";
+
+  async function start(patientId: string) {
+    const doctorId = isDoctor ? session.userId : doctors[0]?.id;
+    if (!doctorId) return alert("No doctor in this chamber yet.");
+    const id = await startVisit(db, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      patientId,
+      doctorUserId: doctorId,
+      chamberId: chamber?.id ?? null,
+      specialtyCode: doctors.find((d) => d.id === doctorId)?.specialty_code ?? "general",
+      asDoctor: isDoctor,
+    });
+    setQ("");
+    navigate(`/visit/${id}`);
+  }
+
+  return (
+    <div className="relative min-w-0 flex-1 max-w-md">
+      <input
+        id="header-patient-search"
+        className="input h-8 bg-slate-50"
+        placeholder="Quick search — name, mobile or ID…  (press /)"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setQ("");
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        data-testid="header-patient-search"
+      />
+      {q.trim().length >= 2 && (
+        <ul className="absolute z-40 mt-1 max-h-72 w-full overflow-auto rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+          {data.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-slate-50">
+              <Link to={`/patients/${p.id}`} className="min-w-0 truncate hover:underline" onClick={() => setQ("")}>
+                <b>{p.name}</b> <span className="text-slate-500">{p.mobile} · {p.code}</span>
+              </Link>
+              <button type="button" className="btn-secondary shrink-0 px-2 py-0.5 text-xs" onClick={() => void start(p.id)}>
+                {isDoctor ? "Rx" : "Queue"}
+              </button>
+            </li>
+          ))}
+          {!data.length && (
+            <li className="px-3 py-2 text-slate-500">
+              No match. <Link to="/patients/new" className="text-brand-700 underline" onClick={() => setQ("")}>New patient</Link>
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -58,57 +171,254 @@ function PlanBanner() {
   const days = Math.ceil((new Date(`${planExpiresAt}T23:59:59`).getTime() - Date.now()) / 86400000);
   if (days > 7) return null;
   return (
-    <div className={`px-4 py-1.5 text-center text-sm print:hidden ${days < 0 ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
-      {days < 0 ? `Subscription expired on ${planExpiresAt}.` : `Subscription ends in ${days} day${days === 1 ? "" : "s"} (${planExpiresAt}).`}{" "}
-      <a href="#/settings" className="underline">Renew</a> — your data stays safe either way.
+    <div className={`shrink-0 px-4 py-1.5 text-center text-sm print:hidden ${days < 0 ? "bg-red-50 text-alert" : "bg-amber-50 text-warn"}`}>
+      {days < 0
+        ? `Subscription expired on ${planExpiresAt}. Sync and SMS are paused until you renew.`
+        : `Subscription ends in ${days} day${days === 1 ? "" : "s"} (${planExpiresAt}).`}{" "}
+      <a href="#/settings" className="underline">Renew</a>
     </div>
   );
 }
 
-export function DoctorShell({ children }: { children: React.ReactNode }) {
+function ChamberSwitcher() {
   const session = useSession();
-  const route = useHashRoute();
-  const isDoctor = session.tenantRole === "doctor";
-  const nav = [
-    { to: "/", label: "Today", match: route.length === 0 },
-    { to: "/patients", label: "Patients", match: route[0] === "patients" },
-    { to: "/bookings", label: "Bookings", match: route[0] === "bookings" },
-    { to: "/lab", label: "Lab", match: route[0] === "lab" },
-    ...(session.tenantRole !== "assistant" ? [{ to: "/reports", label: "Reports", match: route[0] === "reports" }] : []),
-    ...(isDoctor ? [{ to: "/templates", label: "Templates", match: route[0] === "templates" }] : []),
-    ...(session.tenantRole !== "assistant" ? [{ to: "/settings", label: "Settings", match: route[0] === "settings" }] : []),
-  ];
+  const [open, setOpen] = useState(false);
+  const [chambers, setChambers] = useState<{ tenantId: string; name: string; role: string; current: boolean }[]>([]);
+  const [busy, setBusy] = useState(false);
 
-  async function signOut() {
-    // Remove the local copy of patient data from this browser before leaving.
-    await disconnectAndClear();
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+  useEffect(() => {
+    void fetch("/api/auth/switch-chamber")
+      .then((r) => r.json())
+      .then((j) => setChambers(j.chambers ?? []))
+      .catch(() => setChambers([]));
+  }, []);
+
+  async function switchTo(tenantId: string) {
+    if (tenantId === session.tenantId || busy) return;
+    setBusy(true);
+    try {
+      await disconnectForChamberSwitch();
+      const res = await fetch("/api/auth/switch-chamber", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tenantId }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error ?? "Could not switch chamber");
+        setBusy(false);
+        return;
+      }
+      window.location.href = "/doctor";
+    } catch {
+      setBusy(false);
+      alert("Could not switch chamber");
+    }
+  }
+
+  if (chambers.length <= 1 && !open) {
+    return <span className="truncate text-sm text-slate-600" title={session.tenantName}>{session.tenantName}</span>;
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
-          <span className="font-semibold text-brand-700">RxPad</span>
-          <nav className="flex gap-1">
-            {nav.map((n) => (
-              <Link key={n.to} to={n.to} className={`rounded-md px-3 py-1.5 text-sm ${n.match ? "bg-brand-50 font-medium text-brand-700" : "text-slate-600 hover:bg-slate-100"}`}>
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <a href="#/display" className="text-xs text-slate-500 hover:text-slate-900" title="Waiting-room screen">Display</a>
-            <RejectedNotice />
-            <SyncBadge />
-            <span className="hidden text-slate-500 sm:inline">{session.name} · {session.tenantRole}</span>
-            <button onClick={signOut} className="text-xs text-slate-500 hover:text-slate-900">Sign out</button>
-          </div>
+    <details className="relative" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer list-none truncate text-sm text-slate-600 hover:text-slate-900" title="Switch clinic">
+        {session.tenantName} ▾
+      </summary>
+      <div className="absolute left-0 z-40 mt-1 w-64 rounded-md border border-slate-200 bg-white p-2 text-xs shadow-lg">
+        <p className="mb-1 px-1 font-medium text-slate-700">Your clinics</p>
+        <ul className="space-y-1">
+          {(chambers.length ? chambers : [{ tenantId: session.tenantId, name: session.tenantName, role: session.tenantRole, current: true }]).map((c) => (
+            <li key={c.tenantId}>
+              <button
+                type="button"
+                disabled={c.current || busy}
+                className={`w-full rounded px-2 py-1.5 text-left ${c.current ? "bg-brand-50 text-brand-800" : "hover:bg-slate-50"}`}
+                onClick={() => switchTo(c.tenantId)}
+              >
+                <b>{c.name}</b>
+                <span className="block text-slate-500">{c.role}{c.current ? " · current" : ""}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
+  );
+}
+
+type NavItem = { to: string; label: string; match: boolean; icon: ReactNode };
+
+export function DoctorShell({ children }: { children: React.ReactNode }) {
+  const session = useSession();
+  const route = useHashRoute();
+  const profile = useMyProfile();
+  const isDoctor = session.tenantRole === "doctor";
+  const [signingOut, setSigningOut] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const date = today();
+
+  const { data: queueStats } = useQuery<{ waiting: number | null; active: number | null; done: number | null; total: number | null }>(
+    `SELECT
+        coalesce(sum(CASE WHEN status = 'waiting' THEN 1 ELSE 0 END), 0) AS waiting,
+        coalesce(sum(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0) AS active,
+        coalesce(sum(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) AS done,
+        count(*) AS total
+       FROM encounter
+      WHERE visit_date = ? AND status <> 'cancelled' ${isDoctor ? "AND doctor_user_id = ?" : ""}`,
+    isDoctor ? [date, session.userId] : [date],
+  );
+  const qs = {
+    waiting: queueStats[0]?.waiting ?? 0,
+    active: queueStats[0]?.active ?? 0,
+    done: queueStats[0]?.done ?? 0,
+  };
+
+  const home: NavItem[] = [
+    { to: "/", label: "Dashboard", match: route.length === 0, icon: <LayoutDashboard className="h-4 w-4 shrink-0" /> },
+    { to: "/patients/new", label: "New prescription", match: route[0] === "patients" && route[1] === "new", icon: <ClipboardPlus className="h-4 w-4 shrink-0" /> },
+    { to: "/patients", label: "Patients", match: route[0] === "patients" && route[1] !== "new", icon: <Users className="h-4 w-4 shrink-0" /> },
+    { to: "/bookings", label: "Bookings", match: route[0] === "bookings", icon: <CalendarDays className="h-4 w-4 shrink-0" /> },
+  ];
+  const clinical: NavItem[] = [
+    { to: "/lab", label: "Lab", match: route[0] === "lab", icon: <FlaskConical className="h-4 w-4 shrink-0" /> },
+    { to: "/investigations", label: "Investigations", match: route[0] === "investigations", icon: <Microscope className="h-4 w-4 shrink-0" /> },
+    { to: "/medicines", label: "Medicines", match: route[0] === "medicines", icon: <Pill className="h-4 w-4 shrink-0" /> },
+  ];
+  const practice: NavItem[] = [
+    ...(isDoctor ? [{ to: "/templates", label: "Templates", match: route[0] === "templates", icon: <LayoutTemplate className="h-4 w-4 shrink-0" /> }] : []),
+    ...(session.tenantRole !== "assistant" ? [{ to: "/reports", label: "Analytics", match: route[0] === "reports", icon: <BarChart3 className="h-4 w-4 shrink-0" /> }] : []),
+    ...(session.tenantRole !== "assistant" ? [{ to: "/settings", label: "Settings", match: route[0] === "settings", icon: <Settings className="h-4 w-4 shrink-0" /> }] : []),
+  ];
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [route.join("/")]);
+
+  // `/` focuses patient search; Esc closes the mobile drawer. Skip when typing in fields.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
+        e.preventDefault();
+        document.getElementById("header-patient-search")?.focus();
+      }
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  async function signOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    const logout = fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    const leave = disconnectSession().catch(() => null);
+    await Promise.race([Promise.all([logout, leave]), new Promise((r) => setTimeout(r, 2500))]);
+    window.location.href = "/login";
+  }
+
+  const linkClass = (on: boolean) =>
+    `flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition ${
+      on ? "bg-brand-600 font-medium text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"
+    }`;
+
+  const NavGroup = ({ title, items }: { title: string; items: NavItem[] }) =>
+    items.length ? (
+      <div className="space-y-0.5">
+        <p className="px-2.5 pb-0.5 pt-2 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">{title}</p>
+        {items.map((n) => (
+          <Link key={n.to} to={n.to} className={linkClass(n.match)} onClick={() => setMobileOpen(false)}>
+            {n.icon}
+            {n.label}
+          </Link>
+        ))}
+      </div>
+    ) : null;
+
+  const specialty = profile?.specialty_code?.replace(/_/g, " ") ?? session.tenantRole;
+  const doctorLabel = profile?.name_en ?? session.name;
+
+  const sidebar = (
+    <>
+      <div className="border-b border-white/10 px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-base font-semibold tracking-tight text-white">RxPad</span>
+          <span className="rounded bg-sakura-500/90 px-1.5 py-0.5 text-[10px] font-semibold text-white uppercase">Clinic</span>
         </div>
-      </header>
-      <PlanBanner />
-      <main className="mx-auto max-w-7xl p-4">{children}</main>
+        <p className="mt-1 truncate text-sm font-medium text-white">{doctorLabel}</p>
+        <p className="truncate text-xs capitalize text-slate-400">{specialty}</p>
+      </div>
+      <nav className="flex-1 overflow-y-auto px-1.5 pb-2" aria-label="Main">
+        <NavGroup title="Home" items={home} />
+        <NavGroup title="Clinical" items={clinical} />
+        <NavGroup title="Practice" items={practice} />
+        <div className="mt-2 space-y-0.5 border-t border-white/10 pt-2">
+          <a href="#/display" className={linkClass(route[0] === "display")} onClick={() => setMobileOpen(false)}>
+            <Monitor className="h-4 w-4 shrink-0" />
+            Display
+          </a>
+        </div>
+      </nav>
+      <div className="border-t border-white/10 p-2">
+        <button
+          type="button"
+          disabled={signingOut}
+          onClick={() => void signOut()}
+          className="w-full rounded-md px-2 py-1 text-left text-xs text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-50"
+        >
+          {signingOut ? "Signing out…" : "Sign out"}
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="h-dvh overflow-hidden bg-slate-100">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-52 flex-col bg-[#0a3d39] print:hidden md:flex">
+        {sidebar}
+      </aside>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 print:hidden md:hidden">
+          <button type="button" className="absolute inset-0 bg-slate-900/40" aria-label="Close menu" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 flex w-60 max-w-[85vw] flex-col bg-[#0a3d39] shadow-xl">
+            <button type="button" className="absolute top-2.5 right-2.5 rounded p-1 text-slate-300 hover:bg-white/10" aria-label="Close" onClick={() => setMobileOpen(false)}>
+              <X className="h-5 w-5" />
+            </button>
+            {sidebar}
+          </aside>
+        </div>
+      )}
+
+      <div className="flex h-dvh flex-col md:pl-52">
+        <header className="z-30 shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-2.5 py-1.5 sm:px-3">
+            <button type="button" className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 md:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="min-w-0 md:max-w-[11rem]">
+              <ChamberSwitcher />
+            </div>
+            <HeaderSearch />
+            <div className="ml-auto flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <div className="hidden items-center gap-1 text-xs sm:flex" data-testid="queue-status">
+                <span className="badge bg-amber-100 text-warn">{qs.waiting} waiting</span>
+                <span className="badge bg-blue-100 text-blue-800">{qs.active} in room</span>
+                <span className="badge bg-green-100 text-green-800">{qs.done} seen</span>
+              </div>
+              <LiveClock />
+              <RejectedNotice />
+              <SyncBadge />
+            </div>
+          </div>
+        </header>
+        <PlanBanner />
+        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-y-auto overflow-x-hidden p-2 sm:p-2.5 lg:p-3">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

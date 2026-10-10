@@ -1,14 +1,14 @@
 import "server-only";
 import { formatInstruction, labCatalogueRowProblem, labReportProblem, type PrescriptionDoc } from "@rx/core";
 import { s, withTenant, type Tx } from "@rx/db";
-import { eq, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { appDb } from "./db";
 import type { Session } from "./session";
 
 /**
- * NOTE: the client mirrors these rules (antibiotic duration and non-empty Rx in visit.tsx finalize,
- * role-gated UI). Keep both sides identical — a server-only rejection reverts a write the user
- * already saw succeed (surfaced via the "not saved on server" notice).
+ * NOTE: the client mirrors these rules (antibiotic duration, non-empty Rx, allergy / contraindicated
+ * interaction / pregnancy D–X blockers in visit.tsx + safety.ts). Keep both sides identical — a
+ * server-only rejection reverts a write the user already saw succeed (via "not saved on server").
  *
  * Applies the PowerSync client's CRUD queue to Postgres. Runs on the RLS connection inside
  * withTenant(), so a client can never touch another tenant's rows even if it forges ids.
@@ -37,7 +37,8 @@ const SPECS: Record<string, TableSpec> = {
     roles: ["doctor", "assistant", "clinic_admin"],
     columns: {
       name: "text", dob: "date", dob_estimated: "bool", sex: "enum:sex", mobile: "text", address: "text", nid: "text",
-      brn: "text", health_id: "text", allergies: "textarr", notes: "text", consent_at: "ts", guardian_name: "text", report_files_consent_at: "ts",
+      brn: "text", health_id: "text", allergies: "textarr", pregnancy_status: "text", notes: "text", consent_at: "ts",
+      guardian_name: "text", report_files_consent_at: "ts",
       birth_weight_kg: "num", gestational_age_weeks: "int",
       deleted_at: "ts", created_at: "ts",
     },
@@ -66,7 +67,7 @@ const SPECS: Record<string, TableSpec> = {
       patient_id: "uuid", encounter_id: "uuid", report_date: "date", lab_name: "text", panel: "text", title: "text",
       results: "jsonb", conclusion: "text", files: "jsonb", deleted_at: "ts", created_at: "ts",
       source: "text", request_id: "uuid", department: "text", specimen: "text", collected_at: "ts", referred_by: "text",
-      comment: "text", prepared_by_name: "text",
+      comment: "text", prepared_by_name: "text", verified_by_name: "text", verified_at: "ts",
     },
   },
   // A clinic's changes to the lab catalogue (never the platform's rows: see checkLabCatalogue).
@@ -196,6 +197,33 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
     await checkLabReport(tx, op, data, before);
     if (op.op === "PUT" && !before) data.prepared_by_name = session.name;
     else delete data.prepared_by_name;
+    // Verification is doctor/clinic_admin only; name always comes from the session.
+    const wantsVerify = data.verified_at != null && data.verified_at !== "";
+    const wantsUnverify = data.verified_at === null || data.verified_at === "";
+    delete data.verified_by_name;
+    if (wantsVerify && !before?.verified_at) {
+      if (session.tenantRole !== "doctor" && session.tenantRole !== "clinic_admin") {
+        throw new Rejection("only a doctor or clinic admin can verify a lab report");
+      }
+      data.verified_by_name = session.name;
+      data.verified_at = new Date().toISOString();
+    } else if (wantsUnverify && before?.verified_at) {
+      if (session.tenantRole !== "doctor" && session.tenantRole !== "clinic_admin") {
+        throw new Rejection("only a doctor or clinic admin can clear verification");
+      }
+      data.verified_by_name = null;
+      data.verified_at = null;
+    } else {
+      delete data.verified_at;
+      delete data.verified_by_name;
+    }
+  }
+  if (op.table === "patient" && "pregnancy_status" in data) {
+    const v = data.pregnancy_status;
+    if (v != null && v !== "" && !["none", "pregnant", "lactating", "both"].includes(String(v))) {
+      throw new Rejection("invalid pregnancy_status");
+    }
+    if (v === "") data.pregnancy_status = null;
   }
   if (op.table === "lab_test" || op.table === "lab_panel") await checkLabCatalogue(tx, session.tenantId, op, data, before);
   if (op.table === "lab_profile") {
@@ -322,6 +350,7 @@ async function finalize(tx: Tx, session: Session & { tenantId: string }, row: ty
   for (const it of doc.items) {
     if (it.isAntibiotic && it.duration?.kind !== "fixed") throw new Rejection(`antibiotic ${it.brandName} needs a fixed duration`);
   }
+  await assertFinalizeSafety(tx, row.patientId, doc);
   await tx.execute(sql`update prescription set finalized_at = coalesce(finalized_at, now()) where id = ${row.id}::uuid`);
   await tx.delete(s.prescriptionItem).where(eq(s.prescriptionItem.prescriptionId, row.id));
   await tx.insert(s.prescriptionItem).values(
@@ -336,6 +365,90 @@ async function finalize(tx: Tx, session: Session & { tenantId: string }, row: ty
     })),
   );
   await tx.execute(sql`update encounter set status = 'done', updated_at = now() where id = ${row.encounterId}::uuid and status <> 'done'`);
+}
+
+const normAllergy = (v: string) =>
+  v
+    .toLowerCase()
+    .replace(/\s+(hydrochloride|hcl|sodium|potassium|trihydrate|dihydrate|monohydrate|besilate|maleate|citrate)\b/g, "")
+    .trim();
+
+/** Hard gates mirrored by client `checkSafety` blockers — allergies, contraindicated DDI, pregnancy D/X. */
+async function assertFinalizeSafety(tx: Tx, patientId: string, doc: PrescriptionDoc) {
+  const [patient] = await tx
+    .select({
+      allergies: s.patient.allergies,
+      sex: s.patient.sex,
+      pregnancyStatus: s.patient.pregnancyStatus,
+    })
+    .from(s.patient)
+    .where(eq(s.patient.id, patientId));
+  if (!patient) throw new Rejection("patient not found");
+
+  const productIds = [...new Set(doc.items.map((i) => i.productId).filter((id): id is string => !!id && isUuid(id)))];
+  if (!productIds.length) return;
+
+  const ingredients = await tx
+    .select({
+      productId: s.productIngredient.productId,
+      genericId: s.generic.id,
+      genericName: s.generic.name,
+      pregnancyCategory: s.generic.pregnancyCategory,
+    })
+    .from(s.productIngredient)
+    .innerJoin(s.generic, eq(s.generic.id, s.productIngredient.genericId))
+    .where(inArray(s.productIngredient.productId, productIds));
+
+  const byProduct = new Map<string, typeof ingredients>();
+  for (const row of ingredients) {
+    const list = byProduct.get(row.productId) ?? [];
+    list.push(row);
+    byProduct.set(row.productId, list);
+  }
+
+  const allergies = (patient.allergies ?? []).map(normAllergy).filter(Boolean);
+  for (const it of doc.items) {
+    if (!it.productId) continue;
+    const gens = byProduct.get(it.productId) ?? [];
+    for (const a of allergies) {
+      const hit =
+        gens.find((g) => normAllergy(g.genericName).includes(a) || a.includes(normAllergy(g.genericName))) ??
+        (normAllergy(it.brandName).includes(a) ? { genericName: it.brandName } : null);
+      if (hit) throw new Rejection(`allergy: patient allergic to ${a} (${hit.genericName})`);
+    }
+  }
+
+  const genericIds = [...new Set(ingredients.map((i) => i.genericId))];
+  if (genericIds.length > 1) {
+    const pairs = await tx
+      .select({
+        a: s.genericInteraction.genericA,
+        b: s.genericInteraction.genericB,
+        severity: s.genericInteraction.severity,
+        effect: s.genericInteraction.effect,
+      })
+      .from(s.genericInteraction)
+      .where(and(inArray(s.genericInteraction.genericA, genericIds), inArray(s.genericInteraction.genericB, genericIds)));
+    for (const p of pairs) {
+      if (p.severity.toLowerCase() !== "contraindicated") continue;
+      const nameA = ingredients.find((i) => i.genericId === p.a)?.genericName ?? "drug";
+      const nameB = ingredients.find((i) => i.genericId === p.b)?.genericName ?? "drug";
+      throw new Rejection(`contraindicated interaction: ${nameA} + ${nameB} (${p.effect})`);
+    }
+  }
+
+  const pregnant = patient.pregnancyStatus === "pregnant" || patient.pregnancyStatus === "both";
+  if (pregnant && (patient.sex === "female" || patient.sex === null)) {
+    for (const it of doc.items) {
+      if (!it.productId) continue;
+      for (const g of byProduct.get(it.productId) ?? []) {
+        const cat = (g.pregnancyCategory ?? "").trim().toUpperCase().replace(/^CATEGORY\s+/, "");
+        if (cat === "X" || cat === "D") {
+          throw new Rejection(`pregnancy category ${cat}: ${g.genericName} — cannot finalise`);
+        }
+      }
+    }
+  }
 }
 
 export async function applyUpload(session: Session & { tenantId: string }, batch: CrudOp[]): Promise<UploadResult> {

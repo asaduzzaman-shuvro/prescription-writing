@@ -47,7 +47,7 @@ export function MedicineSearch({ onPick }: { onPick: (m: MedicineHit) => void })
     <div className="relative">
       <input
         ref={ref}
-        className="input py-2 text-base"
+        className="input"
         placeholder="Add medicine — type brand or generic (e.g. napa, paracetamol)"
         value={q}
         data-testid="med-search"

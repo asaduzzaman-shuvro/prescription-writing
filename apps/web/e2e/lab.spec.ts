@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login, mobile, registerPatient, uniq, waitSynced } from "./helpers";
+import { login, mobile, openVisitReports, registerPatient, uniq, waitSynced } from "./helpers";
 
 test("the assistant prepares a lab report: picks tests, enters results, prints with a Lab No and as a PDF", async ({ page }) => {
   await login(page, "assistant@rx.local", "assist123");
@@ -93,7 +93,7 @@ test("the doctor sees the clinic's lab report in the patient's visit, flagged", 
   const phone = mobile();
   await registerPatient(page, { name, age: "60", sex: "Male", mobile: phone });
   await expect(page).toHaveURL(/#\/visit\//);
-  await expect(page.getByTestId("lab-reports")).toBeVisible();
+  await openVisitReports(page);
   const visitUrl = page.url();
 
   await page.getByRole("navigation").getByRole("link", { name: "Lab", exact: true }).click();
@@ -106,6 +106,7 @@ test("the doctor sees the clinic's lab report in the patient's visit, flagged", 
   await expect(page.getByTestId("lab-worklist")).toContainText(name);
 
   await page.goto(visitUrl);
+  await openVisitReports(page);
   const card = page.getByTestId("lab-reports");
   await expect(card.getByTestId("lab-report")).toHaveCount(1);
   await expect(card.getByTestId("lab-result-2160-0")).toHaveText("S. creatinine 1.9 mg/dL (H)");

@@ -191,7 +191,7 @@ export function RxItemRow({
       {item.note && readOnly && <div className="pl-7 text-xs text-slate-600">{item.note}</div>}
       {unknown.length > 0 && <div className="pl-7 text-xs text-amber-700">Didn’t understand: {unknown.join(" ")}</div>}
       {durationMissing && <div className="pl-7 text-xs text-amber-800">Antibiotic: set a fixed duration (প্রেসক্রিপশনে “সম্পূর্ণ কোর্স শেষ করুন” ছাপা হবে)</div>}
-      {warning && <div className="pl-7 text-xs font-medium text-amber-800">⚠ {warning}</div>}
+      {warning && <div className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-warn">⚠ {warning}</div>}
     </li>
   );
 }

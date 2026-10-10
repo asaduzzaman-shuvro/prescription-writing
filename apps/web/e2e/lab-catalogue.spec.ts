@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { login, mobile, registerPatient, uniq, waitSynced } from "./helpers";
+import { login, mobile, openVisitReports, registerPatient, uniq, waitSynced } from "./helpers";
 
 const upload = (page: Page, table: string, data: Record<string, unknown>, id: string = crypto.randomUUID(), op = "PUT") =>
   page.request.post("/api/sync/upload", { data: { batch: [{ op, table, id, data }] } }).then((r) => r.json() as Promise<{ applied: number; rejected: { reason: string }[] }>);
@@ -26,6 +26,7 @@ test("a clinic's own lab test reaches its devices; catalogue rows are checked on
 
   // It syncs down and joins the clinic's catalogue: offered under More tests, flagged against its range.
   await registerPatient(page, { name: `E2E Labs Own ${uniq()}`, age: "35", sex: "Female", mobile: mobile() });
+  await openVisitReports(page);
   const card = page.getByTestId("lab-reports");
   await expect(card.getByTestId("lab-add-more").locator("option", { hasText: `Zinc ${code}` })).toHaveCount(1, { timeout: 30_000 });
   await card.getByTestId("lab-add-more").selectOption({ label: `Zinc ${code}` });

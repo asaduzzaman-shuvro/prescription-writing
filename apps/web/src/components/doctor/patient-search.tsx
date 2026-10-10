@@ -35,12 +35,12 @@ export function PatientSearch({ onPick, actionLabel }: { onPick: (p: PatientHit)
   const [q, setQ] = useState("");
   const { data } = usePatientSearch(q, 8);
   return (
-    <div className="card p-3">
+    <div className="card p-2">
       <input className="input" placeholder="Search patient by mobile, name or ID…" value={q} onChange={(e) => setQ(e.target.value)} data-testid="patient-search" />
       {q.trim().length >= 2 && (
-        <ul className="mt-2 divide-y divide-slate-100">
+        <ul className="mt-1.5 divide-y divide-slate-100">
           {data.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+            <li key={p.id} className="flex items-center justify-between gap-1.5 py-1 text-sm">
               <Link to={`/patients/${p.id}`} className="hover:underline">
                 <b>{p.name}</b> <span className="text-slate-500">{ageLabel(p.dob)} {p.sex?.[0]?.toUpperCase()} · {p.mobile} · {p.code}</span>
                 {p.last_visit && <span className="ml-2 text-xs text-slate-400">last visit {p.last_visit}</span>}

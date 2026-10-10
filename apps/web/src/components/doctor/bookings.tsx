@@ -78,15 +78,15 @@ export function BookingsScreen() {
 
   const active = data.filter((a) => a.status !== "cancelled");
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Serial booking</h1>
+          <h1 className="text-lg font-semibold">Serial booking</h1>
           <p className="text-sm text-slate-500">{active.length} booked · {data.filter((a) => a.status === "checked_in").length} arrived</p>
         </div>
         <input type="date" className="input w-auto" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
       </div>
-      <form onSubmit={book} className="card flex flex-wrap items-end gap-2 p-3">
+      <form onSubmit={book} className="card flex flex-wrap items-end gap-1.5 p-2">
         <div className="min-w-48 flex-1"><label className="label">Patient name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="book-name" /></div>
         <div><label className="label">Mobile</label><input className="input" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} placeholder="01XXXXXXXXX" data-testid="book-mobile" /></div>
         {session.tenantRole !== "doctor" && doctors.length > 1 && (

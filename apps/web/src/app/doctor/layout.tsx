@@ -8,7 +8,10 @@ export const metadata = { title: "Chamber" };
 
 export default async function DoctorLayout({ children }: { children: React.ReactNode }) {
   const session = await requireClinic();
-  const [t] = await ownerDb.select({ status: s.tenant.status, plan: s.tenant.plan, planExpiresAt: s.tenant.planExpiresAt }).from(s.tenant).where(eq(s.tenant.id, session.tenantId));
+  const [t] = await ownerDb
+    .select({ status: s.tenant.status, plan: s.tenant.plan, planExpiresAt: s.tenant.planExpiresAt, name: s.tenant.name })
+    .from(s.tenant)
+    .where(eq(s.tenant.id, session.tenantId));
   if (t?.status === "suspended") {
     return <main className="p-8 text-center text-slate-600">This chamber is suspended. Please contact RxPad support.</main>;
   }
@@ -18,6 +21,7 @@ export default async function DoctorLayout({ children }: { children: React.React
         userId: session.userId,
         name: session.name,
         tenantId: session.tenantId,
+        tenantName: t?.name ?? "Chamber",
         tenantRole: session.tenantRole!,
         publicBaseUrl: process.env.PUBLIC_BASE_URL ?? "http://localhost:3000",
         planExpiresAt: t?.planExpiresAt ?? null,

@@ -5,6 +5,7 @@ import { usePowerSync, useQuery } from "@powersync/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyTemplate,
+  clearTemplate,
   emptyDoc,
   ensureDraft,
   finalizePrescription,
@@ -32,6 +33,7 @@ import { LabReports } from "./lab-reports";
 import { MedicineSearch } from "./med-search";
 import { RxItemRow } from "./rx-item";
 import { SpecialtyExam } from "./specialty-exam";
+import { VisitSidePanel, type VisitRxActions } from "./visit-side-panel";
 
 // ---------------------------------------------------------------------------
 // Vitals (assistant or doctor)
@@ -61,31 +63,34 @@ function VitalsPanel({ encounterId, initial, readOnly }: { encounterId: string; 
       void saveVitals(db, encounterId, next);
     }, 500);
   };
-  const field = (k: keyof Vitals, label: string, width = "w-16") => (
-    <label className="flex flex-col text-xs text-slate-500">
+  const field = (k: keyof Vitals, label: string, width = "w-14") => (
+    <label className="flex shrink-0 flex-col text-[11px] text-slate-500">
       {label}
-      <input className={`input ${width}`} inputMode="decimal" disabled={readOnly} value={v[k] ?? ""} onChange={(e) => set(k, e.target.value)} data-testid={`vital-${k}`} />
+      <input className={`input ${width} py-1`} inputMode="decimal" disabled={readOnly} value={v[k] ?? ""} onChange={(e) => set(k, e.target.value)} data-testid={`vital-${k}`} />
     </label>
   );
   const b = bmi(v.weightKg, v.heightCm);
   return (
-    <section className="space-y-1">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">O/E — Vitals</h3>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col text-xs text-slate-500">
-          BP (mmHg)
+    <section className="min-w-0 w-full sm:w-auto sm:max-w-none">
+      <div className="mb-1 flex items-baseline justify-between gap-2 sm:justify-end">
+        <h3 className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">O/E — Vitals</h3>
+        {b && <span className="text-[11px] tabular-nums text-slate-500">BMI {b}</span>}
+      </div>
+      <div className="flex flex-wrap items-end justify-start gap-x-1.5 gap-y-1 sm:flex-nowrap sm:justify-end">
+        <label className="flex flex-col text-[11px] text-slate-500">
+          BP
           <span className="flex items-center gap-0.5">
-            <input className="input w-14" inputMode="numeric" disabled={readOnly} value={v.bpSystolic ?? ""} onChange={(e) => set("bpSystolic", e.target.value)} aria-label="Systolic" />/
-            <input className="input w-14" inputMode="numeric" disabled={readOnly} value={v.bpDiastolic ?? ""} onChange={(e) => set("bpDiastolic", e.target.value)} aria-label="Diastolic" />
+            <input className="input w-12 py-1" inputMode="numeric" disabled={readOnly} value={v.bpSystolic ?? ""} onChange={(e) => set("bpSystolic", e.target.value)} aria-label="Systolic" />
+            <span className="text-slate-300">/</span>
+            <input className="input w-12 py-1" inputMode="numeric" disabled={readOnly} value={v.bpDiastolic ?? ""} onChange={(e) => set("bpDiastolic", e.target.value)} aria-label="Diastolic" />
           </span>
         </label>
         {field("pulse", "Pulse")}
         {field("tempF", "Temp °F")}
-        {field("spo2", "SpO₂ %")}
+        {field("spo2", "SpO₂")}
         {field("respRate", "RR")}
-        {field("weightKg", "Wt kg")}
-        {field("heightCm", "Ht cm")}
-        {b && <span className="pb-2 text-sm text-slate-600">BMI {b}</span>}
+        {field("weightKg", "Wt")}
+        {field("heightCm", "Ht")}
       </div>
     </section>
   );
@@ -177,6 +182,8 @@ interface PatientCtx {
   id: string;
   allergies: string[];
   ageYears: number | null;
+  sex: "male" | "female" | "other" | null;
+  pregnancyStatus: "none" | "pregnant" | "lactating" | "both" | null;
 }
 
 function RxEditor({
@@ -185,12 +192,14 @@ function RxEditor({
   patient,
   specialtyCode,
   vitals,
+  onActionsChange,
 }: {
   prescriptionId: string;
   encounterId: string;
   patient: PatientCtx;
   specialtyCode: string;
   vitals: Vitals;
+  onActionsChange?: (actions: VisitRxActions | null) => void;
 }) {
   const db = usePowerSync();
   const session = useSession();
@@ -201,8 +210,10 @@ function RxEditor({
   const rx = rxRows[0];
   const [doc, setDoc] = useState<PrescriptionDoc | null>(null);
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
-  const [safety, setSafety] = useState<SafetyResult>({ byItem: {}, general: [] });
+  const [safety, setSafety] = useState<SafetyResult>({ byItem: {}, general: [], blockers: [] });
   const [error, setError] = useState<string>();
+  /** Selected Apply-template value; `__none__` = clear template fields. */
+  const [templateId, setTemplateId] = useState("");
   const loadedFor = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const readOnly = rx?.status === "final";
@@ -211,6 +222,7 @@ function RxEditor({
   useEffect(() => {
     if (rx && loadedFor.current !== rx.id) {
       loadedFor.current = rx.id;
+      setTemplateId("");
       setDoc({ ...emptyDoc(), ...parseJson<PrescriptionDoc>(rx.doc, emptyDoc()) });
     }
   }, [rx]);
@@ -263,13 +275,51 @@ function RxEditor({
   useEffect(() => {
     if (!doc) return;
     let cancelled = false;
-    checkSafety(db, doc, { allergies: patient.allergies, ageYears: patient.ageYears, weightKg: vitals.weightKg ?? null }).then((r) => {
+    checkSafety(db, doc, {
+      allergies: patient.allergies,
+      ageYears: patient.ageYears,
+      weightKg: vitals.weightKg ?? null,
+      sex: patient.sex,
+      pregnancyStatus: patient.pregnancyStatus,
+    }).then((r) => {
       if (!cancelled) setSafety(r);
     });
     return () => {
       cancelled = true;
     };
-  }, [itemsKey, patient.allergies.join(), vitals.weightKg, patient.ageYears]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [itemsKey, patient.allergies.join(), vitals.weightKg, patient.ageYears, patient.sex, patient.pregnancyStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const finalizeRef = useRef<() => void>(() => {});
+  const editVersionRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.tagName === "TEXTAREA" && e.key === "Enter") return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finalizeRef.current();
+      } else if (e.key === "p" || e.key === "P") {
+        e.preventDefault();
+        navigate(`/rx/${prescriptionId}/print`);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [prescriptionId]);
+
+  useEffect(() => {
+    if (!rx || !onActionsChange) return;
+    onActionsChange({
+      prescriptionId,
+      readOnly: rx.status === "final",
+      version: rx.version,
+      blocked: safety.blockers.length > 0,
+      finalize: () => finalizeRef.current(),
+      editVersion: () => editVersionRef.current(),
+    });
+    return () => onActionsChange(null);
+  }, [rx?.id, rx?.status, rx?.version, safety.blockers.length, prescriptionId, onActionsChange]);
 
   if (!rx || !doc) return <div className="text-sm text-slate-500">Loading prescription…</div>;
 
@@ -280,13 +330,14 @@ function RxEditor({
       ORDER BY specialty_code IS NULL, sort_order LIMIT 12`;
 
   async function finalize() {
-    if (!doc) return;
+    if (!doc || readOnly) return;
     setError(undefined);
     if (!doc.items.length) return setError("Add at least one medicine");
     const noDuration = doc.items.find((i) => i.isAntibiotic && i.duration.kind !== "fixed");
     if (noDuration) return setError(`Set a fixed duration for antibiotic ${noDuration.brandName}`);
-    const allergy = Object.values(safety.byItem).flat().find((m) => m.startsWith("Patient is allergic"));
-    if (allergy && !confirm(`${allergy}\n\nFinalise anyway?`)) return;
+    if (safety.blockers.length) {
+      return setError(safety.blockers[0] ?? "Resolve safety blockers before finalising");
+    }
     clearTimeout(timer.current);
     pending.current = null;
     await finalizePrescription(db, prescriptionId, doc, vitals);
@@ -294,16 +345,34 @@ function RxEditor({
     resumeEditAfterPrint.set(encounterId);
     navigate(`/rx/${prescriptionId}/print`);
   }
+  finalizeRef.current = () => {
+    void finalize();
+  };
 
   async function editAsNewVersion() {
     const id = await newVersion(db, prescriptionId);
     navigate(`/visit/${encounterId}?rx=${id}`);
   }
+  editVersionRef.current = () => {
+    void editAsNewVersion();
+  };
 
   async function copyLast() {
     const last = await lastFinalDoc(db, patient.id, encounterId);
     if (!last) return alert("No previous prescription for this patient");
+    setTemplateId("");
     update((d) => applyTemplate(d, last));
+  }
+
+  function onPickTemplate(id: string) {
+    setTemplateId(id);
+    if (id === "__none__") {
+      update((d) => clearTemplate(d));
+      return;
+    }
+    if (!id) return;
+    const t = templates.find((x) => x.id === id);
+    if (t) update((d) => applyTemplate(d, parseJson<TemplatePayload>(t.payload, {})));
   }
 
   async function saveAsTemplate() {
@@ -327,41 +396,66 @@ function RxEditor({
   const fu = doc.followUp ?? { kind: "none" as const };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {!readOnly && (
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">
+      <div
+        className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-white p-1.5 sm:flex-nowrap"
+        data-testid="rx-toolbar"
+      >
+        {!readOnly ? (
           <>
             <select
-              className="input w-auto"
-              value=""
+              className="input min-w-0 flex-1 basis-[12rem] py-1.5"
+              value={templateId}
               aria-label="Apply template"
-              onChange={(e) => {
-                const t = templates.find((x) => x.id === e.target.value);
-                if (t) update((d) => applyTemplate(d, parseJson<TemplatePayload>(t.payload, {})));
-              }}
+              data-testid="apply-template"
+              onChange={(e) => onPickTemplate(e.target.value)}
             >
               <option value="">Apply template…</option>
-              {templates.map((t) => <option key={t.id} value={t.id}>{t.tenant_id ? "" : "★ "}{t.name}</option>)}
+              <option value="__none__">No template</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.tenant_id ? "" : "★ "}
+                  {t.name}
+                </option>
+              ))}
             </select>
-            <button className="btn-secondary" onClick={copyLast}>Copy last Rx</button>
-            <button className="btn-ghost" onClick={saveAsTemplate}>Save as template</button>
+            <button type="button" className="btn-secondary shrink-0 whitespace-nowrap px-3 py-1.5" onClick={copyLast}>
+              Copy last Rx
+            </button>
+            <button type="button" className="btn-secondary shrink-0 whitespace-nowrap px-3 py-1.5" onClick={saveAsTemplate}>
+              Save as template
+            </button>
           </>
+        ) : (
+          <span className="flex-1" />
         )}
-        <span className="ml-auto text-xs text-slate-400" data-testid="save-state">
-          {readOnly ? `Finalised · v${rx.version}` : saved === "saving" ? "Saving…" : saved === "saved" ? "Saved on this device" : `Draft v${rx.version}`}
+        <span
+          className="shrink-0 rounded bg-slate-100 px-2 py-1 text-[11px] font-medium tabular-nums text-slate-500 sm:ml-0"
+          data-testid="save-state"
+        >
+          {readOnly ? `Finalised · v${rx.version}` : saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : `Draft v${rx.version}`}
         </span>
       </div>
 
       {readOnly && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900" data-testid="rx-locked">
-          <span><b>Finalised &amp; printed (v{rx.version}).</b> It is locked so the printed copy stays on record. To change medicines or findings, edit it as a new version.</span>
-          <button className="btn-primary ml-auto" onClick={editAsNewVersion} data-testid="edit-new-version">Edit prescription (creates v{rx.version + 1})</button>
+        <div className="alert-warn flex flex-wrap items-center gap-2" data-testid="rx-locked">
+          <span><b>Finalised &amp; printed (v{rx.version}).</b> Locked so the printed copy stays on record.</span>
+          <button className="btn-primary ml-auto" onClick={editAsNewVersion} data-testid="edit-new-version">Edit as v{rx.version + 1}</button>
         </div>
       )}
-      {safety.general.map((g) => <div key={g} className="rounded bg-amber-50 p-2 text-sm text-amber-800">{g}</div>)}
+      {safety.blockers.map((b) => (
+        <div key={b} className="alert-danger" data-testid="safety-blocker"><b>Blocked:</b> {b}</div>
+      ))}
+      {safety.general.map((g) => (
+        <div key={g} className="alert-warn" data-testid="safety-warn"><b>Caution:</b> {g}</div>
+      ))}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
-        <div className="card space-y-4 p-3">
+      {/* Clinical (left) and Rx (right) fill remaining height and scroll independently. */}
+      <div className="grid min-h-0 flex-1 gap-2 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] lg:items-stretch">
+        <div
+          className="card min-h-0 space-y-2.5 overflow-y-auto overscroll-y-contain p-2.5 lg:h-full"
+          data-testid="rx-clinical-pane"
+        >
           <label className="block text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ref By — Referring doctor</span>
             <input className="input" list="rx-referrers" disabled={readOnly} value={doc.referredBy ?? ""} placeholder="Dr. Imran"
@@ -395,10 +489,13 @@ function RxEditor({
             placeholder="Birth wt 1.7 kg / H/O PNA" testId="notes-input" multiline />
         </div>
 
-        <div className="card space-y-3 p-3">
-          <div className="flex items-baseline gap-2"><span className="text-2xl font-bold">℞</span>{!readOnly && <span className="text-xs text-slate-400">Shortcuts: 1+0+1 · tds · af/bf/es/hs · 7d/2w/1m/cont · 2 drop re/le/be</span>}</div>
+        <div
+          className="card min-h-0 space-y-2 overflow-y-auto overscroll-y-contain p-2.5 lg:h-full"
+          data-testid="rx-meds-pane"
+        >
+          <div className="flex items-baseline gap-1.5"><span className="text-xl font-bold">℞</span>{!readOnly && <span className="text-xs text-slate-400">Shortcuts: 1+0+1 · tds · af/bf/es/hs · 7d/2w/1m/cont · 2 drop re/le/be</span>}</div>
           {!readOnly && <MedicineSearch onPick={(m) => setItems((its) => [...its, itemFromMedicine(m)])} />}
-          <ol className="space-y-2">
+          <ol className="space-y-1.5">
             {items.map((it, i) => (
               <RxItemRow
                 key={it.id}
@@ -415,10 +512,10 @@ function RxEditor({
                 warning={safety.byItem[it.id]?.join(" · ")}
               />
             ))}
-            {!items.length && <li className="rounded border border-dashed border-slate-300 p-4 text-center text-sm text-slate-400">No medicines yet</li>}
+            {!items.length && <li className="rounded border border-dashed border-slate-300 p-2.5 text-center text-sm text-slate-400">No medicines yet</li>}
           </ol>
           <section className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Note / letter (printed under the medicines)</h3>
               {!readOnly && (
                 <button type="button" className="btn-ghost ml-auto text-xs" data-testid="referral-reply"
@@ -451,19 +548,31 @@ function RxEditor({
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex flex-wrap gap-2">
-        {readOnly ? (
-          <>
-            <Link to={`/rx/${prescriptionId}/print`} className="btn-primary">Print / PDF</Link>
-            <button className="btn-secondary" onClick={editAsNewVersion}>Edit (creates v{rx.version + 1})</button>
-          </>
-        ) : (
-          <>
-            <button className="btn-primary" onClick={finalize} data-testid="finalize">Finalise & print</button>
-            <Link to={`/rx/${prescriptionId}/print`} className="btn-secondary">Preview</Link>
-          </>
-        )}
+      {error && <p className="alert-danger" role="alert">{error}</p>}
+
+      {/* Mobile / narrow: actions stay under the editor. Wide screens use the right panel footer. */}
+      <div className="sticky bottom-0 z-20 -mx-1 mt-1.5 border-t border-slate-200 bg-white/95 px-1 py-2 backdrop-blur print:hidden xl:hidden">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {readOnly ? (
+            <>
+              <button className="btn-secondary" onClick={editAsNewVersion}>Edit (v{rx.version + 1})</button>
+              <Link to={`/rx/${prescriptionId}/print`} className="btn-primary">Print / PDF</Link>
+            </>
+          ) : (
+            <>
+              <Link to={`/rx/${prescriptionId}/print`} className="btn-secondary" title="Ctrl+P">Preview</Link>
+              <button
+                className="btn-primary"
+                onClick={() => void finalize()}
+                disabled={!!safety.blockers.length}
+                data-testid="finalize-mobile"
+                title="Ctrl+Enter"
+              >
+                Finalise & print
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -501,17 +610,18 @@ function VisitTypeControl({ encounterId, patientId, visitDate, chamberId, visitT
   );
 }
 
-export function VisitScreen({ encounterId }: { encounterId: string }) {
+export function VisitScreen({ encounterId, tab = "rx" }: { encounterId: string; tab?: "rx" | "reports" }) {
   const db = usePowerSync();
   const session = useSession();
   const profile = useMyProfile();
+  const [rxActions, setRxActions] = useState<VisitRxActions | null>(null);
   const { data: encs } = useQuery<{ id: string; patient_id: string; status: string; vitals: string; visit_date: string; serial_no: number; specialty_code: string; doctor_user_id: string; fee: number | null; chamber_id: string | null; visit_type: VisitType | null }>(
     "SELECT id, patient_id, status, vitals, visit_date, serial_no, specialty_code, doctor_user_id, fee, chamber_id, visit_type FROM encounter WHERE id = ?",
     [encounterId],
   );
   const enc = encs[0];
-  const { data: pts } = useQuery<{ id: string; name: string; dob: string | null; sex: string | null; mobile: string | null; code: string | null; allergies: string | null }>(
-    "SELECT id, name, dob, sex, mobile, code, allergies FROM patient WHERE id = ?",
+  const { data: pts } = useQuery<{ id: string; name: string; dob: string | null; sex: string | null; mobile: string | null; code: string | null; allergies: string | null; pregnancy_status: string | null }>(
+    "SELECT id, name, dob, sex, mobile, code, allergies, pregnancy_status FROM patient WHERE id = ?",
     [enc?.patient_id ?? ""],
   );
   const p = pts[0];
@@ -526,6 +636,8 @@ export function VisitScreen({ encounterId }: { encounterId: string }) {
   );
   const isDoctor = session.tenantRole === "doctor";
   const [rxId, setRxId] = useState<string | null>(null);
+  const qs = typeof window !== "undefined" ? (window.location.hash.split("?")[1] ?? "") : "";
+  const rxQuery = qs ? `?${qs}` : "";
 
   useEffect(() => {
     if (!enc || !isDoctor) return;
@@ -546,52 +658,176 @@ export function VisitScreen({ encounterId }: { encounterId: string }) {
   const allergies = parseJson<string[]>(p.allergies, []);
   const vitals = parseJson<Vitals>(enc.vitals, {});
   const age = ageParts(p.dob);
+  const tabClass = (on: boolean) =>
+    `rounded px-3 py-1.5 text-sm whitespace-nowrap ${on ? "bg-white font-medium text-brand-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`;
 
-  return (
-    <div className="space-y-3">
-      <div className="card flex flex-wrap items-center gap-x-4 gap-y-1 p-3">
-        <span className="text-sm text-slate-400">#{enc.serial_no}</span>
-        <Link to={`/patients/${p.id}`} className="text-lg font-semibold text-brand-700 hover:underline">{p.name}</Link>
-        <span className="text-sm text-slate-600">{ageLabel(p.dob)} · {p.sex ?? "—"} · {p.mobile} · {p.code ?? "ID pending"}</span>
-        <span className="text-sm text-slate-400">{enc.visit_date}</span>
-        {allergies.length > 0 && <span className="badge bg-red-100 text-red-800">⚠ Allergy: {allergies.join(", ")}</span>}
-        <label className="flex items-center gap-1 text-xs text-slate-500">
-          Fee ৳
-          <input className="input w-20" inputMode="numeric" defaultValue={enc.fee ?? ""} key={`fee-${enc.id}-${enc.fee}`} data-testid="visit-fee"
-            onBlur={(e) => saveFee(db, encounterId, e.target.value ? Number(e.target.value.replace(/\D/g, "")) : null)} />
-        </label>
-        <VisitTypeControl encounterId={encounterId} patientId={p.id} visitDate={enc.visit_date} chamberId={enc.chamber_id} visitType={enc.visit_type} />
+  const patientCard = (
+    <section className="overflow-hidden rounded-md border border-slate-200 bg-white" data-testid="visit-patient">
+      <div className="flex items-center justify-between gap-1.5 border-b border-brand-100 bg-brand-50/80 px-2 py-1">
+        <span className="rounded bg-brand-600 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">#{enc.serial_no}</span>
+        <span className="text-[11px] tabular-nums text-slate-500">{enc.visit_date}</span>
+      </div>
+      <div className="space-y-1.5 p-2">
+        <div>
+          <Link to={`/patients/${p.id}`} className="block text-[15px] font-semibold leading-tight text-brand-700 hover:underline">
+            {p.name}
+          </Link>
+          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+            {ageLabel(p.dob)} · {p.sex ?? "—"} · {p.mobile}
+            <span className="block text-slate-400">{p.code ?? "ID pending"}</span>
+          </p>
+        </div>
+        {(allergies.length > 0 || (p.pregnancy_status && p.pregnancy_status !== "none")) && (
+          <div className="flex flex-wrap gap-1">
+            {allergies.length > 0 && <span className="badge bg-red-100 text-alert">⚠ {allergies.join(", ")}</span>}
+            {p.pregnancy_status && p.pregnancy_status !== "none" && (
+              <span className="badge bg-sakura-100 text-sakura-600">
+                {p.pregnancy_status === "both" ? "Pregnant + lactating" : p.pregnancy_status === "pregnant" ? "Pregnant" : "Lactating"}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="grid grid-cols-[auto_1fr] items-center gap-x-1.5 gap-y-1 border-t border-slate-100 pt-1.5">
+          <span className="text-[11px] font-medium text-slate-500">Fee ৳</span>
+          <input
+            className="input h-7 w-full py-0.5 text-sm"
+            inputMode="numeric"
+            defaultValue={enc.fee ?? ""}
+            key={`fee-${enc.id}-${enc.fee}`}
+            data-testid="visit-fee"
+            onBlur={(e) => saveFee(db, encounterId, e.target.value ? Number(e.target.value.replace(/\D/g, "")) : null)}
+          />
+          <span className="text-[11px] font-medium text-slate-500">Type</span>
+          <div className="min-w-0 [&_select]:w-full [&_select]:text-xs">
+            <VisitTypeControl
+              encounterId={encounterId}
+              patientId={p.id}
+              visitDate={enc.visit_date}
+              chamberId={enc.chamber_id}
+              visitType={enc.visit_type}
+            />
+          </div>
+        </div>
         {rxs.length > 1 && (
-          <select className="input ml-auto w-auto text-xs" value={rxId ?? ""} onChange={(e) => setRxId(e.target.value)} aria-label="Version">
-            {rxs.map((r) => <option key={r.id} value={r.id}>v{r.version} · {r.status}</option>)}
+          <select className="input h-7 w-full py-0.5 text-xs" value={rxId ?? ""} onChange={(e) => setRxId(e.target.value)} aria-label="Version">
+            {rxs.map((r) => (
+              <option key={r.id} value={r.id}>
+                v{r.version} · {r.status}
+              </option>
+            ))}
           </select>
         )}
       </div>
-      <div className="card p-3">
-        <VitalsPanel encounterId={encounterId} initial={vitals} readOnly={enc.status === "done" && !isDoctor} />
-      </div>
-      <div className="card p-3">
-        <LabReports encounterId={encounterId} patientId={p.id} sex={(p.sex as Sex | null) ?? null} />
-      </div>
-      {isDoctor ? (
-        rxId ? (
-          <RxEditor
-            key={rxId}
-            prescriptionId={rxId}
-            encounterId={encounterId}
-            specialtyCode={profile?.specialty_code ?? enc.specialty_code}
-            patient={{ id: p.id, allergies, ageYears: age?.years ?? null }}
-            vitals={vitals}
-          />
+    </section>
+  );
+
+  const sidePanel = (
+    <VisitSidePanel
+      patientId={p.id}
+      encounterId={encounterId}
+      allergies={allergies}
+      pregnancyStatus={p.pregnancy_status}
+      patientCard={patientCard}
+      actions={rxActions}
+    />
+  );
+
+  return (
+    <div className="grid min-h-0 flex-1 gap-2 overflow-hidden xl:h-full xl:grid-cols-[minmax(0,1fr)_16.5rem] xl:grid-rows-1">
+      <div className="flex min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden">
+        {/* Narrow screens: patient sits above the editor (wide screens use the right rail). */}
+        <div className="shrink-0 xl:hidden">{patientCard}</div>
+        {tab === "reports" ? (
+          <>
+            <div className="card flex items-center p-1.5">
+              <nav
+                className="flex w-fit shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5"
+                aria-label="Visit sections"
+                data-testid="visit-tabs"
+              >
+                <Link to={`/visit/${encounterId}${rxQuery}`} className={tabClass(false)} data-testid="visit-tab-rx">
+                  Prescription
+                </Link>
+                <Link to={`/visit/${encounterId}/reports`} className={tabClass(true)} data-testid="visit-tab-reports">
+                  Reports
+                </Link>
+              </nav>
+            </div>
+            <div className="card p-2.5">
+              <LabReports encounterId={encounterId} patientId={p.id} sex={(p.sex as Sex | null) ?? null} />
+            </div>
+          </>
         ) : (
-          <div className="text-sm text-slate-500">Preparing prescription…</div>
-        )
-      ) : (
-        <div className="card p-4 text-sm text-slate-600">
-          Vitals are saved automatically. The doctor will write the prescription.
-          <div className="mt-2"><Link to="/" className="btn-secondary">Back to queue</Link></div>
-        </div>
-      )}
+          <>
+            <div className="card flex shrink-0 flex-col gap-2 p-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <nav
+                className="flex w-fit shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5"
+                aria-label="Visit sections"
+                data-testid="visit-tabs"
+              >
+                <Link to={`/visit/${encounterId}${rxQuery}`} className={tabClass(true)} data-testid="visit-tab-rx">
+                  Prescription
+                </Link>
+                <Link to={`/visit/${encounterId}/reports`} className={tabClass(false)} data-testid="visit-tab-reports">
+                  Reports
+                </Link>
+              </nav>
+              <div className="min-w-0 sm:ml-auto">
+                <VitalsPanel encounterId={encounterId} initial={vitals} readOnly={enc.status === "done" && !isDoctor} />
+              </div>
+            </div>
+            {isDoctor ? (
+              rxId ? (
+                <RxEditor
+                  key={rxId}
+                  prescriptionId={rxId}
+                  encounterId={encounterId}
+                  specialtyCode={profile?.specialty_code ?? enc.specialty_code}
+                  patient={{
+                    id: p.id,
+                    allergies,
+                    ageYears: age?.years ?? null,
+                    sex: (p.sex as PatientCtx["sex"]) ?? null,
+                    pregnancyStatus: (p.pregnancy_status as PatientCtx["pregnancyStatus"]) ?? null,
+                  }}
+                  vitals={vitals}
+                  onActionsChange={setRxActions}
+                />
+              ) : (
+                <div className="text-sm text-slate-500">Preparing prescription…</div>
+              )
+            ) : (
+              <div className="card p-2.5 text-sm text-slate-600">
+                Vitals are saved automatically. The doctor will write the prescription.
+                <div className="mt-1.5">
+                  <Link to="/" className="btn-secondary">
+                    Back to queue
+                  </Link>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <div className="shrink-0 xl:hidden">
+        <details className="card group" data-testid="visit-context-mobile">
+          <summary className="cursor-pointer list-none px-2.5 py-2 text-sm font-medium text-slate-700">
+            History & labs
+            {allergies.length > 0 && <span className="ml-2 badge bg-red-100 text-alert">Allergy</span>}
+            <span className="float-right text-xs font-normal text-slate-400 group-open:hidden">Show</span>
+          </summary>
+          <div className="border-t border-slate-100 p-2">
+            <VisitSidePanel
+              patientId={p.id}
+              encounterId={encounterId}
+              allergies={allergies}
+              pregnancyStatus={p.pregnancy_status}
+              actions={rxActions}
+            />
+          </div>
+        </details>
+      </div>
+      <div className="hidden min-h-0 xl:flex xl:flex-col">{sidePanel}</div>
     </div>
   );
 }

@@ -67,7 +67,7 @@ function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: Cham
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+    <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
       <datalist id="chamber-slot-labels">{SLOT_LABELS.map((l) => <option key={l} value={l} />)}</datalist>
       <div className="grid gap-2 md:grid-cols-2">
         <label className="text-sm"><span className="label">Chamber / hospital name *</span>
@@ -100,14 +100,14 @@ function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: Cham
       <label className="block text-sm"><span className="label">Footer note (printed at the bottom of the letterhead)</span>
         <textarea className="input" rows={2} value={c.footerText} onChange={(e) => set("footerText", e.target.value)} data-testid="chamber-footer"
           placeholder="পরামর্শের ৫ কর্মদিবসের মধ্যে রিপোর্ট দেখাতে সিরিয়াল বা ভিজিট লাগবে না।" /></label>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="label mb-0">Logo</span>
         {c.logoDataUrl && <img src={c.logoDataUrl} alt="Logo" className="h-10 border border-slate-200 bg-white" />}
         <input type="file" accept="image/png,image/jpeg" onChange={(e) => onLogo(e.target.files?.[0])} className="text-xs" />
         {c.logoDataUrl && <button type="button" className="btn-ghost text-xs" onClick={() => set("logoDataUrl", null)}>Remove</button>}
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex gap-2">
+      <div className="flex gap-1.5">
         <button type="button" className="btn-primary" onClick={save} data-testid="chamber-save">Save chamber</button>
         <button type="button" className="btn-ghost" onClick={onCancel}>Cancel</button>
       </div>
@@ -125,7 +125,7 @@ export function ChamberManager() {
   const doctorUserId = session.tenantRole === "doctor" ? session.userId : null;
 
   return (
-    <section className="card space-y-3 p-4">
+    <section className="card space-y-2 p-2.5">
       <div className="flex items-center gap-2">
         <h2 className="font-semibold">Chambers</h2>
         {editing === null && <button className="btn-secondary ml-auto text-sm" onClick={() => setEditing("new")} data-testid="chamber-new">+ Add chamber</button>}

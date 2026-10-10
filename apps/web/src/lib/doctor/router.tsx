@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type AnchorHTMLAttributes, type ReactNode } from "react";
 
 /**
  * Minimal hash router for the doctor app. Everything lives on the single /doctor page so the
@@ -10,6 +10,8 @@ import { useCallback, useEffect, useState } from "react";
  *   #/patients/new
  *   #/patients/<id>
  *   #/visit/<encounterId>
+ *   #/visit/<encounterId>/reports
+ *   #/medicines
  *   #/rx/<id>/print
  *   #/templates  #/settings
  */
@@ -33,9 +35,14 @@ export function useNavigate() {
   return useCallback((path: string) => navigate(path), []);
 }
 
-export function Link({ to, className, children }: { to: string; className?: string; children: React.ReactNode }) {
+export function Link({
+  to,
+  className,
+  children,
+  ...rest
+}: { to: string; className?: string; children: ReactNode } & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href">) {
   return (
-    <a href={`#${to.startsWith("/") ? to : `/${to}`}`} className={className}>
+    <a href={`#${to.startsWith("/") ? to : `/${to}`}`} className={className} {...rest}>
       {children}
     </a>
   );

@@ -66,6 +66,9 @@ export const appUser = pgTable(
     platformRole: platformRole(),
     disabled: boolean().notNull().default(false),
     lastLoginAt: timestamp({ withTimezone: true }),
+    /** Base32 TOTP secret; null until the user enables MFA. Never granted to rx_app. */
+    totpSecret: text(),
+    totpEnabledAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
   (t) => [uniqueIndex("app_user_email_uq").on(sql`lower(${t.email})`)],
@@ -85,6 +88,22 @@ export const membership = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("membership_uq").on(t.tenantId, t.userId)],
+);
+
+/** One-time self-serve password reset tokens (hashed). Owner DB only — never synced. */
+export const passwordReset = pgTable(
+  "password_reset",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid()
+      .notNull()
+      .references(() => appUser.id),
+    tokenHash: text().notNull(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    usedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("password_reset_user_idx").on(t.userId), uniqueIndex("password_reset_token_uq").on(t.tokenHash)],
 );
 
 export const doctorProfile = pgTable(
@@ -170,6 +189,8 @@ export const patient = pgTable(
     birthWeightKg: real(),
     gestationalAgeWeeks: integer(),
     allergies: text().array().notNull().default(sql`'{}'::text[]`),
+    /** none | pregnant | lactating | both — drives pregnancy-category CDS at prescribe time. */
+    pregnancyStatus: text(),
     notes: text(),
     /** PDPA: explicit consent for storing health data; guardian consent for minors. */
     consentAt: timestamp({ withTimezone: true }),
@@ -295,6 +316,9 @@ export const labReport = pgTable(
     referredBy: text(),
     /** Who entered it, as printed ("Prepared by"); set by the server. */
     preparedByName: text(),
+    /** Who verified the report for release; set by the server when a doctor/admin verifies. */
+    verifiedByName: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
     comment: text(),
     createdBy: uuid(),
     deletedAt: timestamp({ withTimezone: true }),

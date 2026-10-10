@@ -6,6 +6,8 @@ export interface ClientSession {
   userId: string;
   name: string;
   tenantId: string;
+  /** Display name of the active clinic (for the chamber switcher). */
+  tenantName: string;
   tenantRole: "clinic_admin" | "doctor" | "assistant";
   publicBaseUrl: string;
   /** Paid-until date of the chamber's subscription (null = trial / not set). */

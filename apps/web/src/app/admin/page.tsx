@@ -29,12 +29,12 @@ export default async function AdminDashboard() {
     <>
       <PageHeader title="Dashboard" subtitle="Medicine catalogue and chamber overview" />
       {devSeed > 0 && (
-        <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">
           <b>{devSeed.toLocaleString()}</b> products come from the MedEx-derived Kaggle dev seed. This data must be
           replaced by licensed or DGDA data before production.
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="Products" value={products.toLocaleString()} href="/admin/medicines" />
         <Stat label="Active" value={active.toLocaleString()} />
         <Stat label="Generics" value={generics.toLocaleString()} href="/admin/generics" />
@@ -42,7 +42,7 @@ export default async function AdminDashboard() {
         <Stat label="Chambers" value={tenants} href="/admin/doctors" />
         <Stat label="BMDC unverified" value={unverified} href="/admin/doctors?filter=unverified" />
       </div>
-      <h2 className="mb-2 mt-8 font-semibold">Recent imports</h2>
+      <h2 className="mb-1.5 mt-4 font-semibold">Recent imports</h2>
       <div className="card overflow-x-auto">
         <table className="table">
           <thead>

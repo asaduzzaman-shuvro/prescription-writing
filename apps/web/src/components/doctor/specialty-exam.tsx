@@ -178,7 +178,7 @@ function EardrumField({ value, onChange, disabled }: { value: LateralValue<Eardr
           </span>
         </div>
       )}
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-2">
         {(["right", "left"] as const).map((side) => {
           const v = ear(side);
           return (

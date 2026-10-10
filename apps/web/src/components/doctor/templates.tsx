@@ -13,17 +13,17 @@ export function TemplatesScreen() {
     "SELECT id, name, payload, tenant_id, owner_user_id, specialty_code FROM rx_template WHERE is_active = 1 ORDER BY tenant_id IS NULL, name",
   );
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div>
-        <h1 className="text-xl font-semibold">Prescription templates</h1>
+        <h1 className="text-lg font-semibold">Prescription templates</h1>
         <p className="text-sm text-slate-500">Create one from any prescription with “Save as template”. ★ = shared by RxPad admin.</p>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-1.5 md:grid-cols-2">
         {data.map((t) => {
           const p = parseJson<TemplatePayload>(t.payload, {});
           const mine = t.owner_user_id === session.userId;
           return (
-            <div key={t.id} className="card p-3 text-sm">
+            <div key={t.id} className="card p-2 text-sm">
               <div className="flex items-start justify-between">
                 <b>{t.tenant_id ? "" : "★ "}{t.name}</b>
                 {mine && <button className="btn-ghost text-xs text-red-600" onClick={() => confirm(`Delete “${t.name}”?`) && deleteTemplate(db, t.id)}>Delete</button>}

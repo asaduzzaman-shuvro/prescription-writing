@@ -6,16 +6,22 @@ import { parseJson, today } from "./util";
 
 interface LabReportRow {
   panel: string; title: string; department: string | null; specimen: string | null; results: string | null; comment: string | null; conclusion: string | null;
-  lab_no: string | null; referred_by: string | null; collected_at: string | null; report_date: string; prepared_by_name: string | null; patient_id: string;
+  lab_no: string | null; referred_by: string | null; collected_at: string | null; report_date: string; prepared_by_name: string | null;
+  verified_by_name: string | null; verified_at: string | null; patient_id: string;
 }
 
 /** Until the server numbers a request, it prints with this reference instead. */
 export const provisionalLabRef = (requestId: string) => `Ref ${requestId.slice(0, 8).toUpperCase()}`;
 
 /** A clinic lab request's printed report, built entirely from the local database (works offline). */
-export async function buildLabPrintHtml(db: AbstractPowerSyncDatabase, requestId: string, opts: { cat: LabCatalogue; userName: string }): Promise<{ html: string; labNo: string | null } | null> {
+export async function buildLabPrintHtml(
+  db: AbstractPowerSyncDatabase,
+  requestId: string,
+  opts: { cat: LabCatalogue; userName: string },
+): Promise<{ html: string; labNo: string | null; verified: boolean } | null> {
   const rows = await db.getAll<LabReportRow>(
-    `SELECT panel, title, department, specimen, results, comment, conclusion, lab_no, referred_by, collected_at, report_date, prepared_by_name, patient_id
+    `SELECT panel, title, department, specimen, results, comment, conclusion, lab_no, referred_by, collected_at, report_date,
+            prepared_by_name, verified_by_name, verified_at, patient_id
        FROM lab_report WHERE request_id = ? AND deleted_at IS NULL ORDER BY created_at`,
     [requestId],
   );
@@ -29,7 +35,6 @@ export async function buildLabPrintHtml(db: AbstractPowerSyncDatabase, requestId
     db.getOptional<{ name: string; address: string; phone: string | null; logo_data_url: string | null }>(
       `SELECT name, address, phone, logo_data_url FROM chamber WHERE is_active = 1 OR is_active IS NULL ORDER BY created_at LIMIT 1`),
   ]);
-  // The lab's own heading where the clinic set one up, else its chamber's.
   const header: LabProfileHeader = {
     labName: profile?.lab_name || chamber?.name || "",
     address: profile?.address || chamber?.address || undefined,
@@ -39,8 +44,14 @@ export async function buildLabPrintHtml(db: AbstractPowerSyncDatabase, requestId
     footerText: profile?.footer_text || undefined,
   };
   const labNo = rows.find((r) => r.lab_no)?.lab_no ?? null;
+  const verifiedBy = rows.find((r) => r.verified_at)?.verified_by_name ?? null;
+  const verified = !!verifiedBy || rows.some((r) => r.verified_at);
   const reportDate = rows.map((r) => r.report_date).sort().pop() ?? today();
   const origin = window.location.origin;
+  const notes = [
+    !labNo ? "The Lab No is given when this report reaches the server." : null,
+    !verified ? "DRAFT — not verified for release." : null,
+  ].filter(Boolean);
   const html = renderLabReportHtml({
     profile: header,
     patient: {
@@ -51,6 +62,7 @@ export async function buildLabPrintHtml(db: AbstractPowerSyncDatabase, requestId
     labNoPending: !labNo,
     referredBy: first.referred_by,
     preparedBy: rows.find((r) => r.prepared_by_name)?.prepared_by_name ?? opts.userName,
+    verifiedBy: verifiedBy,
     reportDate,
     collectedAt: first.collected_at,
     reports: rows.map((r) => ({
@@ -59,7 +71,7 @@ export async function buildLabPrintHtml(db: AbstractPowerSyncDatabase, requestId
     })),
     fonts: { bengali: `${origin}/fonts/NotoSansBengali.ttf`, latin: `${origin}/fonts/NotoSans.ttf` },
     catalogue: opts.cat,
-    footerNote: labNo ? undefined : "The Lab No is given when this report reaches the server.",
+    footerNote: notes.length ? notes.join(" ") : undefined,
   });
-  return { html, labNo };
+  return { html, labNo, verified };
 }

@@ -1,11 +1,15 @@
 # Sync Streams: what each signed-in user downloads into the browser's local SQLite.
 # Keep in sync with apps/web/src/lib/powersync/schema.ts and the `powersync` publication.
+#
+# Priorities (0=highest … 3=lowest): clinic data first so Today/Patients open quickly;
+# the ~22k-row medicine catalogue continues in the background.
 config:
   edition: 3
 streams:
   # Global, read-only catalogue (~22k products). Inactive rows drop out and are removed on clients.
   catalogue:
     auto_subscribe: true
+    priority: 3
     queries:
       - SELECT id, brand_name, form_id, company_id, strength_text, generic_text, medicine_system FROM brand_product WHERE is_active = true
       - SELECT id, name, short_label, default_route, default_unit FROM dosage_form
@@ -15,6 +19,7 @@ streams:
       - SELECT id, generic_a, generic_b, severity, effect, management FROM generic_interaction WHERE is_active = true
   libraries:
     auto_subscribe: true
+    priority: 1
     queries:
       - SELECT code AS id, name, name_bn FROM specialty
       - SELECT id, specialty_code, sort_order, name, name_bn FROM complaint WHERE is_active = true
@@ -28,10 +33,14 @@ streams:
       - SELECT * FROM lab_panel WHERE tenant_id IS NULL AND is_active = true
   shared_templates:
     auto_subscribe: true
+    priority: 2
     queries:
       - SELECT * FROM rx_template WHERE tenant_id IS NULL AND is_active = true
+  # Note: PowerSync sync rules only allow auth.parameter() with `=` against row columns (not `>=`),
+  # so history limiting uses client prune via POWERSYNC_SYNC_DAYS (see apps/web sync connector).
   tenant_data:
     auto_subscribe: true
+    priority: 1
     queries:
       - SELECT * FROM patient WHERE tenant_id = auth.parameter('tenant_id') AND deleted_at IS NULL
       - SELECT * FROM encounter WHERE tenant_id = auth.parameter('tenant_id')
@@ -47,5 +56,6 @@ streams:
       - SELECT * FROM appointment WHERE tenant_id = auth.parameter('tenant_id')
   user_data:
     auto_subscribe: true
+    priority: 1
     queries:
       - SELECT * FROM doctor_favorite WHERE user_id = auth.user_id()

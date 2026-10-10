@@ -24,6 +24,12 @@ export async function registerPatient(page: Page, p: { name: string; age: string
   await page.getByTestId("patient-save-visit").click();
 }
 
+/** Visit UI: open the Reports tab (lab reports entry). */
+export async function openVisitReports(page: Page) {
+  await page.getByTestId("visit-tab-reports").click();
+  await expect(page.getByTestId("lab-reports")).toBeVisible();
+}
+
 export async function addMedicine(page: Page, query: string, shortcut: string) {
   const items = page.getByTestId("rx-item");
   const before = await items.count();

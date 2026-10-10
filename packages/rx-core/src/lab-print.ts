@@ -40,6 +40,8 @@ export interface LabPrintInput {
   labNoPending?: boolean;
   referredBy?: string | null;
   preparedBy?: string | null;
+  /** Who verified the report for release (doctor / clinic admin). */
+  verifiedBy?: string | null;
   /** YYYY-MM-DD. */
   reportDate: string;
   /** ISO timestamp. */
@@ -156,8 +158,12 @@ export function renderLabReportHtml(input: LabPrintInput): string {
   </table>`;
 
   const signatories = profile.signatories ?? [];
+  const verifiedBlock = input.verifiedBy?.trim()
+    ? `<div><b>${esc(input.verifiedBy)}</b></div>`
+    : `<div class="muted">Not verified</div>`;
   const signs = `<div class="signs">
     <div class="sign"><div class="line">Prepared by</div><div><b>${esc(input.preparedBy ?? "")}</b></div></div>
+    <div class="sign"><div class="line">Verified by</div>${verifiedBlock}</div>
     ${signatories
       .map((s) => `<div class="sign"><div class="line"><b>${esc(s.name)}</b></div>${s.degrees ? `<div>${esc(s.degrees)}</div>` : ""}${s.title ? `<div>${esc(s.title)}</div>` : ""}</div>`)
       .join("")}
@@ -223,6 +229,7 @@ table { border-collapse: collapse; width: 100%; }
 .signs { display: flex; justify-content: space-between; gap: 6mm; margin-top: 10mm; break-inside: avoid; }
 .sign { text-align: center; min-width: 40mm; font-size: 0.9em; }
 .sign .line { border-top: 0.75pt solid #000; padding-top: 1mm; }
+.sign .muted { color: #666; font-style: italic; }
 .footnote { font-size: 0.8em; text-align: center; margin-top: 2mm; }
 footer { border-top: 0.75pt solid #000; margin-top: 2mm; padding-top: 1mm; text-align: center; font-size: 0.85em; }
 @media screen {

@@ -2,7 +2,7 @@
 
 import { usePowerSync, useQuery } from "@powersync/react";
 import { useEffect, useState } from "react";
-import { checkInAppointment, createPatient, startVisit, updatePatient, type PatientInput } from "@/lib/doctor/data";
+import { checkInAppointment, createPatient, startVisit, updatePatient, type PatientInput, type PregnancyStatus } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { navigate } from "@/lib/doctor/router";
@@ -19,6 +19,7 @@ interface FormState {
   mobile: string;
   address: string;
   allergies: string;
+  pregnancyStatus: "" | PregnancyStatus;
   guardianName: string;
   nid: string;
   brn: string;
@@ -31,7 +32,7 @@ interface FormState {
 
 const EMPTY: FormState = {
   name: "", ageYears: "", ageMonths: "", ageDays: "", dob: "", useDob: false, sex: "", mobile: "", address: "", allergies: "",
-  guardianName: "", nid: "", brn: "", healthId: "", notes: "", consent: false, birthWeightKg: "", gestationalAgeWeeks: "",
+  pregnancyStatus: "", guardianName: "", nid: "", brn: "", healthId: "", notes: "", consent: false, birthWeightKg: "", gestationalAgeWeeks: "",
 };
 
 export function PatientEdit({ patientId }: { patientId?: string }) {
@@ -62,6 +63,7 @@ export function PatientEdit({ patientId }: { patientId?: string }) {
       mobile: String(existing.mobile ?? ""),
       address: String(existing.address ?? ""),
       allergies: parseJson<string[]>(existing.allergies as string, []).join(", "),
+      pregnancyStatus: (existing.pregnancy_status as FormState["pregnancyStatus"]) ?? "",
       guardianName: String(existing.guardian_name ?? ""),
       nid: String(existing.nid ?? ""),
       brn: String(existing.brn ?? ""),
@@ -96,6 +98,7 @@ export function PatientEdit({ patientId }: { patientId?: string }) {
       mobile,
       address: f.address,
       allergies: f.allergies.split(",").map((x) => x.trim()).filter(Boolean),
+      pregnancyStatus: f.sex === "female" || f.sex === "" ? (f.pregnancyStatus || null) : null,
       guardianName: f.guardianName,
       nid: f.nid,
       brn: f.brn,
@@ -142,9 +145,9 @@ export function PatientEdit({ patientId }: { patientId?: string }) {
   }
 
   return (
-    <form onSubmit={(e) => save(e, true)} className="mx-auto max-w-3xl space-y-4">
-      <h1 className="text-xl font-semibold">{patientId ? "Edit patient" : "New patient"}</h1>
-      <div className="card grid gap-3 p-4 md:grid-cols-6">
+    <form onSubmit={(e) => save(e, true)} className="mx-auto max-w-3xl space-y-2">
+      <h1 className="text-lg font-semibold">{patientId ? "Edit patient" : "New patient"}</h1>
+      <div className="card grid gap-2 p-2.5 md:grid-cols-6">
         <div className="md:col-span-4"><label className="label">Name *</label><input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus data-testid="patient-name" /></div>
         <div className="md:col-span-2">
           <label className="label">Sex</label>
@@ -169,6 +172,18 @@ export function PatientEdit({ patientId }: { patientId?: string }) {
         <div className="md:col-span-3"><label className="label">Mobile</label><input className="input" inputMode="tel" value={f.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="01XXXXXXXXX" data-testid="patient-mobile" /></div>
         <div className="md:col-span-3"><label className="label">Address</label><input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} /></div>
         <div className="md:col-span-6"><label className="label">Drug allergies (comma separated generics, e.g. Penicillin, Sulfonamide)</label><input className="input" value={f.allergies} onChange={(e) => set("allergies", e.target.value)} data-testid="patient-allergies" /></div>
+        {(f.sex === "female" || f.sex === "") && (
+          <div className="md:col-span-3">
+            <label className="label" htmlFor="preg">Pregnancy / lactation</label>
+            <select id="preg" className="input" value={f.pregnancyStatus} onChange={(e) => set("pregnancyStatus", e.target.value as FormState["pregnancyStatus"])} data-testid="patient-pregnancy">
+              <option value="">Not recorded</option>
+              <option value="none">Not pregnant / not lactating</option>
+              <option value="pregnant">Pregnant</option>
+              <option value="lactating">Lactating</option>
+              <option value="both">Pregnant and lactating</option>
+            </select>
+          </div>
+        )}
         {infant && (
           <>
             <div><label className="label" htmlFor="birth-wt">Birth weight (kg)</label><input id="birth-wt" className="input" inputMode="decimal" value={f.birthWeightKg} onChange={(e) => set("birthWeightKg", e.target.value.replace(/[^\d.]/g, ""))} data-testid="patient-birth-weight" /></div>
@@ -178,7 +193,7 @@ export function PatientEdit({ patientId }: { patientId?: string }) {
         {minor && <div className="md:col-span-3"><label className="label" htmlFor="guardian">Guardian name *</label><input id="guardian" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} /></div>}
         <details className="md:col-span-6">
           <summary className="cursor-pointer text-sm text-slate-600">National IDs & notes (optional)</summary>
-          <div className="mt-2 grid gap-3 md:grid-cols-3">
+          <div className="mt-1.5 grid gap-2 md:grid-cols-3">
             <div><label className="label">NID</label><input className="input" value={f.nid} onChange={(e) => set("nid", e.target.value)} /></div>
             <div><label className="label">Birth reg. no. (BRN)</label><input className="input" value={f.brn} onChange={(e) => set("brn", e.target.value)} /></div>
             <div><label className="label">Health ID</label><input className="input" value={f.healthId} onChange={(e) => set("healthId", e.target.value)} /></div>

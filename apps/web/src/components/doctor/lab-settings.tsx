@@ -29,10 +29,10 @@ import { parseJson } from "@/lib/doctor/util";
 export function LabSettingsScreen() {
   const session = useSession();
   return (
-    <div className="space-y-5" data-testid="lab-settings">
+    <div className="space-y-2.5" data-testid="lab-settings">
       <div className="flex items-center gap-2">
         <Link to="/settings" className="btn-ghost">← Settings</Link>
-        <h1 className="text-xl font-semibold">Lab settings</h1>
+        <h1 className="text-lg font-semibold">Lab settings</h1>
       </div>
       {session.tenantRole === "assistant" ? (
         <p className="text-sm text-slate-600">Only a doctor or the clinic admin can change the lab settings.</p>
@@ -96,17 +96,17 @@ function LabProfileForm() {
   }
 
   return (
-    <section className="card space-y-3 p-4" data-testid="lab-profile">
+    <section className="card space-y-2 p-2.5" data-testid="lab-profile">
       <div>
         <h2 className="font-semibold">Report heading</h2>
         <p className="text-xs text-slate-500">Printed at the top of the clinic&apos;s lab reports. Left blank, the chamber&apos;s name and address are used.</p>
       </div>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3">
         <label className="text-sm"><span className="label">Lab name</span><input className="input" value={labName} onChange={(e) => setLabName(e.target.value)} maxLength={120} data-testid="lab-profile-name" /></label>
         <label className="text-sm"><span className="label">Address</span><input className="input" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={300} data-testid="lab-profile-address" /></label>
         <label className="text-sm"><span className="label">Phone</span><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={60} data-testid="lab-profile-phone" /></label>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="label mb-0">Logo</span>
         {logo && <img src={logo} alt="Lab logo" className="h-10 border border-slate-200 bg-white" />}
         <input type="file" accept="image/png,image/jpeg" onChange={(e) => onLogo(e.target.files?.[0])} className="text-xs" />
@@ -185,7 +185,7 @@ function LabCatalogueEditor() {
   const setPanelShown = (key: string, shown: boolean) => run(() => saveLabCatalogueRow(db, session.tenantId, "lab_panel", key, { is_active: shown }));
 
   return (
-    <section className="card space-y-3 p-4" data-testid="lab-catalogue-settings">
+    <section className="card space-y-2 p-2.5" data-testid="lab-catalogue-settings">
       <div>
         <h2 className="font-semibold">Tests</h2>
         <p className="text-xs text-slate-500">
@@ -414,7 +414,7 @@ function CustomTestForm({ cat, platformPanels, clinicPanels, clinicTests, onDone
     </label>
   );
   return (
-    <div className="space-y-2 rounded border border-slate-200 p-3" data-testid="lab-new-test">
+    <div className="space-y-1.5 rounded border border-slate-200 p-2" data-testid="lab-new-test">
       <h3 className="text-sm font-semibold">Add a test</h3>
       <div className="flex flex-wrap items-end gap-2">
         {input("Name", name, setName, "name", "w-60")}

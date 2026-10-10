@@ -143,6 +143,7 @@ export async function labReportPdf(ctx: { tenantId: string; userId: string }, re
     labNoPending: !labNo,
     referredBy: rows[0]!.referredBy,
     preparedBy: rows.find((r) => r.preparedByName)?.preparedByName ?? null,
+    verifiedBy: rows.find((r) => r.verifiedAt)?.verifiedByName ?? null,
     reportDate,
     collectedAt: rows[0]!.collectedAt?.toISOString() ?? null,
     reports: rows.map((r) => ({
@@ -151,6 +152,7 @@ export async function labReportPdf(ctx: { tenantId: string; userId: string }, re
     })),
     fonts: fonts(),
     catalogue: cat,
+    footerNote: rows.some((r) => r.verifiedAt) ? undefined : "DRAFT — not verified for release.",
   });
   return htmlToPdf(html);
 }

@@ -54,7 +54,7 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
   if (!bundle) return <div className="text-sm text-slate-500">Preparing print…</div>;
   const { widthMm, heightMm } = paperDimensions(bundle.settings.paper);
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         {/* A printed prescription is never changed: going back opens the next version, ready to edit. */}
         {meta[0] && <Link to={`/visit/${meta[0].encounter_id}${bundle.status === "final" ? "?edit=1" : ""}`} className="btn-ghost">← Back to visit</Link>}
@@ -68,7 +68,7 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
         </span>
         <Link to="/settings" className="ml-auto text-xs text-brand-700 underline">Print settings & pad calibration</Link>
       </div>
-      <div className="overflow-auto rounded bg-slate-200 p-4">
+      <div className="overflow-auto rounded bg-slate-200 p-2">
         <iframe
           ref={frame}
           title="Prescription preview"

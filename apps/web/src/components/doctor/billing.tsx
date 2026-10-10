@@ -28,7 +28,7 @@ export function BillingPanel() {
     else setErr(j.error);
   }
   return (
-    <section className="card space-y-2 p-4 text-sm">
+    <section className="card space-y-1.5 p-2.5 text-sm">
       <h2 className="font-semibold">Subscription</h2>
       {err && <p className="text-amber-700">{err}</p>}
       {st && (
