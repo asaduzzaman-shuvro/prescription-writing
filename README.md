@@ -70,6 +70,47 @@ with eardrum (TM) map — quadrants, symbols, free-hand drawing, optional blank 
 pictures (oropharynx, larynx, neck node levels) and audiogram printed as diagrams, interaction/allergy alerts, serial booking →
 check-in → waiting-room display → fees/reports, SMS credit charging, FHIR export, bKash payment recording.
 
+## Deploy (shared cPanel)
+
+Shared cPanel can't run Docker, and Docker only ever hosted PowerSync. cPanel runs the **web app only**:
+
+- **Postgres**: managed, with logical replication (e.g. Supabase). cPanel's PostgreSQL can't create the replication
+  role or set `wal_level=logical`.
+- **PowerSync**: PowerSync Cloud instead of the container.
+- **Server PDF** (`/api/print/.../pdf`) needs Chromium, which shared hosting can't run. It answers 503, and browser
+  print is the path to use.
+
+```bash
+./scripts/build-cpanel.sh      # → dist/rxpad-cpanel.tar.gz (Next standalone, flat node_modules, no symlinks)
+```
+
+1. Database, once: run the role part of `infra/powersync/setup.sql` (strong passwords; PowerSync Cloud has its own
+   storage, so skip the storage user and DB), create the owner and `rx_app` roles as in "Run locally", then from your
+   machine `DATABASE_URL=<owner url> pnpm db:migrate` and `pnpm db:seed:labs`. **Never `db:seed:dev`.**
+2. PowerSync Cloud, once: connect it with the `powersync_role` URI, paste `infra/powersync/sync-config.yaml` as the
+   sync config, add an HS256 client-auth key matching `POWERSYNC_JWT_KID`/`POWERSYNC_JWT_SECRET` with audience
+   `rxpad`. Its instance URL is `POWERSYNC_URL`.
+3. cPanel: turn on AutoSSL (the service worker needs HTTPS). Upload the archive to your **home folder, not
+   `public_html`**, and extract it there; it creates `~/rxpad`. In **Setup Node.js App**, pick Node ≥ 20.9, set
+   application root `rxpad`, application URL the domain, startup file
+   `index.js` (it starts `apps/web/server.js`), and mode production. Don't run NPM install, because the archive already holds its
+   `node_modules`. Set the env vars there (`DATABASE_URL`, `DATABASE_URL_APP`, `SESSION_SECRET`, `POWERSYNC_URL`,
+   `POWERSYNC_JWT_SECRET`, `POWERSYNC_JWT_KID`, `PUBLIC_BASE_URL`, `CRON_SECRET`, SMS/email/SSLCommerz as used),
+   then Restart.
+4. Cron Jobs: `curl -X POST -H "authorization: Bearer $CRON_SECRET" https://<domain>/api/cron/followup-reminders`.
+5. Updates: re-run the script, upload, extract over the old files, Restart. Run new migrations from your machine first.
+
+**403 or a file listing on the domain?** The app was extracted into `public_html`. Apache then serves the folder as
+plain files instead of passing requests to the Node app, and anyone can download `node_modules/` and the server code.
+An `index.html` won't fix it. Delete `apps/`, `node_modules/` and `index.js` from `public_html` (keep `.htaccess`),
+delete that app in Setup Node.js App, then do step 3 again. Afterwards, `public_html/.htaccess` should hold the
+`CLOUDLINUX PASSENGER CONFIGURATION` block with `PassengerAppRoot` pointing at `~/rxpad`. Startup errors go to
+`~/rxpad/stderr.log`. The archive also carries these steps as `rxpad/DEPLOY-CPANEL.txt`.
+
+The host must allow outbound connections to the database port (5432, or Supabase's pooler on 6543). Many shared hosts
+block them, so check before you start. The archive is built on your machine, so `sharp` inside it is the wrong platform
+for Linux. That's harmless, because the app doesn't use `next/image`.
+
 ## Key design points
 
 - **Offline:** the doctor app is one page (`/doctor`, hash routes) cached by `public/sw.js`. Data lives
