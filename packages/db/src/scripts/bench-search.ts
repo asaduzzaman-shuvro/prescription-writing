@@ -1,8 +1,9 @@
 import { createDb } from "../client";
 import { searchProducts } from "../catalogue-search";
+import { ownerConnection } from "../connection";
 import { DEV_DATABASE_URL } from "../dev-urls";
 
-const db = createDb(process.env.DATABASE_URL ?? DEV_DATABASE_URL, { max: 1 });
+const db = createDb(ownerConnection(DEV_DATABASE_URL), { max: 1 });
 const queries = ["napa", "paracet", "amox", "seclo", "omepra", "fexo", "cipro", "montel", "azith", "xyz"];
 await searchProducts(db, "warm"); // warm-up
 for (const q of queries) {

@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../client";
+import { connectionHost, ownerConnection } from "../connection";
 import { DEV_DATABASE_URL } from "../dev-urls";
 import { applyPlan, buildPlan, guessMapping, loadSnapshot, parseCsv, parseMedexGenerics, rowsToProducts } from "../import";
 import { hashPassword } from "../password";
@@ -19,8 +20,8 @@ import * as s from "../schema";
 import { seedLabCatalogue } from "../seed/lab-catalogue";
 import { ADVICE, COMPLAINTS, DIAGNOSES, HISTORIES, INSTRUCTIONS, INVESTIGATIONS, SPECIALTIES } from "../seed/libraries";
 
-const url = process.env.DATABASE_URL ?? DEV_DATABASE_URL;
-const host = new URL(url).hostname;
+const connection = ownerConnection(DEV_DATABASE_URL);
+const host = connectionHost(connection);
 if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
   console.error(`Refusing to load the MedEx-derived dev seed into non-local database host "${host}".`);
   process.exit(1);
@@ -29,7 +30,7 @@ if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
 const here = dirname(fileURLToPath(import.meta.url));
 const seedDir = resolve(join(here, "../../../.."), process.env.SEED_DIR ?? "data/dev-seed");
 const SOURCE = "medex-kaggle-2022";
-const db = createDb(url, { max: 4 });
+const db = createDb(connection, { max: 4 });
 
 const ANTIBIOTIC_CLASS =
   /antibiotic|cephalosporin|penicillin|macrolide|quinolone|tetracycline|carbapenem|aminoglycoside|sulfonamide|lincosamide|glycopeptide|nitroimidazole|monobactam|oxazolidinone/i;

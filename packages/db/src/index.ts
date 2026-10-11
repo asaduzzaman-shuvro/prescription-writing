@@ -1,4 +1,5 @@
 export * from "./client";
+export * from "./connection";
 export * from "./dev-urls";
 export * from "./tenant-context";
 export * from "./password";
