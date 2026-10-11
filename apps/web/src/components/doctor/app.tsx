@@ -10,7 +10,6 @@ import { LabScreen } from "./lab";
 import { LabSettingsScreen } from "./lab-settings";
 import { MedicinesScreen } from "./medicines";
 import { PatientDetail } from "./patient-detail";
-import { ReportsScreen } from "./reports";
 import { PatientEdit } from "./patient-form";
 import { PatientList } from "./patient-list";
 import { PrintView } from "./print-view";
@@ -63,8 +62,6 @@ export function DoctorApp() {
       return <InvestigationsScreen />;
     case "medicines":
       return <MedicinesScreen />;
-    case "reports":
-      return <ReportsScreen />;
     case "templates":
       return <TemplatesScreen />;
     case "settings":

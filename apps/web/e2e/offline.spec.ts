@@ -16,10 +16,6 @@ test("works fully offline and syncs when the connection returns", async ({ page,
 
   const name = `Offline Patient ${uniq()}`;
   await registerPatient(page, { name, age: "6", sex: "Female", mobile: mobile() });
-  // Child patient: guardian required
-  await expect(page.getByText("Guardian name is required")).toBeVisible();
-  await page.getByLabel("Guardian name *").fill("Mother");
-  await page.getByTestId("patient-save-visit").click();
   await expect(page.getByTestId("med-search")).toBeVisible();
   await addMedicine(page, "napa", "1+1+1 af 3d");
   await page.getByTestId("finalize").click();

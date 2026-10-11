@@ -23,7 +23,7 @@ import {
   type TrendPoint,
 } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { deleteLabReport, lastFinalDoc, recordReportFilesConsent, saveLabReport } from "@/lib/doctor/data";
 import { useLabCatalogue } from "@/lib/doctor/hooks";
 import { parseJson, today, uuid } from "@/lib/doctor/util";
@@ -184,7 +184,18 @@ export function LabTrendChart({ code, points, sex, testId }: { code: string; poi
 }
 
 /** The visit's Reports card: add the paper reports the patient brought; ticked values print on the prescription. */
-export function LabReports({ encounterId, patientId, sex }: { encounterId: string; patientId: string; sex: Sex | null }) {
+export function LabReports({
+  encounterId,
+  patientId,
+  sex,
+  leading,
+}: {
+  encounterId: string;
+  patientId: string;
+  sex: Sex | null;
+  /** Desktop visit tabs, sitting on the same row as the report chips. */
+  leading?: ReactNode;
+}) {
   const db = usePowerSync();
   const cat = useLabCatalogue();
   const reports = useLabReports(patientId);
@@ -242,7 +253,8 @@ export function LabReports({ encounterId, patientId, sex }: { encounterId: strin
   return (
     <section className="space-y-2" data-testid="lab-reports">
       <div className="flex flex-wrap items-center gap-1.5">
-        <h3 className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Reports</h3>
+        {leading}
+        <h3 className={`mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500 ${leading ? "xl:hidden" : ""}`}>Reports</h3>
         {[...cat.panels.filter((p) => CHIP_PANELS.includes(p.id)).map((p) => ({ id: p.id, name: p.name })), { id: OTHER_PANEL, name: "Imaging / other" }].map((p) => (
           <button key={p.id} className="rounded-full border border-slate-300 px-2.5 py-0.5 text-xs hover:bg-slate-50" onClick={() => setEditing({ panel: p.id })} data-testid={`lab-add-${p.id}`}>
             + {p.name}

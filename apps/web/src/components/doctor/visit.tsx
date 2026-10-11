@@ -9,6 +9,7 @@ import {
   finalizePrescription,
   lastConsultationDate,
   lastFinalDoc,
+  hiddenTemplateIds,
   newVersion,
   saveDraftDoc,
   saveFee,
@@ -91,10 +92,10 @@ function VitalsPanel({
     }, 500);
   };
   const field = (k: keyof Vitals, label: string) => (
-    <label className="flex min-w-0 flex-col text-[11px] font-medium text-slate-500">
+    <label className="flex w-[4.25rem] shrink-0 flex-col text-[11px] font-medium text-slate-500">
       {label}
       <input
-        className="input h-9 w-full min-w-0 py-1.5 text-sm tabular-nums"
+        className="input h-7 w-full min-w-0 py-0.5 text-sm tabular-nums"
         inputMode="decimal"
         disabled={readOnly}
         value={v[k] ?? ""}
@@ -120,13 +121,14 @@ function VitalsPanel({
       title="O/E — Vitals"
       badge={filled || (b ? `BMI ${b}` : null)}
       className="lg:col-span-2"
+      inline
     >
-      <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-4 md:grid-cols-7 md:gap-2">
-        <label className="col-span-2 flex min-w-0 flex-col text-[11px] font-medium text-slate-500 md:col-span-1">
+      <div className="flex flex-wrap items-end gap-1.5">
+        <label className="flex w-[7.25rem] shrink-0 flex-col text-[11px] font-medium text-slate-500">
           BP
           <span className="flex items-center gap-0.5">
             <input
-              className="input h-9 min-w-0 flex-1 py-1.5 text-sm tabular-nums"
+              className="input h-7 min-w-0 flex-1 py-0.5 text-sm tabular-nums"
               inputMode="numeric"
               disabled={readOnly}
               value={v.bpSystolic ?? ""}
@@ -135,7 +137,7 @@ function VitalsPanel({
             />
             <span className="shrink-0 text-slate-300">/</span>
             <input
-              className="input h-9 min-w-0 flex-1 py-1.5 text-sm tabular-nums"
+              className="input h-7 min-w-0 flex-1 py-0.5 text-sm tabular-nums"
               inputMode="numeric"
               disabled={readOnly}
               value={v.bpDiastolic ?? ""}
@@ -406,7 +408,7 @@ function RxEditor({
     [session.userId],
   );
   const favSet = new Set(favs.map((f) => f.product_id));
-  const { data: templates } = useQuery<{
+  const { data: templateRows } = useQuery<{
     id: string;
     name: string;
     payload: string;
@@ -415,6 +417,11 @@ function RxEditor({
     "SELECT id, name, payload, tenant_id FROM rx_template WHERE is_active = 1 AND (specialty_code IS NULL OR specialty_code = ?) ORDER BY tenant_id IS NULL, name",
     [specialtyCode],
   );
+  const [hiddenTemplates, setHiddenTemplates] = useState<string[]>([]);
+  useEffect(() => {
+    setHiddenTemplates(hiddenTemplateIds(session.userId));
+  }, [session.userId]);
+  const templates = templateRows.filter((t) => !hiddenTemplates.includes(t.id));
   const { data: referrers } = useQuery<{ r: string }>(
     "SELECT DISTINCT json_extract(doc, '$.referredBy') AS r FROM prescription WHERE json_extract(doc, '$.referredBy') IS NOT NULL ORDER BY r LIMIT 200",
   );
@@ -626,13 +633,33 @@ function RxEditor({
     <VisitPaneProvider>
     <div className="flex flex-col gap-1.5 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
       <div
-        className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-white p-1.5 sm:flex-nowrap"
+        className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-white p-1 xl:flex-nowrap"
         data-testid="rx-toolbar"
       >
+        <nav
+          className="hidden shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5 xl:flex"
+          aria-label="Visit sections"
+          data-testid="visit-tabs"
+        >
+          <Link
+            to={`/visit/${encounterId}`}
+            className="rounded-md bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap text-brand-700 shadow-sm"
+            data-testid="visit-tab-rx"
+          >
+            Prescription
+          </Link>
+          <Link
+            to={`/visit/${encounterId}/reports`}
+            className="rounded-md px-2.5 py-1 text-xs whitespace-nowrap text-slate-600 hover:bg-white/60 hover:text-slate-900"
+            data-testid="visit-tab-reports"
+          >
+            Reports
+          </Link>
+        </nav>
         {!readOnly ? (
           <>
             <select
-              className="input min-w-0 flex-1 basis-[12rem] py-1.5"
+              className="input h-7 min-w-0 w-full flex-1 basis-[10rem] py-0.5 text-xs xl:max-w-xs"
               value={templateId}
               aria-label="Apply template"
               data-testid="apply-template"
@@ -649,14 +676,14 @@ function RxEditor({
             </select>
             <button
               type="button"
-              className="btn-secondary shrink-0 whitespace-nowrap px-3 py-1.5"
+              className="btn-secondary h-7 shrink-0 whitespace-nowrap px-2 py-0 text-xs"
               onClick={copyLast}
             >
               Copy last Rx
             </button>
             <button
               type="button"
-              className="btn-secondary shrink-0 whitespace-nowrap px-3 py-1.5"
+              className="btn-secondary h-7 shrink-0 whitespace-nowrap px-2 py-0 text-xs"
               onClick={saveAsTemplate}
             >
               Save as template
@@ -666,7 +693,7 @@ function RxEditor({
           <span className="flex-1" />
         )}
         <span
-          className="shrink-0 rounded bg-slate-100 px-2 py-1 text-[11px] font-medium tabular-nums text-slate-500 sm:ml-0"
+          className="shrink-0 rounded bg-slate-100 px-2 py-1 text-[11px] font-medium tabular-nums text-slate-500 xl:ml-auto"
           data-testid="save-state"
         >
           {readOnly
@@ -1219,18 +1246,25 @@ export function VisitScreen({
   const tabClass = (on: boolean) =>
     `rounded-md px-3.5 py-2 text-sm whitespace-nowrap ${on ? "bg-white font-medium text-brand-700 shadow-sm" : "text-slate-600 hover:bg-white/60 hover:text-slate-900"}`;
 
-  const patientCard = (
-    <div className="space-y-1">
-      <button
-        type="button"
-        className="btn-sakura w-full py-1.5 text-sm font-semibold shadow-sm"
-        data-testid="visit-new-patient"
-        onClick={() => setNewPatientOpen(true)}
-      >
-        + New patient
-      </button>
+  const newPatientButton = (className: string) => (
+    <button
+      type="button"
+      className={className}
+      data-testid="visit-new-patient"
+      onClick={() => setNewPatientOpen(true)}
+    >
+      + New patient
+    </button>
+  );
+
+  const railBtn =
+    "flex w-full min-h-0 flex-1 basis-0 items-center justify-center whitespace-nowrap rounded-md px-1.5 text-center text-xs font-semibold leading-tight";
+  const sectionTabClass = (on: boolean) =>
+    `${railBtn} border ${on ? "border-brand-700 bg-brand-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800"}`;
+
+  const patientInfo = (
       <section
-        className="overflow-hidden rounded-md border border-slate-200 bg-white"
+        className="min-w-0 flex-1 overflow-hidden rounded-md border border-slate-200 bg-white"
         data-testid="visit-patient"
       >
         <div className="flex items-center justify-between gap-1.5 border-b border-brand-100 bg-brand-50/80 px-2 py-1">
@@ -1257,37 +1291,39 @@ export function VisitScreen({
                 {p.code ?? "ID pending"}
               </p>
             </div>
-            <label className="w-[4.5rem] shrink-0">
-              <span className="label mb-0 text-[10px]">Fee ৳</span>
-              <input
-                className="input h-7 w-full py-0.5 text-sm tabular-nums"
-                inputMode="numeric"
-                defaultValue={enc.fee ?? ""}
-                key={`fee-${enc.id}-${enc.fee}`}
-                data-testid="visit-fee"
-                onBlur={(e) =>
-                  saveFee(
-                    db,
-                    encounterId,
-                    e.target.value
-                      ? Number(e.target.value.replace(/\D/g, ""))
-                      : null,
-                  )
-                }
-              />
-            </label>
-            <label className="w-[5.5rem] shrink-0">
-              <span className="label mb-0 text-[10px]">Type</span>
-              <div className="[&_select]:h-7 [&_select]:w-full [&_select]:py-0.5 [&_select]:text-xs">
-                <VisitTypeControl
-                  encounterId={encounterId}
-                  patientId={p.id}
-                  visitDate={enc.visit_date}
-                  chamberId={enc.chamber_id}
-                  visitType={enc.visit_type}
+            <div className="flex shrink-0 flex-nowrap items-end gap-1.5">
+              <label className="w-[6.5rem] shrink-0">
+                <span className="label mb-0 text-[10px]">Fee ৳</span>
+                <input
+                  className="input h-7 w-full py-0.5 text-sm tabular-nums"
+                  inputMode="numeric"
+                  defaultValue={enc.fee ?? ""}
+                  key={`fee-${enc.id}-${enc.fee}`}
+                  data-testid="visit-fee"
+                  onBlur={(e) =>
+                    saveFee(
+                      db,
+                      encounterId,
+                      e.target.value
+                        ? Number(e.target.value.replace(/\D/g, ""))
+                        : null,
+                    )
+                  }
                 />
-              </div>
-            </label>
+              </label>
+              <label className="w-[7.25rem] shrink-0">
+                <span className="label mb-0 text-[10px]">Type</span>
+                <div className="[&_select]:h-7 [&_select]:w-full [&_select]:py-0.5 [&_select]:text-xs">
+                  <VisitTypeControl
+                    encounterId={encounterId}
+                    patientId={p.id}
+                    visitDate={enc.visit_date}
+                    chamberId={enc.chamber_id}
+                    visitType={enc.visit_type}
+                  />
+                </div>
+              </label>
+            </div>
           </div>
           {(allergies.length > 0 ||
             (p.pregnancy_status && p.pregnancy_status !== "none")) && (
@@ -1324,7 +1360,34 @@ export function VisitScreen({
           )}
         </div>
       </section>
+  );
+
+  const patientCard = (
+    <div className="space-y-1">
+      {newPatientButton("btn-sakura w-full py-1.5 text-sm font-semibold shadow-sm")}
+      {patientInfo}
     </div>
+  );
+
+  const sectionTabs = (
+    <nav
+      className="flex w-[7.75rem] shrink-0 flex-col gap-1 self-stretch"
+      aria-label="Visit sections"
+    >
+      {newPatientButton(`${railBtn} bg-sakura-500 text-white shadow-sm hover:bg-sakura-600`)}
+      <Link
+        to={`/visit/${encounterId}${rxQuery}`}
+        className={sectionTabClass(tab !== "reports")}
+      >
+        Prescription
+      </Link>
+      <Link
+        to={`/visit/${encounterId}/reports`}
+        className={sectionTabClass(tab === "reports")}
+      >
+        Reports
+      </Link>
+    </nav>
   );
 
   const sidePanel = (
@@ -1344,45 +1407,58 @@ export function VisitScreen({
       className="flex flex-col gap-2 lg:min-h-0 lg:flex-1 lg:overflow-hidden xl:grid xl:h-full xl:grid-cols-[minmax(0,1fr)_16.5rem] xl:grid-rows-1"
     >
       <div className="flex min-w-0 flex-col gap-1.5 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
-        {/* Narrow screens: patient sits above the editor (wide screens use the right rail). */}
-        <div className="shrink-0 xl:hidden">{patientCard}</div>
+        {/* Below xl the patient block sits above the editor: actions on the left, identity on the right. */}
+        <div className="flex shrink-0 items-stretch gap-1.5 xl:hidden">
+          {sectionTabs}
+          {patientInfo}
+        </div>
+        {/* Phone: collapsed under the editor. Tablet: open row, so alerts and history stay on screen. */}
+        <div className="order-last shrink-0 md:order-none xl:hidden">
+          <VisitSidePanel
+            variant="band"
+            patientId={p.id}
+            encounterId={encounterId}
+            allergies={allergies}
+            pregnancyStatus={p.pregnancy_status}
+            actions={rxActions}
+            testIdSuffix="-band"
+          />
+        </div>
         {tab === "reports" ? (
-          <>
-            <div className="card flex shrink-0 items-center p-1.5">
-              <nav
-                className="flex w-fit shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5"
-                aria-label="Visit sections"
-                data-testid="visit-tabs"
-              >
-                <Link
-                  to={`/visit/${encounterId}${rxQuery}`}
-                  className={tabClass(false)}
-                  data-testid="visit-tab-rx"
+          <div className="card min-h-0 flex-1 overflow-y-auto p-2">
+            <LabReports
+              encounterId={encounterId}
+              patientId={p.id}
+              sex={(p.sex as Sex | null) ?? null}
+              leading={
+                <nav
+                  className="hidden shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5 xl:flex"
+                  aria-label="Visit sections"
+                  data-testid="visit-tabs"
                 >
-                  Prescription
-                </Link>
-                <Link
-                  to={`/visit/${encounterId}/reports`}
-                  className={tabClass(true)}
-                  data-testid="visit-tab-reports"
-                >
-                  Reports
-                </Link>
-              </nav>
-            </div>
-            <div className="card min-h-0 flex-1 overflow-y-auto p-2.5">
-              <LabReports
-                encounterId={encounterId}
-                patientId={p.id}
-                sex={(p.sex as Sex | null) ?? null}
-              />
-            </div>
-          </>
+                  <Link
+                    to={`/visit/${encounterId}${rxQuery}`}
+                    className="rounded-md px-2.5 py-1 text-xs whitespace-nowrap text-slate-600 hover:bg-white/60 hover:text-slate-900"
+                    data-testid="visit-tab-rx"
+                  >
+                    Prescription
+                  </Link>
+                  <Link
+                    to={`/visit/${encounterId}/reports`}
+                    className="rounded-md bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap text-brand-700 shadow-sm"
+                    data-testid="visit-tab-reports"
+                  >
+                    Reports
+                  </Link>
+                </nav>
+              }
+            />
+          </div>
         ) : (
           <>
-            <div className="card flex shrink-0 flex-col gap-2 p-2 lg:flex-row lg:items-start lg:gap-3">
+            <div className={`card shrink-0 flex-col gap-2 p-2 lg:flex-row lg:items-start lg:gap-3 ${isDoctor ? "hidden" : "flex"}`}>
               <nav
-                className="flex w-full shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5 lg:w-auto"
+                className="hidden w-full shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5 xl:flex xl:w-auto"
                 aria-label="Visit sections"
                 data-testid="visit-tabs"
               >
@@ -1451,24 +1527,6 @@ export function VisitScreen({
             )}
           </>
         )}
-      </div>
-      <div className="shrink-0 xl:hidden">
-        <details className="card group" data-testid="visit-context-mobile">
-          <summary className="cursor-pointer list-none px-2.5 py-2 text-sm font-medium text-slate-700">
-            History & labs
-            {allergies.length > 0 && <span className="ml-2 badge bg-red-100 text-alert">Allergy</span>}
-            <span className="float-right text-xs font-normal text-slate-400 group-open:hidden">Show</span>
-          </summary>
-          <div className="border-t border-slate-100 p-2">
-            <VisitSidePanel
-              patientId={p.id}
-              encounterId={encounterId}
-              allergies={allergies}
-              pregnancyStatus={p.pregnancy_status}
-              actions={rxActions}
-            />
-          </div>
-        </details>
       </div>
       <div className="hidden min-h-0 xl:flex xl:flex-col">{sidePanel}</div>
       <NewPatientModal

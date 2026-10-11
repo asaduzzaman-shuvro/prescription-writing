@@ -40,7 +40,7 @@ test("admin-curated interaction and patient allergy raise alerts in the editor",
   await doc.ctx.close();
 });
 
-test("serial booking → check-in keeps the serial; display, fee and reports", async ({ browser }) => {
+test("serial booking → check-in keeps the serial; display and fee", async ({ browser }) => {
   const asst = await as(browser, "assistant@rx.local", "assist123");
   await waitSynced(asst.page);
   const name = `Booked Patient ${uniq()}`;
@@ -73,12 +73,6 @@ test("serial booking → check-in keeps the serial; display, fee and reports", a
   await page.goBack();
   await page.getByTestId("finalize").click();
   await expect(page.frameLocator("[data-testid=print-frame]").locator(".rx-item")).toHaveCount(1);
-  await page.goto("/doctor#/reports");
-  const stats = page.getByTestId("report-stats");
-  await expect(stats).toContainText("Fees collected (৳)");
-  const statValue = async (i: number) => Number((await stats.locator("div.card").nth(i).locator("div").nth(1).innerText()).replace(/,/g, "")) || 0;
-  await expect.poll(() => statValue(2)).toBeGreaterThanOrEqual(500); // fees (live query)
-  await expect.poll(() => statValue(3)).toBeGreaterThanOrEqual(1); // final prescriptions
   await doc.ctx.close();
 });
 

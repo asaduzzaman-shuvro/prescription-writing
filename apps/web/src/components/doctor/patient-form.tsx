@@ -87,8 +87,7 @@ export function PatientEdit({
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF((p) => ({ ...p, [k]: v }));
   const years = Number(f.ageYears || 0);
-  const minor = f.useDob ? (ageParts(f.dob)?.years ?? 99) < 18 : f.ageYears !== "" && years < 18;
-  // Birth details matter for infants; the fields show for patients under 2.
+  // Birth details matter for infants; the fields show for patients under 2. Any age can be saved.
   const infant = f.useDob ? (ageParts(f.dob)?.years ?? 99) < 2 : f.ageYears === "" ? f.ageMonths !== "" || f.ageDays !== "" : years < 2;
   const num = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 
@@ -97,7 +96,6 @@ export function PatientEdit({
     setError(undefined);
     if (!f.name.trim()) return setError("Name is required");
     if (!f.consent) return setError("Record the patient's (or guardian's) consent to store their health data");
-    if (minor && !f.guardianName.trim()) return setError("Guardian name is required for patients under 18");
     const mobile = normaliseMobile(f.mobile);
     if (mobile && !/^01\d{9}$/.test(mobile)) return setError("Mobile should look like 01XXXXXXXXX");
     const input: PatientInput = {
@@ -152,7 +150,8 @@ export function PatientEdit({
       }
       onClose?.();
       // Registered from the Lab screen: back there with this patient.
-      navigate(qs.get("then") === "lab" ? `/lab/new?patient=${id}` : `/patients/${id}`);
+      // Plain save stays on the list (Current date), not the empty profile.
+      navigate(qs.get("then") === "lab" ? `/lab/new?patient=${id}` : "/patients");
     } finally {
       setSaving(false);
     }
@@ -202,7 +201,7 @@ export function PatientEdit({
           <div><label className="label" htmlFor="ga">Gestational age at birth (weeks)</label><input id="ga" className="input" inputMode="numeric" value={f.gestationalAgeWeeks} onChange={(e) => set("gestationalAgeWeeks", e.target.value.replace(/\D/g, ""))} data-testid="patient-ga" /></div>
         </>
       )}
-      {minor && <div className="md:col-span-3"><label className="label" htmlFor="guardian">Guardian name *</label><input id="guardian" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} /></div>}
+      <div className="md:col-span-3"><label className="label" htmlFor="guardian">Guardian name</label><input id="guardian" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} /></div>
       <details className="md:col-span-6">
         <summary className="cursor-pointer text-sm text-slate-600">National IDs & notes (optional)</summary>
         <div className="mt-1.5 grid gap-2 md:grid-cols-3">
@@ -214,7 +213,7 @@ export function PatientEdit({
       </details>
       <label className="flex items-start gap-2 text-sm md:col-span-6">
         <input type="checkbox" className="mt-1" checked={f.consent} onChange={(e) => set("consent", e.target.checked)} data-testid="patient-consent" />
-        <span>The patient{minor ? "'s guardian" : ""} consents to storing their health information for treatment (রোগীর তথ্য সংরক্ষণে সম্মতি দিয়েছেন).</span>
+        <span>The patient or their guardian consents to storing their health information for treatment (রোগীর তথ্য সংরক্ষণে সম্মতি দিয়েছেন).</span>
       </label>
     </div>
   );

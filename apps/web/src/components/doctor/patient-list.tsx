@@ -6,8 +6,35 @@ import { startVisit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
-import { ageLabel } from "@/lib/doctor/util";
-import { usePatientSearch, type PatientHit } from "./patient-search";
+import { ageLabel, normaliseMobile, today } from "@/lib/doctor/util";
+import type { PatientHit } from "./patient-search";
+
+/** Each tab is the whole group, not a shortened slice of the others. */
+type PatientGroup = "today" | "unseen" | "seen";
+
+/** A written prescription has medicines, or has been finalised. Opening a visit only creates an empty draft. */
+const WRITTEN_RX = `EXISTS (
+  SELECT 1 FROM prescription rx
+   WHERE rx.patient_id = p.id
+     AND (rx.status = 'final' OR rx.doc LIKE '%"items": [{%' OR rx.doc LIKE '%"items":[{%')
+)`;
+
+const TODAY_VISIT = `EXISTS (SELECT 1 FROM encounter e WHERE e.patient_id = p.id AND e.visit_date = ? AND e.status <> 'cancelled')`;
+/** Registration day is the local date stored at the start of created_at. */
+const REGISTERED_TODAY = `substr(p.created_at, 1, 10) = ?`;
+const ON_TODAY = `((${TODAY_VISIT}) OR (${REGISTERED_TODAY}))`;
+
+const GROUP_WHERE: Record<PatientGroup, string> = {
+  today: `(${ON_TODAY}) AND NOT (${WRITTEN_RX})`,
+  unseen: `NOT (${WRITTEN_RX}) AND NOT (${ON_TODAY})`,
+  seen: WRITTEN_RX,
+};
+
+function groupFromHash(): PatientGroup {
+  if (typeof window === "undefined") return "today";
+  const g = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("group");
+  return g === "unseen" || g === "seen" ? g : "today";
+}
 
 export function PatientList() {
   const db = usePowerSync();
@@ -15,14 +42,49 @@ export function PatientList() {
   const doctors = useDoctors();
   const { current: chamber } = useChambers();
   const [q, setQ] = useState("");
-  const search = usePatientSearch(q, 50);
-  const recent = useQuery<PatientHit>(
-    `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code, (SELECT MAX(visit_date) FROM encounter e WHERE e.patient_id = p.id) AS last_visit
-       FROM patient p WHERE p.deleted_at IS NULL ORDER BY p.updated_at DESC LIMIT 50`,
+  const [group, setGroup] = useState<PatientGroup>(groupFromHash);
+  const date = today();
+  const term = q.trim();
+  const mobile = normaliseMobile(term);
+  const searching = term.length >= 2;
+  const isMobile = /^\d{4,}$/.test(mobile);
+  const params: (string | number)[] = [];
+  if (group === "today" || group === "unseen") params.push(date, date);
+  const searchSql = !searching
+    ? ""
+    : isMobile
+      ? "AND p.mobile LIKE ?"
+      : "AND (p.name LIKE ? OR p.code LIKE ?)";
+  if (searching) {
+    if (isMobile) params.push(`%${mobile}%`);
+    else params.push(`%${term}%`, `%${term}%`);
+  }
+  params.push(50);
+  const rows = useQuery<PatientHit>(
+    `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code,
+            (SELECT MAX(visit_date) FROM encounter e WHERE e.patient_id = p.id AND e.status <> 'cancelled') AS last_visit
+       FROM patient p
+      WHERE p.deleted_at IS NULL AND ${GROUP_WHERE[group]} ${searchSql}
+      ORDER BY last_visit DESC, p.name
+      LIMIT ?`,
+    params,
   );
-  const rows = q.trim().length >= 2 ? search.data : recent.data;
-  const { data: count } = useQuery<{ n: number }>("SELECT count(*) AS n FROM patient WHERE deleted_at IS NULL");
+  const { data: counts } = useQuery<{ today_n: number; unseen_n: number; seen_n: number; n: number }>(
+    `SELECT
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${GROUP_WHERE.today}) AS today_n,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${GROUP_WHERE.unseen}) AS unseen_n,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${GROUP_WHERE.seen}) AS seen_n,
+        (SELECT count(*) FROM patient WHERE deleted_at IS NULL) AS n`,
+    [date, date, date, date],
+  );
+  const tally = counts[0];
   const isDoctor = session.tenantRole === "doctor";
+  const tabs: { id: PatientGroup; label: string; hint: string; n: number }[] = [
+    { id: "today", label: "Current date", hint: `Registered or visiting today (${date}), with no prescription yet`, n: tally?.today_n ?? 0 },
+    { id: "unseen", label: "Unseen patients", hint: "Older patients who do not have a prescription yet", n: tally?.unseen_n ?? 0 },
+    { id: "seen", label: "Seen patients", hint: "Patients who have a prescription written", n: tally?.seen_n ?? 0 },
+  ];
+  const active = tabs.find((t) => t.id === group) ?? tabs[0]!;
 
   async function visit(patientId: string) {
     const doctorId = isDoctor ? session.userId : doctors[0]?.id;
@@ -44,9 +106,27 @@ export function PatientList() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold">Patients</h1>
-          <p className="text-sm text-slate-500">{count[0]?.n ?? 0} registered — available offline on this device</p>
+          <p className="text-sm text-slate-500">{tally?.n ?? 0} registered — available offline on this device</p>
         </div>
         <Link to="/patients/new" className="btn-primary">+ New patient</Link>
+      </div>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <nav className="flex flex-wrap gap-0.5 rounded-md bg-slate-100 p-0.5" aria-label="Patient groups" data-testid="patient-groups">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm ${group === t.id ? "bg-white font-medium text-brand-700 shadow-sm" : "text-slate-600 hover:bg-white/70 hover:text-slate-900"}`}
+              aria-pressed={group === t.id}
+              data-testid={`patient-tab-${t.id}`}
+              onClick={() => setGroup(t.id)}
+            >
+              {t.label}
+              <span className="ml-1.5 tabular-nums text-xs text-slate-400">{t.n}</span>
+            </button>
+          ))}
+        </nav>
+        <p className="text-xs text-slate-500">{active.hint}</p>
       </div>
       <input
         className="input max-w-xl"
@@ -69,7 +149,7 @@ export function PatientList() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((p) => (
+            {rows.data.map((p) => (
               <tr key={p.id} className="hover:bg-slate-50/80">
                 <td className="text-xs text-slate-500">{p.code ?? "pending"}</td>
                 <td>
@@ -85,19 +165,16 @@ export function PatientList() {
                 </td>
               </tr>
             ))}
-            {!rows.length && (
+            {!rows.data.length && (
               <tr>
                 <td colSpan={6} className="py-5 text-center text-slate-500">
-                  {q.trim().length >= 2 ? (
+                  {searching ? (
                     <>
-                      No match.{" "}
+                      No match in {active.label.toLowerCase()}.{" "}
                       <Link to="/patients/new" className="text-brand-700 underline">Register new patient</Link>
                     </>
                   ) : (
-                    <>
-                      No patients yet.{" "}
-                      <Link to="/patients/new" className="text-brand-700 underline">Add the first patient</Link>
-                    </>
+                    <>No one in {active.label.toLowerCase()}.</>
                   )}
                 </td>
               </tr>

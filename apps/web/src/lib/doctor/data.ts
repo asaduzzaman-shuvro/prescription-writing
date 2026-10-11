@@ -7,7 +7,7 @@
 import type { ChamberSlot, LabFileRef, LabResult, LabSignatory, PrescriptionDoc, PrintSettings, RxItem, Vitals } from "@rx/core";
 import { DEFAULT_PRINT_SETTINGS, labCatalogueRowProblem, labLine, labReportProblem, labRowId } from "@rx/core";
 import type { AbstractPowerSyncDatabase } from "@powersync/web";
-import { nowIso, parseJson, randomToken, today, uuid } from "./util";
+import { localNowIso, nowIso, parseJson, randomToken, today, uuid } from "./util";
 
 type Db = AbstractPowerSyncDatabase;
 
@@ -40,24 +40,51 @@ const MED_SELECT = `
     LEFT JOIN doctor_favorite fav ON fav.product_id = p.id AND fav.user_id = ?`;
 
 /** Brand/generic prefix search on the synced catalogue; favourites first. Works offline. */
-export async function searchMedicines(db: Db, userId: string, q: string, limit = 25): Promise<MedicineHit[]> {
+function medicineSearchTerms(q: string) {
+  const term = q.trim().replace(/[%_]/g, "");
+  return { prefix: `${term}%`, word: `% ${term}%` };
+}
+
+export async function searchMedicines(db: Db, userId: string, q: string, limit = 25, offset = 0): Promise<MedicineHit[]> {
   const term = q.trim();
   if (term.length < 2) return [];
-  const prefix = `${term.replace(/[%_]/g, "")}%`;
-  const word = `% ${term.replace(/[%_]/g, "")}%`;
+  const { prefix, word } = medicineSearchTerms(q);
   return db.getAll<MedicineHit>(
     `${MED_SELECT}
       WHERE p.brand_name LIKE ? OR p.generic_text LIKE ? OR p.generic_text LIKE ?
       ORDER BY is_favorite DESC,
                CASE WHEN p.brand_name LIKE ? THEN 0 ELSE 1 END,
                fav.use_count DESC, length(p.brand_name), p.brand_name, p.strength_text
-      LIMIT ?`,
-    [userId, prefix, prefix, word, prefix, limit],
+      LIMIT ? OFFSET ?`,
+    [userId, prefix, prefix, word, prefix, limit, offset],
   );
+}
+
+export async function searchMedicineCount(db: Db, q: string): Promise<number> {
+  if (q.trim().length < 2) return 0;
+  const { prefix, word } = medicineSearchTerms(q);
+  const row = await db.getOptional<{ n: number }>(
+    `SELECT count(*) AS n FROM brand_product p WHERE p.brand_name LIKE ? OR p.generic_text LIKE ? OR p.generic_text LIKE ?`,
+    [prefix, prefix, word],
+  );
+  return Number(row?.n ?? 0);
 }
 
 export async function favoriteMedicines(db: Db, userId: string, limit = 30): Promise<MedicineHit[]> {
   return db.getAll<MedicineHit>(`${MED_SELECT} WHERE fav.id IS NOT NULL ORDER BY fav.use_count DESC, p.brand_name LIMIT ?`, [userId, limit]);
+}
+
+/** A page of the synced catalogue, alphabetical. The full list is tens of thousands of rows. */
+export async function listMedicines(db: Db, userId: string, offset: number, limit = 50): Promise<MedicineHit[]> {
+  return db.getAll<MedicineHit>(
+    `${MED_SELECT} ORDER BY p.brand_name COLLATE NOCASE, p.strength_text LIMIT ? OFFSET ?`,
+    [userId, limit, offset],
+  );
+}
+
+export async function medicineCount(db: Db): Promise<number> {
+  const row = await db.getOptional<{ n: number }>("SELECT count(*) AS n FROM brand_product");
+  return Number(row?.n ?? 0);
 }
 
 export async function productGenericIds(db: Db, productId: string): Promise<string[]> {
@@ -100,7 +127,7 @@ export async function createPatient(db: Db, userId: string, tenantId: string, p:
     [
       id, tenantId, p.name.trim(), p.dob, p.dobEstimated ? 1 : 0, p.sex, p.mobile || null, p.address || null,
       JSON.stringify(p.allergies), p.pregnancyStatus, p.guardianName || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null,
-      p.consent ? now : null, p.birthWeightKg, p.gestationalAgeWeeks, userId, now, now,
+      p.consent ? now : null, p.birthWeightKg, p.gestationalAgeWeeks, userId, localNowIso(), now,
     ],
   );
   return id;
@@ -520,8 +547,34 @@ export async function saveTemplate(db: Db, tenantId: string, userId: string, nam
   );
 }
 
+export async function updateTemplate(db: Db, id: string, name: string, specialtyCode: string | null, payload: TemplatePayload) {
+  await db.execute(
+    `UPDATE rx_template SET name = ?, specialty_code = ?, payload = ?, updated_at = ? WHERE id = ?`,
+    [name, specialtyCode, JSON.stringify(payload), nowIso(), id],
+  );
+}
+
 export async function deleteTemplate(db: Db, id: string) {
   await db.execute(`DELETE FROM rx_template WHERE id = ?`, [id]);
+}
+
+const hiddenTemplateKey = (userId: string) => `rx.hiddenTemplates.${userId}`;
+
+/** Shared RxPad templates can't be deleted on the server. Hiding removes one from this doctor's lists. */
+export function hiddenTemplateIds(userId: string): string[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(hiddenTemplateKey(userId)) ?? "[]") as unknown;
+    return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function hideTemplate(userId: string, id: string) {
+  const ids = new Set(hiddenTemplateIds(userId));
+  ids.add(id);
+  localStorage.setItem(hiddenTemplateKey(userId), JSON.stringify([...ids]));
 }
 
 /**

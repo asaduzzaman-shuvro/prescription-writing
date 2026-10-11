@@ -12,7 +12,123 @@ import {
   type Side,
   type Timing,
 } from "@rx/core";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+/** Common BD dose slots. Arrow up/down walks this list; anything else the doctor types is kept. */
+const DOSE_PATTERNS = ["1+1+1", "1+0+1", "1+1+0", "0+1+1", "1+0+0", "0+1+0", "0+0+1", "2+0+2", "0+0+2", "1+1+1+1", "½+0+½", "½+½+½"];
+const DAY_OPTIONS = ["1", "2", "3", "5", "7", "10", "14", "15", "21", "28", "30"];
+
+/** Searchable dropdown. A value that is not in the list is kept when the doctor leaves the field. */
+function SearchSelect({
+  value,
+  options,
+  onPick,
+  accept,
+  ariaLabel,
+  testId,
+  className,
+  boxClassName,
+  inputMode,
+  placeholder,
+}: {
+  value: string;
+  options: string[];
+  onPick: (value: string) => void;
+  /** Canonical custom value, or null when the typed text should be discarded. */
+  accept: (text: string) => string | null;
+  ariaLabel: string;
+  testId: string;
+  className?: string;
+  boxClassName?: string;
+  inputMode?: "numeric" | "text";
+  placeholder?: string;
+}) {
+  const [text, setText] = useState(value);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(value);
+  }, [value]);
+
+  const choices = value && !options.includes(value) ? [value, ...options] : options;
+  const q = text.trim().toLowerCase();
+  const searching = text.trim() !== value;
+  const shown = searching && q ? choices.filter((o) => o.toLowerCase().includes(q)) : choices;
+
+  function commit(raw: string) {
+    const trimmed = raw.trim();
+    const hit = choices.find((o) => o.toLowerCase() === trimmed.toLowerCase());
+    if (hit) {
+      onPick(hit);
+      setText(hit);
+      return;
+    }
+    const custom = accept(trimmed);
+    if (custom) {
+      onPick(custom);
+      setText(custom);
+      return;
+    }
+    setText(value);
+  }
+
+  return (
+    <div className={`relative min-w-0 ${boxClassName ?? "w-full"}`}>
+      <input
+        className={className ?? "input w-full font-mono"}
+        aria-label={ariaLabel}
+        data-testid={testId}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        title="Type to search. Arrow up or down to move. A value that is not listed is kept."
+        value={text}
+        onChange={(e) => { setText(e.target.value); setOpen(true); setActive(0); }}
+        onFocus={() => { focused.current = true; setOpen(true); }}
+        onBlur={() => { focused.current = false; setOpen(false); commit(text); }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            const list = shown.length ? shown : choices;
+            if (!list.length) return;
+            const i = list.indexOf(text);
+            const step = e.key === "ArrowDown" ? 1 : -1;
+            const next = list[(i < 0 ? (step > 0 ? 0 : list.length - 1) : i + step + list.length) % list.length];
+            if (!next) return;
+            onPick(next);
+            setText(next);
+            setOpen(true);
+            setActive(Math.max(0, list.indexOf(next)));
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            const typed = text.trim().toLowerCase();
+            const highlighted = shown[active];
+            commit(highlighted && typed && highlighted.toLowerCase().includes(typed) ? highlighted : text);
+            setOpen(false);
+          } else if (e.key === "Escape") {
+            setText(value);
+            setOpen(false);
+          }
+        }}
+      />
+      {open && shown.length > 0 && (
+        <ul className="absolute z-30 mt-1 max-h-48 w-full min-w-[5.5rem] overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
+          {shown.map((o, i) => (
+            <li key={o}>
+              <button
+                type="button"
+                className={`block w-full px-2 py-1 text-left font-mono ${i === active ? "bg-brand-50" : ""}`}
+                onMouseDown={(e) => { e.preventDefault(); commit(o); setOpen(false); }}
+              >
+                {o}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const TIMINGS: { v: Timing; label: string }[] = [
   { v: "none", label: "—" },
@@ -83,6 +199,26 @@ export function RxItemRow({
     set(patch);
   }
 
+  function pickPattern(text: string) {
+    const slots = parsePattern(text);
+    if (!slots) return;
+    const frequency: Frequency = { kind: "pattern", slots };
+    set({ frequency });
+    setShortcut(shortcutOf({ ...item, frequency }));
+  }
+
+  function applyDuration(duration: Duration) {
+    set({ duration });
+    setShortcut(shortcutOf({ ...item, duration }));
+  }
+
+  function pickDays(text: string) {
+    const v = Number(text.replace(/\D/g, ""));
+    if (!v) return;
+    const unit = item.duration.kind === "fixed" ? item.duration.unit : "day";
+    applyDuration({ kind: "fixed", value: v, unit });
+  }
+
   const freq = item.frequency;
   const durationMissing = item.isAntibiotic && item.duration.kind !== "fixed";
 
@@ -118,42 +254,49 @@ export function RxItemRow({
             onBlur={() => applyShortcut(shortcut)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), applyShortcut(shortcut))}
           />
-          <input
-            className="input font-mono"
-            aria-label="Dose pattern"
+          <SearchSelect
             value={freq.kind === "pattern" ? freq.slots.join("+") : ""}
-            placeholder={freq.kind === "pattern" ? "1+0+1" : freq.kind.replaceAll("_", " ")}
-            onChange={(e) => {
-              const slots = parsePattern(e.target.value);
-              if (slots) set({ frequency: { kind: "pattern", slots } as Frequency });
+            options={DOSE_PATTERNS}
+            onPick={pickPattern}
+            accept={(raw) => {
+              const slots = parsePattern(raw);
+              return slots ? slots.join("+") : null;
             }}
+            ariaLabel="Dose pattern"
+            testId="rx-pattern"
+            placeholder="1+0+1"
           />
           <select className="input" aria-label="Timing" value={item.timing ?? "none"} onChange={(e) => set({ timing: e.target.value as Timing })}>
             {TIMINGS.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
           </select>
           <div className="flex gap-1">
             {item.duration.kind === "continue" ? (
-              <button type="button" className="btn-secondary flex-1" onClick={() => set({ duration: { kind: "fixed", value: 7, unit: "day" } })}>চলবে</button>
+              <button type="button" className="btn-secondary flex-1" onClick={() => applyDuration({ kind: "fixed", value: 7, unit: "day" })}>চলবে</button>
             ) : (
               <>
-                <input
-                  className="input w-14"
-                  inputMode="numeric"
-                  aria-label="Duration"
-                  value={item.duration.kind === "fixed" ? item.duration.value : ""}
-                  onChange={(e) => {
-                    const v = Number(e.target.value.replace(/\D/g, ""));
-                    set({ duration: v ? { kind: "fixed", value: v, unit: item.duration.kind === "fixed" ? item.duration.unit : "day" } : { kind: "none" } });
+                <SearchSelect
+                  value={item.duration.kind === "fixed" ? String(item.duration.value) : ""}
+                  options={DAY_OPTIONS}
+                  onPick={pickDays}
+                  accept={(raw) => {
+                    const n = Number(raw.replace(/\D/g, ""));
+                    return n > 0 && n < 1000 ? String(n) : null;
                   }}
+                  ariaLabel="Duration"
+                  testId="rx-days"
+                  inputMode="numeric"
+                  placeholder="7"
+                  className="input w-full font-mono"
+                  boxClassName="w-16 shrink-0"
                 />
                 <select
                   className="input"
                   aria-label="Duration unit"
                   value={item.duration.kind === "fixed" ? item.duration.unit : "day"}
                   onChange={(e) => {
-                    if (e.target.value === "continue") return set({ duration: { kind: "continue" } });
+                    if (e.target.value === "continue") return applyDuration({ kind: "continue" });
                     const value = item.duration.kind === "fixed" ? item.duration.value : 1;
-                    set({ duration: { kind: "fixed", value, unit: e.target.value as "day" } as Duration });
+                    applyDuration({ kind: "fixed", value, unit: e.target.value as "day" | "week" | "month" });
                   }}
                 >
                   <option value="day">দিন</option><option value="week">সপ্তাহ</option><option value="month">মাস</option><option value="continue">চলবে</option>

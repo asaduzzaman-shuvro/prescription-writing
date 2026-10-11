@@ -2,7 +2,6 @@
 
 import { usePowerSync, useQuery, useStatus } from "@powersync/react";
 import {
-  BarChart3,
   CalendarDays,
   ClipboardPlus,
   // FlaskConical,
@@ -86,13 +85,16 @@ function SyncBadge() {
 }
 
 function LiveClock() {
-  const [now, setNow] = useState(() => new Date());
+  // First paint stays empty so SSR and hydration match. The clock starts after mount.
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
+    const tick = () => setNow(new Date());
+    tick();
+    const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
   }, []);
-  const date = today();
-  const time = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const date = now ? today() : "\u00a0";
+  const time = now ? now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "\u00a0";
   return (
     <div className="hidden text-right text-xs text-slate-500 sm:block">
       <div className="font-medium tabular-nums text-slate-700">{time}</div>
@@ -127,11 +129,12 @@ function HeaderSearch() {
   }
 
   return (
-    <div className="relative min-w-0 flex-1 max-w-md">
+    <div className="relative min-w-0 flex-1">
       <input
         id="header-patient-search"
         className="input h-8 bg-slate-50"
-        placeholder="Quick search — name, mobile or ID…  (press /)"
+        placeholder="Search name, mobile or ID"
+        title="Search by name, mobile or patient ID. Press / to focus."
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
@@ -217,7 +220,7 @@ function ChamberSwitcher() {
   }
 
   if (chambers.length <= 1 && !open) {
-    return <span className="truncate text-sm text-slate-600" title={session.tenantName}>{session.tenantName}</span>;
+    return <span className="block truncate text-sm font-medium text-slate-800" title={session.tenantName}>{session.tenantName}</span>;
   }
 
   return (
@@ -287,7 +290,6 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
   ];
   const practice: NavItem[] = [
     ...(isDoctor ? [{ to: "/templates", label: "Templates", match: route[0] === "templates", icon: <LayoutTemplate className="h-4 w-4 shrink-0" /> }] : []),
-    ...(session.tenantRole !== "assistant" ? [{ to: "/reports", label: "Analytics", match: route[0] === "reports", icon: <BarChart3 className="h-4 w-4 shrink-0" /> }] : []),
     ...(session.tenantRole !== "assistant" ? [{ to: "/settings", label: "Settings", match: route[0] === "settings", icon: <Settings className="h-4 w-4 shrink-0" /> }] : []),
   ];
 
@@ -366,7 +368,6 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
           type="button"
           disabled={signingOut}
           onClick={() => void signOut()}
-          autoComplete="off"
           data-lpignore="true"
           data-1p-ignore="true"
           data-bwignore="true"
@@ -399,20 +400,20 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex h-dvh flex-col md:pl-52">
-        <header className="z-30 shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-2.5 py-1.5 sm:px-3">
-            <button type="button" className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 md:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+        <header className="z-30 shrink-0 border-b border-slate-200 bg-white print:hidden">
+          <div className="flex h-12 items-center gap-2 px-3">
+            <button type="button" className="shrink-0 rounded-md p-1.5 text-slate-600 hover:bg-slate-100 md:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
               <Menu className="h-5 w-5" />
             </button>
-            <div className="min-w-0 md:max-w-[11rem]">
+            <div className="hidden w-40 shrink-0 sm:block">
               <ChamberSwitcher />
             </div>
             <HeaderSearch />
-            <div className="ml-auto flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <div className="hidden items-center gap-1 text-xs sm:flex" data-testid="queue-status">
-                <span className="badge bg-amber-100 text-warn">{qs.waiting} waiting</span>
-                <span className="badge bg-blue-100 text-blue-800">{qs.active} in room</span>
-                <span className="badge bg-green-100 text-green-800">{qs.done} seen</span>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="hidden h-8 items-center overflow-hidden rounded-md border border-slate-200 text-[11px] font-medium sm:flex" data-testid="queue-status">
+                <span className="flex h-full items-center bg-amber-50 px-2 text-amber-900 tabular-nums" title="Waiting">{qs.waiting}<span className="ml-1 hidden font-normal lg:inline">waiting</span></span>
+                <span className="flex h-full items-center border-l border-slate-200 bg-blue-50 px-2 text-blue-900 tabular-nums" title="In room">{qs.active}<span className="ml-1 hidden font-normal lg:inline">in room</span></span>
+                <span className="flex h-full items-center border-l border-slate-200 bg-green-50 px-2 text-green-900 tabular-nums" title="Seen">{qs.done}<span className="ml-1 hidden font-normal lg:inline">seen</span></span>
               </div>
               <LiveClock />
               <RejectedNotice />

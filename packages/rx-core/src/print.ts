@@ -102,6 +102,18 @@ export interface RenderInput {
   footerNote?: string;
 }
 
+/** Saved PDF name: name, mobile, patient id and visit date, so one patient's prescriptions stay distinct. */
+export function prescriptionFileName(input: {
+  name: string;
+  mobile?: string | null;
+  id?: string | null;
+  date?: string | null;
+}): string {
+  const stem = [input.name, input.mobile, input.id, input.date].filter((part) => part && part.trim()).join(" ");
+  const cleaned = stem.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+  return `${(cleaned || "prescription").slice(0, 140)}.pdf`;
+}
+
 /** Text for HTML (element content or a quoted attribute). */
 export const escapeHtml = (s: string | undefined | null): string =>
   (s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -345,7 +357,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
 <html lang="bn">
 <head>
 <meta charset="utf-8">
-<title>Prescription — ${esc(patient.name)}</title>
+<title>${esc(prescriptionFileName({ name: patient.name, mobile: patient.mobile, id: patient.patientCode, date: input.date }).replace(/\.pdf$/, ""))}</title>
 <style>
 @font-face { font-family: "RxBengali"; src: url("${input.fonts.bengali}") format("truetype"); font-weight: 100 900; }
 @font-face { font-family: "RxLatin"; src: url("${input.fonts.latin}") format("truetype"); font-weight: 100 900; }

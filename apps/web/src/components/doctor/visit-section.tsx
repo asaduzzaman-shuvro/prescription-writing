@@ -97,6 +97,7 @@ export function VisitSection({
   actions,
   children,
   className = "",
+  inline = false,
 }: {
   id: VisitPaneId;
   title: string;
@@ -104,11 +105,34 @@ export function VisitSection({
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Desktop: title and fields share one short row. */
+  inline?: boolean;
 }) {
   const ctx = useContext(VisitPaneContext);
   const isDesktop = ctx?.isDesktop ?? true;
   const isOpen = !ctx || isDesktop || ctx.open[id];
   const toggle = ctx?.toggle;
+
+  if (isDesktop && inline) {
+    return (
+      <div
+        className={`flex shrink-0 flex-wrap items-end gap-x-2 gap-y-1 rounded-md border border-slate-200 bg-white px-2 py-1 ${className}`}
+        data-testid={`visit-section-${id}`}
+        data-open="1"
+      >
+        <span className="mb-1 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          {title}
+        </span>
+        {children}
+        {badge != null && badge !== "" && badge !== 0 && (
+          <span className="mb-1 ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-slate-600">
+            {badge}
+          </span>
+        )}
+        {actions}
+      </div>
+    );
+  }
 
   if (isDesktop) {
     return (

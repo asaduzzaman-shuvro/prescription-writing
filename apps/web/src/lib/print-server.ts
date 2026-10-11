@@ -6,6 +6,7 @@ import {
   labReportDepartment,
   printAge,
   renderLabReportHtml,
+  prescriptionFileName,
   renderPrescriptionHtml,
   type ChamberHeader,
   type ChamberSlot,
@@ -24,7 +25,38 @@ import QRCode from "qrcode";
 import { appDb } from "./db";
 
 const g = globalThis as unknown as { __rxBrowser?: Promise<Browser> };
-const browser = () => (g.__rxBrowser ??= chromium.launch());
+
+/** Playwright's bundled Chromium, then the machine's Chrome or Edge. A failed launch is not cached. */
+async function browser(): Promise<Browser> {
+  if (g.__rxBrowser) {
+    try {
+      return await g.__rxBrowser;
+    } catch {
+      g.__rxBrowser = undefined;
+    }
+  }
+  const launched = (async () => {
+    try {
+      return await chromium.launch();
+    } catch {
+      for (const channel of ["chrome", "msedge"] as const) {
+        try {
+          return await chromium.launch({ channel });
+        } catch {
+          /* try the next installed browser */
+        }
+      }
+      throw new Error("Could not start a browser for PDF. Install Chrome, or run: pnpm exec playwright install chromium");
+    }
+  })();
+  g.__rxBrowser = launched;
+  try {
+    return await launched;
+  } catch (err) {
+    if (g.__rxBrowser === launched) g.__rxBrowser = undefined;
+    throw err;
+  }
+}
 
 let fontCache: { bengali: string; latin: string } | null = null;
 function fonts() {
@@ -36,7 +68,10 @@ function fonts() {
 }
 
 /** Server-side render of a prescription to PDF (same renderer as the browser print). */
-export async function prescriptionPdf(ctx: { tenantId: string; userId: string }, prescriptionId: string): Promise<Buffer | null> {
+export async function prescriptionPdf(
+  ctx: { tenantId: string; userId: string },
+  prescriptionId: string,
+): Promise<{ pdf: Buffer; filename: string } | null> {
   const data = await withTenant(appDb, ctx, async (tx) => {
     const [rx] = await tx.select().from(s.prescription).where(eq(s.prescription.id, prescriptionId));
     if (!rx) return null;
@@ -96,7 +131,10 @@ export async function prescriptionPdf(ctx: { tenantId: string; userId: string },
     fonts: fonts(),
     footerNote: verifyUrl ? `Verify: ${verifyUrl.replace(/^https?:\/\//, "")}` : "DRAFT — not valid",
   });
-  return htmlToPdf(html);
+  return {
+    pdf: await htmlToPdf(html),
+    filename: prescriptionFileName({ name: patient.name, mobile: patient.mobile, id: patient.code, date }),
+  };
 }
 
 async function htmlToPdf(html: string): Promise<Buffer> {
