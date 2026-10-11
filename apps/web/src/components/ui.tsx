@@ -12,14 +12,14 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   );
 }
 
-export function Stat({ label, value, href }: { label: string; value: string | number; href?: string }) {
+export function Stat({ label, value, href, accent }: { label: string; value: string | number; href?: string; accent?: string }) {
   const body = (
-    <div className="card px-2.5 py-2">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="text-xl font-semibold tabular-nums">{value}</div>
+    <div className={`card px-2.5 py-2 ${accent ?? ""} ${href ? "transition hover:border-brand-300" : ""}`}>
+      <div className="text-[10px] font-medium tracking-wide text-slate-500 uppercase">{label}</div>
+      <div className="text-xl font-semibold tabular-nums text-slate-900">{value}</div>
     </div>
   );
-  return href ? <Link href={href} className="block hover:opacity-90">{body}</Link> : body;
+  return href ? <Link href={href} className="block">{body}</Link> : body;
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
