@@ -15,27 +15,45 @@ export interface ProductHit {
   score: number;
 }
 
+let trigram: boolean | undefined;
+
+/** Shared cPanel has no pg_trgm. Those servers match the start of the name only. */
+async function hasTrigram(db: Pick<Db, "execute">): Promise<boolean> {
+  if (trigram !== undefined) return trigram;
+  const found = await db.execute(sql`select 1 as ok from pg_extension where extname = 'pg_trgm' limit 1`);
+  const rows = Array.isArray(found) ? found : ((found as { rows?: unknown[] }).rows ?? []);
+  trigram = rows.length > 0;
+  return trigram;
+}
+
 /**
  * Medicine autocomplete over brand and generic names.
- * Ranking: brand prefix > generic prefix > trigram similarity. Inactive products are excluded.
+ * Ranking: brand prefix, then generic prefix. With pg_trgm, a fuzzy match ranks below those.
+ * Inactive products are excluded.
  */
 export async function searchProducts(db: Pick<Db, "execute">, q: string, limit = 20): Promise<ProductHit[]> {
   const term = q.trim().toLowerCase();
   if (term.length < 2) return [];
   const prefix = term.replace(/[\\%_]/g, "\\$&") + "%";
-  const rows = await db.execute(sql`
-    with hits as (
-      select p.id,
-             case when lower(p.brand_name) like ${prefix} then 3
-                  when lower(p.generic_text) like ${prefix} then 2
-                  else greatest(similarity(lower(p.brand_name), ${term}), similarity(lower(p.generic_text), ${term}))
-             end as score
-        from brand_product p
-       where p.is_active
-         and (lower(p.brand_name) like ${prefix}
+  const fuzzy = await hasTrigram(db);
+  const match = fuzzy
+    ? sql`lower(p.brand_name) like ${prefix}
               or lower(p.generic_text) like ${prefix}
               or lower(p.brand_name) % ${term}
-              or lower(p.generic_text) % ${term})
+              or lower(p.generic_text) % ${term}`
+    : sql`lower(p.brand_name) like ${prefix} or lower(p.generic_text) like ${prefix}`;
+  const score = fuzzy
+    ? sql`case when lower(p.brand_name) like ${prefix} then 3
+                  when lower(p.generic_text) like ${prefix} then 2
+                  else greatest(similarity(lower(p.brand_name), ${term}), similarity(lower(p.generic_text), ${term}))
+             end`
+    : sql`case when lower(p.brand_name) like ${prefix} then 2 else 1 end`;
+  const rows = await db.execute(sql`
+    with hits as (
+      select p.id, ${score} as score
+        from brand_product p
+       where p.is_active
+         and (${match})
        order by score desc
        limit ${limit * 3}
     )

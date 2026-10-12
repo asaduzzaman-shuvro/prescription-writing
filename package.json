@@ -8,6 +8,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "db:migrate": "pnpm --filter @rx/db migrate",
+    "db:migrate:cpanel": "pnpm --filter @rx/db exec tsx src/scripts/migrate-cpanel.ts",
     "db:seed:dev": "pnpm --filter @rx/db seed:dev",
     "db:seed:labs": "pnpm --filter @rx/db seed:labs"
   },
