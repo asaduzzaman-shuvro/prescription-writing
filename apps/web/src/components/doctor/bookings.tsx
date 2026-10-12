@@ -7,6 +7,7 @@ import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { navigate } from "@/lib/doctor/router";
 import { ageLabel, normaliseMobile, today } from "@/lib/doctor/util";
+import { ListPager } from "@/components/list-pager";
 
 export interface ApptRow {
   id: string;
@@ -63,6 +64,7 @@ export function BookingsScreen() {
   const [date, setDate] = useState(today());
   const [form, setForm] = useState({ name: "", mobile: "", note: "", doctorId: "" });
   const [q, setQ] = useState("");
+  const [patientPage, setPatientPage] = useState(0);
   const [msg, setMsg] = useState<string>();
   const [bookingId, setBookingId] = useState<string | null>(null);
   const { data } = useAppointments(date);
@@ -73,11 +75,13 @@ export function BookingsScreen() {
   const mobileQ = normaliseMobile(term);
   const isMobile = /^\d{4,}$/.test(mobileQ);
   const searching = term.length >= 1;
-  const patientParams: (string | number)[] = [date];
+  const patientPageSize = 50;
+  const searchParams: string[] = [];
   const patientSearch = !searching ? "" : isMobile ? "AND p.mobile LIKE ?" : "AND (p.name LIKE ? OR p.code LIKE ?)";
-  if (searching) patientParams.push(isMobile ? `%${mobileQ}%` : `%${term}%`);
-  if (searching && !isMobile) patientParams.push(`%${term}%`);
-  patientParams.push(50);
+  if (searching) {
+    searchParams.push(isMobile ? `%${mobileQ}%` : `%${term}%`);
+    if (!isMobile) searchParams.push(`%${term}%`);
+  }
   const { data: patients } = useQuery<{
     id: string; name: string; dob: string | null; sex: string | null; mobile: string | null; code: string | null; serial_no: number | null; appt_status: string | null;
   }>(
@@ -86,8 +90,12 @@ export function BookingsScreen() {
        LEFT JOIN appointment a ON a.patient_id = p.id AND a.appt_date = ? AND a.status <> 'cancelled'
       WHERE p.deleted_at IS NULL ${patientSearch}
       ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END, a.serial_no, p.name
-      LIMIT ?`,
-    patientParams,
+      LIMIT ? OFFSET ?`,
+    [date, ...searchParams, patientPageSize, patientPage * patientPageSize],
+  );
+  const { data: patientTotals } = useQuery<{ n: number }>(
+    `SELECT count(*) AS n FROM patient p WHERE p.deleted_at IS NULL ${patientSearch}`,
+    searchParams,
   );
 
   async function book(e: React.FormEvent) {
@@ -152,7 +160,7 @@ export function BookingsScreen() {
       <div className="card overflow-x-auto" data-testid="booking-patients">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-2.5 py-1.5">
           <h2 className="text-sm font-semibold text-slate-700">Patients</h2>
-          <input className="input h-7 w-56 text-xs" placeholder="Search name, mobile or ID" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search patients to book" data-testid="booking-patient-search" />
+          <input className="input h-7 w-56 text-xs" placeholder="Search name, mobile or ID" value={q} onChange={(e) => { setQ(e.target.value); setPatientPage(0); }} aria-label="Search patients to book" data-testid="booking-patient-search" />
         </div>
         <table className="table">
           <thead><tr><th>Name</th><th>Age/Sex</th><th>Mobile</th><th>ID</th><th></th></tr></thead>
@@ -180,6 +188,7 @@ export function BookingsScreen() {
             {!patients.length && <tr><td colSpan={5} className="text-slate-500">No patients match.</td></tr>}
           </tbody>
         </table>
+        <ListPager page={patientPage} total={Number(patientTotals[0]?.n ?? 0)} size={patientPageSize} onPage={setPatientPage} />
       </div>
 
       <div className="card overflow-x-auto">

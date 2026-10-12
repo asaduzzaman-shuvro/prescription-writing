@@ -1,25 +1,37 @@
 import { s } from "@rx/db";
-import { asc } from "drizzle-orm";
+import { asc, eq, isNull } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, Pager } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { saveLibraryItem, toggleLibraryItem } from "../actions";
 import { isLibraryKind, LIBRARIES } from "../config";
+import { connection } from "next/server";
 
 export const metadata = { title: "Libraries" };
+const SIZE = 50;
 
-export default async function LibraryPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams: Promise<{ spec?: string }> }) {
+export default async function LibraryPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams: Promise<{ spec?: string; page?: string }> }) {
+  await connection();
   const { kind } = await params;
-  const { spec } = await searchParams;
+  const sp = await searchParams;
   if (!isLibraryKind(kind)) notFound();
   const lib = LIBRARIES[kind];
   const table = lib.table as any;
+  const page = Math.max(1, Number(sp.page ?? 1) || 1);
+  const spec = sp.spec;
+  const specFilter = spec === "all" ? isNull(table.specialtyCode) : spec ? eq(table.specialtyCode, spec) : undefined;
   const [rows, specialties] = await Promise.all([
-    ownerDb.select().from(table).orderBy(asc(table.specialtyCode), asc(table.sortOrder)) as Promise<Record<string, any>[]>,
+    ownerDb
+      .select()
+      .from(table)
+      .where(specFilter)
+      .orderBy(asc(table.specialtyCode), asc(table.sortOrder), asc(table.id))
+      .limit(SIZE + 1)
+      .offset((page - 1) * SIZE) as Promise<Record<string, any>[]>,
     ownerDb.select().from(s.specialty),
   ]);
-  const shown = spec ? rows.filter((r) => (spec === "all" ? !r.specialtyCode : r.specialtyCode === spec)) : rows;
+  const shown = rows.slice(0, SIZE);
   const SpecSelect = ({ value }: { value?: string | null }) => (
     <select name="specialtyCode" defaultValue={value ?? ""} className="input w-auto">
       <option value="">All specialties</option>
@@ -65,7 +77,11 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
             </form>
           </div>
         ))}
+        {!shown.length && <p className="p-3 text-sm text-slate-500">Nothing on this page.</p>}
       </div>
+      {(page > 1 || rows.length > SIZE) && (
+        <Pager page={page} hasNext={rows.length > SIZE} base={`/admin/libraries/${kind}${spec ? `?spec=${encodeURIComponent(spec)}` : ""}`} />
+      )}
     </>
   );
 }

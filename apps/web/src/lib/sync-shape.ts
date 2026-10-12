@@ -13,6 +13,33 @@ export function shapeCell(value: unknown): string | number | null {
   return JSON.stringify(value);
 }
 
+/** One sync table's `json_agg` value, either already parsed or a JSON string. */
+export function rowsFromBundle(table: string, value: unknown): SyncRow[] {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  const out: SyncRow[] = [];
+  for (const raw of parsed) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = shapeRow(table, raw as Record<string, unknown>);
+    if (row) out.push(row);
+  }
+  return out;
+}
+
+/** Compare If-None-Match / ETag header values. Quotes and the weak marker are ignored. */
+export function normalizeEtag(header: string | null): string | null {
+  if (!header) return null;
+  const tag = header.trim().replace(/^W\//i, "").replace(/^"/, "").replace(/"$/, "");
+  return tag || null;
+}
+
 /** Keep only the columns the local table has. Drops a row with no id. */
 export function shapeRow(table: string, raw: Record<string, unknown>): SyncRow | null {
   const cols = SYNC_COLUMNS[table];

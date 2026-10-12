@@ -51,7 +51,7 @@ export function getDb(userId: string, tenantId: string): PowerSyncDatabase {
   dbKey = key;
   if (typeof window !== "undefined") {
     startLabFileQueue(db, userId);
-    startCustomSync(db);
+    startCustomSync(db, key);
   }
   return db;
 }

@@ -121,7 +121,15 @@ export function MedicinesScreen() {
                   <td className="text-slate-500">{m.company_name ?? "—"}</td>
                 </tr>
               ))}
-              {!hits.length && (
+              {catalogue === null && !hits.length &&
+                Array.from({ length: 8 }, (_, i) => (
+                  <tr key={i}>
+                    <td colSpan={6} className="py-2.5">
+                      <span className="block h-3 w-full max-w-md animate-pulse rounded bg-slate-200" />
+                    </td>
+                  </tr>
+                ))}
+              {!hits.length && catalogue !== null && (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-500">
                     {searching ? "No medicine matches that search." : catalogue === 0 ? "No medicines downloaded yet." : "No medicines on this page."}

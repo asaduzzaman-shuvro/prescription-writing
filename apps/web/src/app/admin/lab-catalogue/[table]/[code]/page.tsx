@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { saveLabCatalogueEntry } from "../../actions";
+import { connection } from "next/server";
 
 export const metadata = { title: "Lab catalogue" };
 
@@ -15,6 +16,7 @@ export default async function LabCatalogueEntryPage({ params, searchParams }: {
   params: Promise<{ table: string; code: string }>;
   searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
+  await connection();
   const { table, code: rawCode } = await params;
   const { error, saved } = await searchParams;
   if (table !== "tests" && table !== "panels") notFound();

@@ -1,29 +1,91 @@
 import { s } from "@rx/db";
-import { desc, isNull, sql, type SQL } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import { desc, sql } from "drizzle-orm";
 import Link from "next/link";
 import { PageHeader, Stat } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
+import { connection } from "next/server";
 
 export const metadata = { title: "Admin" };
 
-export default async function AdminDashboard() {
-  const count = (t: PgTable, where?: SQL) =>
-    ownerDb.select({ n: sql<number>`count(*)::int` }).from(t).where(where).then((r) => r[0]!.n);
-  const [products, active, generics, companies, tenants, unverified, jobs] = await Promise.all([
-    count(s.brandProduct),
-    count(s.brandProduct, sql`${s.brandProduct.isActive}`),
-    count(s.generic),
-    count(s.company),
-    count(s.tenant),
-    count(s.doctorProfile, isNull(s.doctorProfile.bmdcVerifiedAt)),
-    ownerDb.select().from(s.importJob).orderBy(desc(s.importJob.createdAt)).limit(5),
+const DASH_TTL_MS = 30_000;
+
+interface Dash {
+  at: number;
+  products: number;
+  active: number;
+  generics: number;
+  companies: number;
+  tenants: number;
+  unverified: number;
+  devSeed: number;
+  jobs: { id: string; createdAt: Date; filename: string; source: string; summary: unknown }[];
+}
+
+let dashCache: Dash | null = null;
+
+async function loadDash(): Promise<Dash> {
+  if (dashCache && Date.now() - dashCache.at < DASH_TTL_MS) return dashCache;
+  const [counts, jobs] = await Promise.all([
+    ownerDb.execute<{
+      products: number;
+      active: number;
+      dev_seed: number;
+      generics: number;
+      companies: number;
+      tenants: number;
+      unverified: number;
+    }>(sql`
+      SELECT p.products, p.active, p.dev_seed,
+             (SELECT count(*)::int FROM generic) AS generics,
+             (SELECT count(*)::int FROM company) AS companies,
+             (SELECT count(*)::int FROM tenant) AS tenants,
+             (SELECT count(*)::int FROM doctor_profile WHERE bmdc_verified_at IS NULL) AS unverified
+        FROM (
+          SELECT count(*)::int AS products,
+                 count(*) FILTER (WHERE is_active)::int AS active,
+                 count(*) FILTER (WHERE source LIKE 'medex-%')::int AS dev_seed
+            FROM brand_product
+        ) p
+    `),
+    ownerDb
+      .select({
+        id: s.importJob.id,
+        createdAt: s.importJob.createdAt,
+        filename: s.importJob.filename,
+        source: s.importJob.source,
+        summary: s.importJob.summary,
+      })
+      .from(s.importJob)
+      .orderBy(desc(s.importJob.createdAt))
+      .limit(5),
   ]);
-  const devSeed = await ownerDb
-    .select({ n: sql<number>`count(*)::int` })
-    .from(s.brandProduct)
-    .where(sql`${s.brandProduct.source} like 'medex-%'`)
-    .then((r) => r[0]!.n);
+  const row = (Array.isArray(counts) ? counts[0] : undefined) ?? {
+    products: 0,
+    active: 0,
+    dev_seed: 0,
+    generics: 0,
+    companies: 0,
+    tenants: 0,
+    unverified: 0,
+  };
+  const n = (v: unknown) => Number(v) || 0;
+  dashCache = {
+    at: Date.now(),
+    products: n(row.products),
+    active: n(row.active),
+    generics: n(row.generics),
+    companies: n(row.companies),
+    tenants: n(row.tenants),
+    unverified: n(row.unverified),
+    devSeed: n(row.dev_seed),
+    jobs,
+  };
+  return dashCache;
+}
+
+export default async function AdminDashboard() {
+  await connection();
+  const { products, active, generics, companies, tenants, unverified, devSeed, jobs } = await loadDash();
 
   return (
     <div className="flex min-h-full flex-1 flex-col">

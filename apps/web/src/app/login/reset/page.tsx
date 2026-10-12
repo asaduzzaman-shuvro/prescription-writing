@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { LoginLoading } from "@/components/loading-states";
 import { completePasswordReset } from "../reset-actions";
 
 function ResetForm() {
@@ -58,7 +59,7 @@ function ResetForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<main className="p-8 text-center text-sm text-slate-500">Loading…</main>}>
+    <Suspense fallback={<LoginLoading />}>
       <ResetForm />
     </Suspense>
   );

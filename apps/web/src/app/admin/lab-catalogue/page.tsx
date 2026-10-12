@@ -1,27 +1,75 @@
 import { LAB_DEPARTMENTS } from "@rx/core";
 import { s } from "@rx/db";
-import { asc, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import Link from "next/link";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, Pager } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
+import { connection } from "next/server";
 
 export const metadata = { title: "Lab catalogue" };
 
 const deptName = (d: string | null) => LAB_DEPARTMENTS.find((x) => x.id === d)?.name ?? d ?? "";
+const SIZE = 50;
 
-export default async function LabCataloguePage({ searchParams }: { searchParams: Promise<{ dept?: string; q?: string }> }) {
-  const { dept = "", q = "" } = await searchParams;
-  const [tests, panels, overrides] = await Promise.all([
-    ownerDb.select().from(s.labTest).where(isNull(s.labTest.tenantId)).orderBy(asc(s.labTest.sortOrder)),
-    ownerDb.select().from(s.labPanel).where(isNull(s.labPanel.tenantId)).orderBy(asc(s.labPanel.sortOrder)),
-    ownerDb.select({ code: s.labTest.code, n: sql<number>`count(*)::int` }).from(s.labTest).where(isNotNull(s.labTest.tenantId)).groupBy(s.labTest.code),
+export default async function LabCataloguePage({ searchParams }: { searchParams: Promise<{ dept?: string; q?: string; page?: string; ppage?: string }> }) {
+  await connection();
+  const sp = await searchParams;
+  const dept = sp.dept ?? "";
+  const q = sp.q ?? "";
+  const page = Math.max(1, Number(sp.page ?? 1) || 1);
+  const ppage = Math.max(1, Number(sp.ppage ?? 1) || 1);
+  const words = q.trim();
+  const text = words ? `%${words}%` : "";
+  const [tests, panels] = await Promise.all([
+    ownerDb
+      .select({
+        id: s.labTest.id,
+        name: s.labTest.name,
+        short: s.labTest.short,
+        code: s.labTest.code,
+        department: s.labTest.department,
+        unit: s.labTest.unit,
+        kind: s.labTest.kind,
+        source: s.labTest.source,
+        isActive: s.labTest.isActive,
+      })
+      .from(s.labTest)
+      .where(
+        and(
+          isNull(s.labTest.tenantId),
+          dept ? eq(s.labTest.department, dept) : undefined,
+          text ? or(ilike(s.labTest.name, text), ilike(s.labTest.short, text), ilike(s.labTest.code, text)) : undefined,
+        ),
+      )
+      .orderBy(asc(s.labTest.sortOrder), asc(s.labTest.name), asc(s.labTest.code))
+      .limit(SIZE + 1)
+      .offset((page - 1) * SIZE),
+    ownerDb
+      .select()
+      .from(s.labPanel)
+      .where(
+        and(
+          isNull(s.labPanel.tenantId),
+          dept ? eq(s.labPanel.department, dept) : undefined,
+          text ? or(ilike(s.labPanel.name, text), ilike(s.labPanel.key, text)) : undefined,
+        ),
+      )
+      .orderBy(asc(s.labPanel.sortOrder), asc(s.labPanel.name), asc(s.labPanel.key))
+      .limit(SIZE + 1)
+      .offset((ppage - 1) * SIZE),
   ]);
+  const shownTests = tests.slice(0, SIZE);
+  const shownPanels = panels.slice(0, SIZE);
+  const codes = shownTests.map((t) => t.code);
+  const overrides = codes.length
+    ? await ownerDb
+        .select({ code: s.labTest.code, n: sql<number>`count(*)::int` })
+        .from(s.labTest)
+        .where(and(isNotNull(s.labTest.tenantId), inArray(s.labTest.code, codes)))
+        .groupBy(s.labTest.code)
+    : [];
   const changedBy = new Map(overrides.map((o) => [o.code, o.n]));
-  const words = q.trim().toLowerCase();
-  const match = (r: { department: string | null; name: string | null }, extra: string) =>
-    (!dept || r.department === dept) && (!words || `${r.name} ${extra}`.toLowerCase().includes(words));
-  const shownTests = tests.filter((t) => match(t, `${t.short} ${t.code}`));
-  const shownPanels = panels.filter((p) => match(p, p.key));
+  const filter = `q=${encodeURIComponent(q)}&dept=${encodeURIComponent(dept)}`;
   return (
     <>
       <PageHeader
@@ -55,9 +103,11 @@ export default async function LabCataloguePage({ searchParams }: { searchParams:
                 <td className="text-xs">{changedBy.get(t.code) ?? ""}</td>
               </tr>
             ))}
+            {!shownTests.length && <tr><td colSpan={7} className="text-slate-500">No tests on this page.</td></tr>}
           </tbody>
         </table>
       </div>
+      {(page > 1 || tests.length > SIZE) && <Pager page={page} hasNext={tests.length > SIZE} base={`/admin/lab-catalogue?${filter}&ppage=${ppage}`} />}
       <h2 className="mb-2 font-semibold">Panels</h2>
       <div className="card overflow-x-auto">
         <table className="table text-sm" data-testid="admin-lab-panels">
@@ -75,9 +125,11 @@ export default async function LabCataloguePage({ searchParams }: { searchParams:
                 </tr>
               );
             })}
+            {!shownPanels.length && <tr><td colSpan={5} className="text-slate-500">No panels on this page.</td></tr>}
           </tbody>
         </table>
       </div>
+      {(ppage > 1 || panels.length > SIZE) && <Pager page={ppage} hasNext={panels.length > SIZE} base={`/admin/lab-catalogue?${filter}&page=${page}`} />}
     </>
   );
 }

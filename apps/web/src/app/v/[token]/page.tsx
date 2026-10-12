@@ -2,6 +2,7 @@ import { formatInstruction, type PrescriptionDoc } from "@rx/core";
 import { s } from "@rx/db";
 import { eq } from "drizzle-orm";
 import { ownerDb } from "@/lib/db";
+import { connection } from "next/server";
 
 export const metadata = { title: "Verify prescription", robots: { index: false } };
 
@@ -9,6 +10,7 @@ export const metadata = { title: "Verify prescription", robots: { index: false }
 const mask = (name: string) => name.split(/\s+/).map((w) => (w.length <= 1 ? w : `${w[0]}${"•".repeat(Math.min(w.length - 1, 4))}`)).join(" ");
 
 export default async function VerifyPage({ params }: { params: Promise<{ token: string }> }) {
+  await connection();
   const { token } = await params;
   const rows = /^[A-Za-z0-9_-]{8,64}$/.test(token)
     ? await ownerDb

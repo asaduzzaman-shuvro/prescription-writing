@@ -9,6 +9,8 @@ import { useLabCatalogue } from "@/lib/doctor/hooks";
 import { buildLabPrintHtml, provisionalLabRef } from "@/lib/doctor/lab-print";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, parseJson, uuid } from "@/lib/doctor/util";
+import { ReportLoading } from "@/components/loading-states";
+import { ListPager } from "@/components/list-pager";
 import { EMPTY_ROW, FLAG_STYLE, LabValueInput, rowFromResult, rowResult, type RowInput } from "./lab-entry";
 import { PatientSearch } from "./patient-search";
 
@@ -28,13 +30,23 @@ const shortTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString("e
 
 function LabWorklist() {
   const session = useSession();
+  const [page, setPage] = useState(0);
+  const pageSize = 40;
   const { data } = useQuery<{ request_id: string; lab_no: string | null; collected_at: string | null; titles: string; name: string; code: string | null; abnormal: number; verified: number }>(
     `SELECT r.request_id, max(r.lab_no) AS lab_no, min(r.collected_at) AS collected_at, group_concat(r.title, ', ') AS titles, p.name, p.code,
             sum(r.results LIKE '%"flag":%') AS abnormal,
             sum(CASE WHEN r.verified_at IS NOT NULL AND r.verified_at <> '' THEN 1 ELSE 0 END) AS verified
        FROM lab_report r JOIN patient p ON p.id = r.patient_id
       WHERE r.source = 'in_house' AND r.request_id IS NOT NULL AND r.deleted_at IS NULL
-      GROUP BY r.request_id ORDER BY max(r.created_at) DESC LIMIT 100`,
+      GROUP BY r.request_id ORDER BY max(r.created_at) DESC LIMIT ? OFFSET ?`,
+    [pageSize, page * pageSize],
+  );
+  const { data: totals } = useQuery<{ n: number }>(
+    `SELECT count(*) AS n FROM (
+       SELECT r.request_id FROM lab_report r
+        WHERE r.source = 'in_house' AND r.request_id IS NOT NULL AND r.deleted_at IS NULL
+        GROUP BY r.request_id
+     ) AS requests`,
   );
   return (
     <div className="space-y-2">
@@ -64,6 +76,7 @@ function LabWorklist() {
           </div>
         ))}
         {!data.length && <p className="px-2.5 py-3 text-sm text-slate-500">No lab reports yet. Start with “New lab report”.</p>}
+        <ListPager page={page} total={Number(totals[0]?.n ?? 0)} size={pageSize} onPage={setPage} />
       </div>
     </div>
   );
@@ -328,7 +341,7 @@ function LabPrintView({ requestId }: { requestId: string }) {
     }
   }
 
-  if (bundle === undefined) return <div className="text-sm text-slate-500">Preparing print…</div>;
+  if (bundle === undefined) return <ReportLoading />;
   if (bundle === null) return <div className="text-sm text-slate-500">This lab report isn't on this device.</div>;
   return (
     <div className="space-y-2">

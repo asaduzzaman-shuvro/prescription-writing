@@ -5,10 +5,12 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { SchemaEditor } from "./schema-editor";
+import { connection } from "next/server";
 
 export const metadata = { title: "Exam template" };
 
 export default async function TemplatePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ published?: string }> }) {
+  await connection();
   const { id } = await params;
   const { published } = await searchParams;
   const specialties = await ownerDb.select().from(s.specialty);

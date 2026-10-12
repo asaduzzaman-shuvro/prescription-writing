@@ -1,15 +1,28 @@
 import "server-only";
 import { s } from "@rx/db";
-import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { ownerDb } from "./db";
 
 export const PAGE_SIZE = 50;
 
+const OPTION_TTL_MS = 60_000;
+let formCache: { at: number; rows: { id: string; name: string }[] } | null = null;
+let companyCache: { at: number; rows: { id: string; name: string }[] } | null = null;
+
+export function clearCompanyOptionCache() {
+  companyCache = null;
+}
+
 export async function listProducts(opts: { q?: string; status?: string; page: number }) {
   const q = opts.q?.trim();
+  const needle = q ? q.toLowerCase().replace(/[\\%_]/g, "\\$&") : "";
   const where = and(
     q
-      ? or(ilike(s.brandProduct.brandName, `${q}%`), ilike(s.brandProduct.genericText, `%${q}%`), eq(s.brandProduct.darNumber, q))
+      ? or(
+          sql`lower(${s.brandProduct.brandName}) like ${needle + "%"}`,
+          sql`lower(${s.brandProduct.genericText}) like ${"%" + needle + "%"}`,
+          eq(s.brandProduct.darNumber, q),
+        )
       : undefined,
     opts.status === "inactive" ? eq(s.brandProduct.isActive, false) : opts.status === "all" ? undefined : eq(s.brandProduct.isActive, true),
   );
@@ -56,19 +69,25 @@ export async function getProduct(id: string) {
 }
 
 export async function formOptions() {
-  return ownerDb
+  if (formCache && Date.now() - formCache.at < OPTION_TTL_MS) return formCache.rows;
+  const rows = await ownerDb
     .select({ id: s.dosageForm.id, name: s.dosageForm.name })
     .from(s.dosageForm)
     .where(eq(s.dosageForm.isActive, true))
     .orderBy(asc(s.dosageForm.name));
+  formCache = { at: Date.now(), rows };
+  return rows;
 }
 
 export async function companyOptions() {
-  return ownerDb
+  if (companyCache && Date.now() - companyCache.at < OPTION_TTL_MS) return companyCache.rows;
+  const rows = await ownerDb
     .select({ id: s.company.id, name: s.company.name })
     .from(s.company)
     .where(eq(s.company.isActive, true))
     .orderBy(asc(s.company.name));
+  companyCache = { at: Date.now(), rows };
+  return rows;
 }
 
 export async function genericNamesByIds(ids: string[]) {

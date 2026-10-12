@@ -3,7 +3,7 @@
 import type { PowerSyncDatabase } from "@powersync/web";
 import { useSyncExternalStore } from "react";
 import { CATALOGUE_SYNC_TABLES, CLINIC_SYNC_TABLES, SYNC_COLUMNS } from "@/lib/sync-tables";
-import type { SyncRow } from "@/lib/sync-shape";
+import { normalizeEtag, type SyncRow } from "@/lib/sync-shape";
 import { BackendConnector } from "./connector";
 
 export interface CustomSyncState {
@@ -24,6 +24,7 @@ const initial: CustomSyncState = {
 
 let state = initial;
 const listeners = new Set<() => void>();
+let syncScope = "";
 let generation = 0;
 let runningGen: number | null = null;
 let stopListeners: (() => void) | null = null;
@@ -95,6 +96,34 @@ async function uploadAll(db: PowerSyncDatabase) {
   }
 }
 
+async function revision(part: string): Promise<string | null> {
+  try {
+    return localStorage.getItem(`rx-sync-etag:${syncScope}:${part}`);
+  } catch {
+    return null;
+  }
+}
+
+function rememberRevision(part: string, etag: string) {
+  try {
+    localStorage.setItem(`rx-sync-etag:${syncScope}:${part}`, etag);
+  } catch {
+    // Private mode can refuse storage. The next sync just downloads again.
+  }
+}
+
+/** Only send If-None-Match when this browser already has rows. An empty table must download. */
+async function usableEtag(db: PowerSyncDatabase, part: string, probe: string): Promise<string | null> {
+  const etag = await revision(part);
+  if (!etag) return null;
+  try {
+    const row = await db.get<{ n: number }>(`SELECT count(*) AS n FROM ${probe}`);
+    return Number(row?.n) > 0 ? etag : null;
+  } catch {
+    return null;
+  }
+}
+
 async function applyTables(db: PowerSyncDatabase, tables: readonly string[], data: Record<string, SyncRow[]>, dirty: Map<string, Set<string>>) {
   await db.writeTransaction(async (tx) => {
     let checkpoint = -1;
@@ -117,8 +146,8 @@ async function applyTables(db: PowerSyncDatabase, tables: readonly string[], dat
       }
       const fresh = rows.filter((row) => !keep.has(String(row.id)));
       const sqlText = `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`;
-      for (let i = 0; i < fresh.length; i += 80) {
-        const chunk = fresh.slice(i, i + 80);
+      for (let i = 0; i < fresh.length; i += 200) {
+        const chunk = fresh.slice(i, i + 200);
         await tx.executeBatch(sqlText, chunk.map((row) => cols.map((col) => row[col] ?? null)));
       }
     }
@@ -126,23 +155,60 @@ async function applyTables(db: PowerSyncDatabase, tables: readonly string[], dat
   });
 }
 
-async function pull(db: PowerSyncDatabase, gen: number) {
-  const res = await fetch("/api/sync/pull", { cache: "no-store" });
-  const body = (await res.json().catch(() => ({}))) as PullBody;
-  if (gen !== generation) return;
+interface PartFetch {
+  unchanged: boolean;
+  rows?: Record<string, SyncRow[]>;
+  etag: string | null;
+}
+
+async function fetchPart(part: "clinic" | "catalogue", etag: string | null, gen: number): Promise<PartFetch> {
+  const res = await fetch(`/api/sync/pull?part=${part}`, {
+    cache: "no-store",
+    headers: etag ? { "if-none-match": `"${etag}"` } : {},
+  });
+  if (gen !== generation) return { unchanged: true, etag };
   if (res.status === 401) throw new SyncNotice("Sign in again to sync");
-  if (res.status === 402 || res.status === 403) throw new SyncNotice(body.error || "This chamber cannot sync");
-  if (!res.ok || !body.clinic || !body.catalogue) throw new Error(`sync pull ${res.status}`);
-  for (const table of CLINIC_SYNC_TABLES) {
-    if (!Object.prototype.hasOwnProperty.call(body.clinic, table)) throw new Error(`sync pull missing ${table}`);
+  if (res.status === 402 || res.status === 403) {
+    const body = (await res.json().catch(() => ({}))) as PullBody;
+    throw new SyncNotice(body.error || "This chamber cannot sync");
   }
+  if (res.status === 304) return { unchanged: true, etag: normalizeEtag(res.headers.get("etag")) ?? etag };
+  const body = (await res.json().catch(() => ({}))) as PullBody;
+  if (!res.ok) throw new Error(`sync pull ${res.status}`);
+  const rows = part === "clinic" ? body.clinic : body.catalogue;
+  const tables = part === "clinic" ? CLINIC_SYNC_TABLES : CATALOGUE_SYNC_TABLES;
+  if (!rows) throw new Error(`sync pull missing ${part}`);
+  for (const table of tables) {
+    if (!Object.prototype.hasOwnProperty.call(rows, table)) throw new Error(`sync pull missing ${table}`);
+  }
+  return { unchanged: false, rows, etag: normalizeEtag(res.headers.get("etag")) };
+}
+
+async function pull(db: PowerSyncDatabase, gen: number) {
   const dirty = await localEdits(db);
   if (dirty === "unknown") throw new SyncNotice("Some changes are still waiting to upload");
   if (gen !== generation) return;
-  await applyTables(db, CLINIC_SYNC_TABLES, body.clinic, dirty);
+  const [clinicEtag, catalogueEtag] = await Promise.all([
+    usableEtag(db, "clinic", "specialty"),
+    usableEtag(db, "catalogue", "dosage_form"),
+  ]);
+  // Start both downloads together. The screen opens as soon as the smaller clinic half is in.
+  const clinicReq = fetchPart("clinic", clinicEtag, gen);
+  const catalogueReq = fetchPart("catalogue", catalogueEtag, gen);
+  const clinic = await clinicReq;
+  if (gen !== generation) return;
+  if (!clinic.unchanged && clinic.rows) {
+    await applyTables(db, CLINIC_SYNC_TABLES, clinic.rows, dirty);
+    if (clinic.etag) rememberRevision("clinic", clinic.etag);
+  }
   if (gen !== generation) return;
   emit({ clinicReady: true, error: null, syncing: true });
-  await applyTables(db, CATALOGUE_SYNC_TABLES, body.catalogue, dirty);
+  const catalogue = await catalogueReq;
+  if (gen !== generation) return;
+  if (!catalogue.unchanged && catalogue.rows) {
+    await applyTables(db, CATALOGUE_SYNC_TABLES, catalogue.rows, dirty);
+    if (catalogue.etag) rememberRevision("catalogue", catalogue.etag);
+  }
   if (gen !== generation) return;
   emit({ fullReady: true, syncing: false, error: null });
 }
@@ -174,9 +240,10 @@ async function run(gen: number, db: PowerSyncDatabase) {
 }
 
 /** Download and upload through /api/sync/pull and /api/sync/upload. No PowerSync server. */
-export function startCustomSync(db: PowerSyncDatabase) {
+export function startCustomSync(db: PowerSyncDatabase, scope: string) {
   stopListeners?.();
   stopListeners = null;
+  syncScope = scope;
   const gen = ++generation;
   emit({ mode: "custom", syncing: true, error: null, clinicReady: false, fullReady: false });
   const tick = () => void run(gen, db);

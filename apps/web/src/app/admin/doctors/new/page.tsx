@@ -3,10 +3,12 @@ import { PageHeader } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { OnboardForm } from "./onboard-form";
+import { connection } from "next/server";
 
 export const metadata = { title: "Onboard doctor" };
 
 export default async function NewDoctorPage() {
+  await connection();
   await requireAdmin({ superOnly: true });
   const specialties = await ownerDb.select().from(s.specialty);
   return (

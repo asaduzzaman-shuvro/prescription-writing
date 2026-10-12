@@ -9,7 +9,15 @@ export type Db = ReturnType<typeof createDb>;
 export function openSql(connection: DbConnection, opts: { max?: number; onnotice?: () => void } = {}) {
   const settings = {
     max: opts.max ?? 10,
+    // Prepared statements break transaction-mode poolers. Parsing cost is small next to a remote round trip.
     prepare: false as const,
+    // Shared hosts drop idle TCP sessions. The next query then hangs until the dead socket times out,
+    // which is instant on localhost and many seconds in production. Close idle sockets ourselves,
+    // and probe sooner so a live connection is not killed by a NAT timeout.
+    idle_timeout: 20,
+    connect_timeout: 10,
+    keep_alive: 10,
+    max_lifetime: 60 * 30,
     ...(opts.onnotice ? { onnotice: opts.onnotice } : {}),
   };
   return typeof connection === "string" ? postgres(connection, settings) : postgres({ ...connection, ...settings });

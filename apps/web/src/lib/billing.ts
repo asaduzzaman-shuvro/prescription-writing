@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { audit } from "./audit";
 import { ownerDb } from "./db";
+import { invalidateTenantBrief } from "./tenant-access";
 
 export const PLANS = {
   starter: { name: "Starter", monthly: 700, smsIncluded: 0 },
@@ -35,6 +36,7 @@ export async function settlePayment(paymentId: string, opts: { gatewayRef?: stri
              sms_credits = sms_credits + ${included * p.months},
              plan_expires_at = (greatest(coalesce(plan_expires_at, current_date), current_date) + make_interval(months => ${p.months}))::date
        where id = ${p.tenantId}::uuid`);
+    invalidateTenantBrief(p.tenantId);
     await audit({ actorUserId: opts.actorUserId ?? null, tenantId: p.tenantId, action: "billing.payment.paid", entity: "subscription_payment", entityId: p.id, after: { plan: p.plan, months: p.months, amount: p.amount, method: p.method } });
     return p;
   });

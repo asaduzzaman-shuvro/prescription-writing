@@ -323,7 +323,8 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
     setSigningOut(true);
     const logout = fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
     const leave = disconnectSession().catch(() => null);
-    await Promise.race([Promise.all([logout, leave]), new Promise((r) => setTimeout(r, 2500))]);
+    const forgetShell = navigator.serviceWorker?.getRegistration?.().then((reg) => reg?.active?.postMessage({ clearShell: true })).catch(() => null);
+    await Promise.race([Promise.all([logout, leave, forgetShell]), new Promise((r) => setTimeout(r, 2500))]);
     window.location.href = "/login";
   }
 

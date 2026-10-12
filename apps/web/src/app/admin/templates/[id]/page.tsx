@@ -5,10 +5,12 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { TemplateEditor } from "../editor";
+import { connection } from "next/server";
 
 export const metadata = { title: "Template" };
 
 export default async function TemplatePage({ params }: { params: Promise<{ id: string }> }) {
+  await connection();
   const { id } = await params;
   const specialties = await ownerDb.select().from(s.specialty);
   if (id === "new") {

@@ -3,11 +3,13 @@ import { and, desc, eq, ilike } from "drizzle-orm";
 import { PageHeader, Pager } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { connection } from "next/server";
 
 export const metadata = { title: "Audit log" };
 const SIZE = 100;
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<{ action?: string; entity?: string; page?: string }> }) {
+  await connection();
   await requireAdmin({ superOnly: true });
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1));

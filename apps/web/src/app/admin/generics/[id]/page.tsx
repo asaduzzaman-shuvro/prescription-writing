@@ -2,16 +2,21 @@ import { s } from "@rx/db";
 import { asc, eq, sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, Pager } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { GenericForm } from "./generic-form";
+import { connection } from "next/server";
 
 export const metadata = { title: "Generic" };
+const BRANDS = 50;
 
 const stripHtml = (h: string | null) => (h ?? "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/[ \t]+/g, " ").trim();
 
-export default async function GenericPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function GenericPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ page?: string }> }) {
+  await connection();
   const { id } = await params;
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const [g] = await ownerDb.select().from(s.generic).where(eq(s.generic.id, id));
   if (!g) notFound();
   const [classes, mono, brands] = await Promise.all([
@@ -22,9 +27,11 @@ export default async function GenericPage({ params }: { params: Promise<{ id: st
       .from(s.productIngredient)
       .innerJoin(s.brandProduct, eq(s.brandProduct.id, s.productIngredient.productId))
       .where(eq(s.productIngredient.genericId, id))
-      .orderBy(asc(sql`lower(${s.brandProduct.brandName})`))
-      .limit(200),
+      .orderBy(asc(sql`lower(${s.brandProduct.brandName})`), asc(s.brandProduct.id))
+      .limit(BRANDS + 1)
+      .offset((page - 1) * BRANDS),
   ]);
+  const shownBrands = brands.slice(0, BRANDS);
   const m = mono[0];
   return (
     <>
@@ -45,14 +52,16 @@ export default async function GenericPage({ params }: { params: Promise<{ id: st
       />
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 className="mb-2 font-semibold">Brands ({brands.length}{brands.length === 200 ? "+" : ""})</h2>
+          <h2 className="mb-2 font-semibold">Brands</h2>
           <div className="card max-h-96 overflow-auto p-2 text-sm">
-            {brands.map((b) => (
+            {shownBrands.map((b) => (
               <Link key={b.id} href={`/admin/medicines/${b.id}`} className="block rounded px-2 py-1 hover:bg-slate-50">
                 <b>{b.brandName}</b> {b.strengthText} <span className="text-slate-500">{b.genericText !== g.name && `(${b.genericText})`}</span>
               </Link>
             ))}
+            {!shownBrands.length && <p className="px-2 py-1 text-slate-500">No brands on this page.</p>}
           </div>
+          {(page > 1 || brands.length > BRANDS) && <Pager page={page} hasNext={brands.length > BRANDS} base={`/admin/generics/${id}`} />}
         </div>
         <div>
           <h2 className="mb-2 font-semibold">Monograph {m && <span className="text-xs font-normal text-slate-500">({m.source})</span>}</h2>

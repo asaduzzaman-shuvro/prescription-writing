@@ -1,23 +1,32 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useStatus } from "@powersync/react";
+import { DetailPageLoading, FormPageLoading, ListPageLoading, PrescriptionLoading } from "@/components/loading-states";
 import { useHashRoute } from "@/lib/doctor/router";
 import { useCustomSync } from "@/lib/powersync/custom-sync";
 import { CLINIC_SYNC_PRIORITY, clinicDataReady, downloadPercent } from "@/lib/powersync/sync-ready";
-import { BookingsScreen } from "./bookings";
-import { DisplayScreen } from "./display";
-import { InvestigationsScreen } from "./investigations";
-import { LabScreen } from "./lab";
-import { LabSettingsScreen } from "./lab-settings";
-import { MedicinesScreen } from "./medicines";
-import { PatientDetail } from "./patient-detail";
-import { PatientEdit } from "./patient-form";
-import { PatientList } from "./patient-list";
-import { PrintView } from "./print-view";
-import { SettingsScreen } from "./settings";
-import { TemplatesScreen } from "./templates";
-import { Today } from "./today";
-import { VisitScreen } from "./visit";
+
+const list = () => <ListPageLoading />;
+const form = () => <FormPageLoading />;
+const detail = () => <DetailPageLoading />;
+const rx = () => <PrescriptionLoading />;
+
+// Each screen is its own chunk. The first paint only needs this file, not the visit or lab editors.
+const Today = dynamic(() => import("./today").then((m) => m.Today), { loading: list });
+const PatientDetail = dynamic(() => import("./patient-detail").then((m) => m.PatientDetail), { loading: detail });
+const PatientEdit = dynamic(() => import("./patient-form").then((m) => m.PatientEdit), { loading: form });
+const PatientList = dynamic(() => import("./patient-list").then((m) => m.PatientList), { loading: list });
+const VisitScreen = dynamic(() => import("./visit").then((m) => m.VisitScreen), { loading: rx });
+const PrintView = dynamic(() => import("./print-view").then((m) => m.PrintView), { loading: rx });
+const BookingsScreen = dynamic(() => import("./bookings").then((m) => m.BookingsScreen), { loading: list });
+const DisplayScreen = dynamic(() => import("./display").then((m) => m.DisplayScreen), { loading: list });
+const InvestigationsScreen = dynamic(() => import("./investigations").then((m) => m.InvestigationsScreen), { loading: list });
+const LabScreen = dynamic(() => import("./lab").then((m) => m.LabScreen), { loading: list });
+const LabSettingsScreen = dynamic(() => import("./lab-settings").then((m) => m.LabSettingsScreen), { loading: form });
+const MedicinesScreen = dynamic(() => import("./medicines").then((m) => m.MedicinesScreen), { loading: list });
+const SettingsScreen = dynamic(() => import("./settings").then((m) => m.SettingsScreen), { loading: form });
+const TemplatesScreen = dynamic(() => import("./templates").then((m) => m.TemplatesScreen), { loading: list });
 
 export function DoctorApp() {
   const r = useHashRoute();
@@ -28,16 +37,16 @@ export function DoctorApp() {
     const clinicPct = status.downloadProgress?.untilPriority(CLINIC_SYNC_PRIORITY).downloadedFraction;
     const pct = clinicPct != null ? Math.round(clinicPct * 100) : downloadPercent(status);
     return (
-      <div className="card p-8 text-center text-sm text-slate-600" data-testid="first-sync">
-        <p>Loading your patients and today&apos;s queue…</p>
-        <p className="mt-2 text-xs text-slate-500">Medicine catalogue downloads in the background after this.</p>
-        {custom.error && <p className="mt-2 text-xs text-red-600">{custom.error}</p>}
+      <div data-testid="first-sync" className="space-y-3">
+        <ListPageLoading label="Loading today's queue" />
+        <p className="text-center text-xs text-slate-500">Medicine catalogue downloads in the background after this.</p>
+        {custom.error && <p className="text-center text-xs text-red-600">{custom.error}</p>}
         {pct != null && (
-          <div className="mx-auto mt-4 max-w-xs">
+          <div className="mx-auto max-w-xs">
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full bg-brand-600 transition-all" style={{ width: `${pct}%` }} />
             </div>
-            <p className="mt-1 tabular-nums text-xs text-slate-500">{pct}%</p>
+            <p className="mt-1 text-center text-xs text-slate-500 tabular-nums">{pct}%</p>
           </div>
         )}
       </div>

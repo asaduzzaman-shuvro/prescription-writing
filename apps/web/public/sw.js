@@ -1,7 +1,7 @@
 /* RxPad offline app shell. The doctor app is a single page (/doctor) with hash routing, so caching
    that page plus Next's static assets and fonts is enough to open it with no network. Patient data
    lives in the browser SQLite managed by PowerSync, not in this cache. */
-const CACHE = "rxpad-shell-v2";
+const CACHE = "rxpad-shell-v3";
 const SHELL = ["/doctor", "/fonts/NotoSansBengali.ttf", "/fonts/NotoSans.ttf", "/manifest.webmanifest", "/icon.svg"];
 
 const isAsset = (path) => path.startsWith("/_next/static/") || path.startsWith("/fonts/");
@@ -21,6 +21,10 @@ self.addEventListener("install", (e) => {
 
 // The page posts the resources it already loaded (before this worker controlled it) so they are cached too.
 self.addEventListener("message", (e) => {
+  if (e.data && e.data.clearShell) {
+    e.waitUntil(caches.open(CACHE).then((c) => c.delete("/doctor")));
+    return;
+  }
   const urls = (e.data && e.data.cacheUrls) || [];
   e.waitUntil(
     caches.open(CACHE).then((c) =>
@@ -40,6 +44,53 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+async function pageScope() {
+  try {
+    if (!self.cookieStore) return null;
+    const cookie = await self.cookieStore.get("rx_scope");
+    return cookie && cookie.value ? cookie.value : "";
+  } catch {
+    return null;
+  }
+}
+
+function rememberDoctor(res) {
+  if (res.ok && !res.redirected) {
+    const copy = res.clone();
+    caches.open(CACHE).then((c) => c.put("/doctor", copy));
+  }
+  return res;
+}
+
+async function doctorNavigate(req) {
+  const cached = await caches.match("/doctor");
+  const network = fetch(req).then(rememberDoctor);
+  const scope = await pageScope();
+  const cachedScope = cached ? cached.headers.get("x-rx-scope") || "" : "";
+  const sameSignIn = scope != null && scope !== "" && cached && cachedScope === scope;
+  if (!sameSignIn) {
+    try {
+      return await network;
+    } catch {
+      return cached || Response.error();
+    }
+  }
+  // Localhost answers well under this. A slow shared host shows the last shell and refreshes the cache behind it.
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(cached.clone()), 800);
+    network.then(
+      (res) => {
+        clearTimeout(timer);
+        resolve(res.ok ? res : cached.clone());
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(cached.clone());
+      },
+    );
+  });
+}
+
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
@@ -48,16 +99,10 @@ self.addEventListener("fetch", (e) => {
   // Never cache API calls, auth or the sync endpoints.
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/login")) return;
 
-  // Doctor app page: network first (fresh deploys), fall back to the cached shell offline.
+  // Doctor app page: use the cached shell when this sign-in matches and the server is slow.
+  // A different user or chamber always waits for the network. Offline still falls back to the cache.
   if (req.mode === "navigate" && url.pathname.startsWith("/doctor")) {
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res.ok && !res.redirected) caches.open(CACHE).then((c) => c.put("/doctor", res.clone()));
-          return res;
-        })
-        .catch(() => caches.match("/doctor").then((r) => r || Response.error())),
-    );
+    e.respondWith(doctorNavigate(req));
     return;
   }
 

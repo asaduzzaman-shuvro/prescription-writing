@@ -6,10 +6,12 @@ import { ownerDb } from "@/lib/db";
 import { addSmsCredits, setTenantStatus, verifyBmdc } from "../actions";
 import { RecordPaymentForm } from "./billing";
 import { AddMemberForm, ProfileForm, ResetPasswordForm } from "./forms";
+import { connection } from "next/server";
 
 export const metadata = { title: "Chamber" };
 
 export default async function TenantPage({ params }: { params: Promise<{ tenantId: string }> }) {
+  await connection();
   const { tenantId } = await params;
   const [t] = await ownerDb.select().from(s.tenant).where(eq(s.tenant.id, tenantId));
   if (!t) notFound();

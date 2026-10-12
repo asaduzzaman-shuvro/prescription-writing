@@ -176,7 +176,7 @@ function MfaPanel() {
     <section className="card space-y-2 p-2.5 text-sm" data-testid="mfa-settings">
       <h2 className="font-semibold">Two-factor authentication (MFA)</h2>
       <p className="text-slate-500">Protect sign-in with Google Authenticator, Authy, or any TOTP app.</p>
-      {enabled === null && <p className="text-slate-400">Loading…</p>}
+      {enabled === null && <span className="block h-4 w-32 animate-pulse rounded bg-slate-200" />}
       {enabled === true && (
         <div className="space-y-2">
           <p className="text-green-700">MFA is on for this account.</p>

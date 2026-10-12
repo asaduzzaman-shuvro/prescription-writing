@@ -3,11 +3,13 @@ import { and, asc, eq, ilike, sql } from "drizzle-orm";
 import Link from "next/link";
 import { PageHeader, Pager } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
+import { connection } from "next/server";
 
 export const metadata = { title: "Generics" };
 const SIZE = 50;
 
 export default async function GenericsPage({ searchParams }: { searchParams: Promise<{ q?: string; abx?: string; page?: string }> }) {
+  await connection();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1));
   const rows = await ownerDb

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shapeCell, shapeRow } from "./sync-shape";
+import { normalizeEtag, rowsFromBundle, shapeCell, shapeRow } from "./sync-shape";
 
 describe("shapeCell", () => {
   it("maps postgres values onto sqlite types", () => {
@@ -21,5 +21,23 @@ describe("shapeRow", () => {
 
   it("drops a row without an id", () => {
     expect(shapeRow("company", { name: "Acme" })).toBeNull();
+  });
+});
+
+describe("rowsFromBundle", () => {
+  it("reads a json array and a json string", () => {
+    expect(rowsFromBundle("company", [{ id: "1", name: "Acme" }])).toEqual([{ id: "1", name: "Acme" }]);
+    expect(rowsFromBundle("company", JSON.stringify([{ id: "2", name: "Beta" }]))).toEqual([{ id: "2", name: "Beta" }]);
+    expect(rowsFromBundle("company", null)).toEqual([]);
+    expect(rowsFromBundle("company", "not-json")).toEqual([]);
+  });
+});
+
+describe("normalizeEtag", () => {
+  it("strips quotes and the weak validator", () => {
+    expect(normalizeEtag('"abc"')).toBe("abc");
+    expect(normalizeEtag('W/"abc"')).toBe("abc");
+    expect(normalizeEtag(null)).toBeNull();
+    expect(normalizeEtag("  ")).toBeNull();
   });
 });

@@ -1,17 +1,14 @@
-import { s } from "@rx/db";
-import { eq } from "drizzle-orm";
-import { ownerDb } from "@/lib/db";
 import { requireClinic } from "@/lib/session";
+import { tenantBrief } from "@/lib/tenant-access";
 import { DoctorRoot } from "./root";
+import { connection } from "next/server";
 
 export const metadata = { title: "Chamber" };
 
 export default async function DoctorLayout({ children }: { children: React.ReactNode }) {
+  await connection();
   const session = await requireClinic();
-  const [t] = await ownerDb
-    .select({ status: s.tenant.status, plan: s.tenant.plan, planExpiresAt: s.tenant.planExpiresAt, name: s.tenant.name })
-    .from(s.tenant)
-    .where(eq(s.tenant.id, session.tenantId));
+  const t = await tenantBrief(session.tenantId);
   if (t?.status === "suspended") {
     return <main className="p-8 text-center text-slate-600">This chamber is suspended. Please contact RxPad support.</main>;
   }

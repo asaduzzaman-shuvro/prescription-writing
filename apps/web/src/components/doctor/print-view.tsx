@@ -8,6 +8,7 @@ import { markVisitDone } from "@/lib/doctor/data";
 import { buildPrintHtml, type PrintBundle } from "@/lib/doctor/print";
 import { Link, navigate } from "@/lib/doctor/router";
 import { resumeEditAfterPrint } from "@/lib/doctor/util";
+import { PrescriptionLoading } from "@/components/loading-states";
 import { ShareButtons } from "./share";
 
 const MM = 96 / 25.4;
@@ -176,7 +177,7 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
     w.print();
   }
 
-  if (!bundle) return <div className="text-sm text-slate-500">Preparing print…</div>;
+  if (!bundle) return <PrescriptionLoading label="Preparing prescription" />;
   const { widthMm, heightMm } = paperDimensions(bundle.settings.paper);
   const frameMm = { w: widthMm + 16, h: heightMm + 20 };
   return (

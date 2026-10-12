@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { companyOptions, formOptions, getProduct } from "@/lib/catalogue";
 import { ProductForm } from "../product-form";
+import { connection } from "next/server";
 
 export const metadata = { title: "Edit medicine" };
 
 export default async function EditMedicine({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
+  await connection();
   const { id } = await params;
   const { saved } = await searchParams;
   const [p, forms, companies] = await Promise.all([getProduct(id), formOptions(), companyOptions()]);

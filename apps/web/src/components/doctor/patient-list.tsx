@@ -7,6 +7,7 @@ import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, normaliseMobile, today } from "@/lib/doctor/util";
+import { ListPager } from "@/components/list-pager";
 import type { PatientHit } from "./patient-search";
 
 /** Each tab is the whole group, not a shortened slice of the others. */
@@ -30,6 +31,8 @@ const GROUP_WHERE: Record<PatientGroup, string> = {
   seen: WRITTEN_RX,
 };
 
+const PAGE = 50;
+
 function groupFromHash(): PatientGroup {
   if (typeof window === "undefined") return "today";
   const g = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("group");
@@ -42,6 +45,7 @@ export function PatientList() {
   const doctors = useDoctors();
   const { current: chamber } = useChambers();
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
   const [group, setGroup] = useState<PatientGroup>(groupFromHash);
   const date = today();
   const term = q.trim();
@@ -59,14 +63,17 @@ export function PatientList() {
     if (isMobile) params.push(`%${mobile}%`);
     else params.push(`%${term}%`, `%${term}%`);
   }
-  params.push(50);
   const rows = useQuery<PatientHit>(
     `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code,
             (SELECT MAX(visit_date) FROM encounter e WHERE e.patient_id = p.id AND e.status <> 'cancelled') AS last_visit
        FROM patient p
       WHERE p.deleted_at IS NULL AND ${GROUP_WHERE[group]} ${searchSql}
       ORDER BY last_visit DESC, p.name
-      LIMIT ?`,
+      LIMIT ? OFFSET ?`,
+    [...params, PAGE, page * PAGE],
+  );
+  const { data: matched } = useQuery<{ n: number }>(
+    `SELECT count(*) AS n FROM patient p WHERE p.deleted_at IS NULL AND ${GROUP_WHERE[group]} ${searchSql}`,
     params,
   );
   const { data: counts } = useQuery<{ today_n: number; unseen_n: number; seen_n: number; n: number }>(
@@ -119,7 +126,10 @@ export function PatientList() {
               className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm ${group === t.id ? "bg-white font-medium text-brand-700 shadow-sm" : "text-slate-600 hover:bg-white/70 hover:text-slate-900"}`}
               aria-pressed={group === t.id}
               data-testid={`patient-tab-${t.id}`}
-              onClick={() => setGroup(t.id)}
+              onClick={() => {
+                setGroup(t.id);
+                setPage(0);
+              }}
             >
               {t.label}
               <span className="ml-1.5 tabular-nums text-xs text-slate-400">{t.n}</span>
@@ -132,7 +142,10 @@ export function PatientList() {
         className="input max-w-xl"
         placeholder="Search by mobile, name or ID"
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setPage(0);
+        }}
         data-testid="patient-list-search"
         autoFocus
       />
@@ -181,6 +194,7 @@ export function PatientList() {
             )}
           </tbody>
         </table>
+        <ListPager page={page} total={Number(matched[0]?.n ?? 0)} size={PAGE} onPage={setPage} />
       </div>
     </div>
   );

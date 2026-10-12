@@ -4,10 +4,12 @@ import { asc, isNull } from "drizzle-orm";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
+import { connection } from "next/server";
 
 export const metadata = { title: "Shared Rx templates" };
 
 export default async function SharedTemplatesPage() {
+  await connection();
   const rows = await ownerDb.select().from(s.rxTemplate).where(isNull(s.rxTemplate.tenantId)).orderBy(asc(s.rxTemplate.specialtyCode), asc(s.rxTemplate.name));
   return (
     <>

@@ -2,8 +2,10 @@ import "server-only";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { SCOPE_COOKIE, scopeValue } from "./session-scope";
 
 export const SESSION_COOKIE = "rx_session";
+export { SCOPE_COOKIE, scopeValue };
 const MAX_AGE = 60 * 60 * 24 * 14; // 14 days
 
 export interface Session {
@@ -28,17 +30,21 @@ export async function createSession(session: Session) {
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE}s`)
     .sign(secret());
-  (await cookies()).set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
+  const jar = await cookies();
+  const cookie = {
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: MAX_AGE,
-  });
+  };
+  jar.set(SESSION_COOKIE, token, { ...cookie, httpOnly: true });
+  jar.set(SCOPE_COOKIE, scopeValue(session), { ...cookie, httpOnly: false });
 }
 
 export async function destroySession() {
-  (await cookies()).delete(SESSION_COOKIE);
+  const jar = await cookies();
+  jar.delete(SESSION_COOKIE);
+  jar.delete(SCOPE_COOKIE);
 }
 
 export async function getSession(): Promise<Session | null> {

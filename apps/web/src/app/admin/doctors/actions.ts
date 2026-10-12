@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
+import { invalidateTenantBrief } from "@/lib/tenant-access";
 import { ownerDb } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 
@@ -79,6 +80,7 @@ export async function setTenantStatus(form: FormData) {
   const tenantId = String(form.get("tenantId"));
   const status = z.enum(["pending", "active", "suspended"]).parse(form.get("status"));
   await ownerDb.update(s.tenant).set({ status, updatedAt: new Date() }).where(eq(s.tenant.id, tenantId));
+  invalidateTenantBrief(tenantId);
   await audit({ actorUserId: session.userId, tenantId, action: "tenant.status", entity: "tenant", entityId: tenantId, after: { status } });
   revalidatePath(`/admin/doctors/${tenantId}`);
   revalidatePath("/admin/doctors");

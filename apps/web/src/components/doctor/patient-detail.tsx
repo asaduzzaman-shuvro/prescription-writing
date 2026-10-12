@@ -7,6 +7,7 @@ import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors, useLabCatalogue } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, parseJson } from "@/lib/doctor/util";
+import { DetailPageLoading } from "@/components/loading-states";
 import { LabReportSummary, LabTrendChart, trendSeries, useLabReports } from "./lab-reports";
 
 export function PatientDetail({ patientId }: { patientId: string }) {
@@ -26,7 +27,7 @@ export function PatientDetail({ patientId }: { patientId: string }) {
   const labs = useLabReports(patientId);
   const labCatalogue = useLabCatalogue();
   const p = pts[0];
-  if (!p) return <div className="text-sm text-slate-500">Loading patient…</div>;
+  if (!p) return <DetailPageLoading label="Loading patient" />;
   const allergies = parseJson<string[]>(p.allergies, []);
   // A trend needs at least two values of a test.
   const trends = labCatalogue.tests.map((test) => ({ test, points: trendSeries(labs, test.code) })).filter((t) => t.points.length >= 2);

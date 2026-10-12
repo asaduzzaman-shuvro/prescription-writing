@@ -22,6 +22,7 @@ import {
   type VisitType,
 } from "@/lib/doctor/data";
 import { useMyProfile } from "@/lib/doctor/hooks";
+import { PrescriptionLoading } from "@/components/loading-states";
 import { Link, navigate } from "@/lib/doctor/router";
 import { checkSafety, type SafetyResult } from "@/lib/doctor/safety";
 import {
@@ -529,7 +530,7 @@ function RxEditor({
   ]);
 
   if (!rx || !doc)
-    return <div className="text-sm text-slate-500">Loading prescription…</div>;
+    return <PrescriptionLoading />;
 
   const spec = [specialtyCode];
   const libQuery = (
@@ -1239,7 +1240,7 @@ export function VisitScreen({
   }, [enc?.id, rxs.length, rxs[0]?.status, explicitRx, resumeEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!enc || !p)
-    return <div className="text-sm text-slate-500">Loading visit…</div>;
+    return <PrescriptionLoading label="Loading visit" />;
   const allergies = parseJson<string[]>(p.allergies, []);
   const vitals = parseJson<Vitals>(enc.vitals, {});
   const age = ageParts(p.dob);

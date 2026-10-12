@@ -1,13 +1,18 @@
 import { s } from "@rx/db";
 import { asc, eq, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, Pager } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
+import { connection } from "next/server";
 
 export const metadata = { title: "Doctors & chambers" };
+const SIZE = 50;
 
-export default async function DoctorsPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
-  const { filter } = await searchParams;
+export default async function DoctorsPage({ searchParams }: { searchParams: Promise<{ filter?: string; page?: string }> }) {
+  await connection();
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page ?? 1) || 1);
+  const unverified = sp.filter === "unverified";
   const rows = await ownerDb
     .select({
       tenantId: s.tenant.id,
@@ -23,9 +28,13 @@ export default async function DoctorsPage({ searchParams }: { searchParams: Prom
     })
     .from(s.doctorProfile)
     .innerJoin(s.tenant, eq(s.tenant.id, s.doctorProfile.tenantId))
-    .where(filter === "unverified" ? isNull(s.doctorProfile.bmdcVerifiedAt) : undefined)
-    .orderBy(asc(s.doctorProfile.nameEn));
+    .where(unverified ? isNull(s.doctorProfile.bmdcVerifiedAt) : undefined)
+    .orderBy(asc(s.doctorProfile.nameEn), asc(s.doctorProfile.userId))
+    .limit(SIZE + 1)
+    .offset((page - 1) * SIZE);
+  const shown = rows.slice(0, SIZE);
   const today = new Date().toISOString().slice(0, 10);
+  const base = unverified ? "/admin/doctors?filter=unverified" : "/admin/doctors";
   return (
     <>
       <PageHeader title="Doctors & chambers" subtitle="Onboarding, BMDC verification and chamber status" actions={<Link href="/admin/doctors/new" className="btn-primary">+ Onboard doctor</Link>} />
@@ -37,7 +46,7 @@ export default async function DoctorsPage({ searchParams }: { searchParams: Prom
         <table className="table">
           <thead><tr><th>Doctor</th><th>Chamber / tenant</th><th>BMDC</th><th>Verification</th><th>Specialty</th><th>Final Rx</th><th>Status</th></tr></thead>
           <tbody>
-            {rows.map((r) => {
+            {shown.map((r) => {
               const expired = r.bmdcExpiry && r.bmdcExpiry < today;
               return (
                 <tr key={r.userId}>
@@ -51,9 +60,11 @@ export default async function DoctorsPage({ searchParams }: { searchParams: Prom
                 </tr>
               );
             })}
+            {!shown.length && <tr><td colSpan={7} className="text-slate-500">No doctors on this page.</td></tr>}
           </tbody>
         </table>
       </div>
+      {(page > 1 || rows.length > SIZE) && <Pager page={page} hasNext={rows.length > SIZE} base={base} />}
     </>
   );
 }

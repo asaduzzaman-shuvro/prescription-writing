@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { createSpecialty } from "./actions";
+import { connection } from "next/server";
 
 export const metadata = { title: "Exam templates" };
 
@@ -13,6 +14,7 @@ const ERRORS: Record<string, string> = {
 };
 
 export default async function SpecialtyTemplatesPage({ searchParams }: { searchParams: Promise<{ error?: string; added?: string }> }) {
+  await connection();
   const { error, added } = await searchParams;
   const rows = await ownerDb.select().from(s.specialtyTemplate).orderBy(asc(s.specialtyTemplate.specialtyCode), asc(s.specialtyTemplate.name), desc(s.specialtyTemplate.version));
   const specialties = await ownerDb.select().from(s.specialty).orderBy(asc(s.specialty.name));
