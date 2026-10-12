@@ -2,6 +2,7 @@
 
 import { useStatus } from "@powersync/react";
 import { useHashRoute } from "@/lib/doctor/router";
+import { useCustomSync } from "@/lib/powersync/custom-sync";
 import { CLINIC_SYNC_PRIORITY, clinicDataReady, downloadPercent } from "@/lib/powersync/sync-ready";
 import { BookingsScreen } from "./bookings";
 import { DisplayScreen } from "./display";
@@ -21,14 +22,16 @@ import { VisitScreen } from "./visit";
 export function DoctorApp() {
   const r = useHashRoute();
   const status = useStatus();
+  const custom = useCustomSync();
   // Open once patients/visits are in (priority 1); ~22k medicines keep downloading at priority 3.
-  if (!clinicDataReady(status)) {
+  if (!clinicDataReady(status) && !custom.clinicReady) {
     const clinicPct = status.downloadProgress?.untilPriority(CLINIC_SYNC_PRIORITY).downloadedFraction;
     const pct = clinicPct != null ? Math.round(clinicPct * 100) : downloadPercent(status);
     return (
       <div className="card p-8 text-center text-sm text-slate-600" data-testid="first-sync">
         <p>Loading your patients and today&apos;s queue…</p>
         <p className="mt-2 text-xs text-slate-500">Medicine catalogue downloads in the background after this.</p>
+        {custom.error && <p className="mt-2 text-xs text-red-600">{custom.error}</p>}
         {pct != null && (
           <div className="mx-auto mt-4 max-w-xs">
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">

@@ -3,14 +3,14 @@
 import { PowerSyncContext } from "@powersync/react";
 import { createConsoleLogger, LogLevels, PowerSyncDatabase } from "@powersync/web";
 import { Suspense, type ReactNode } from "react";
-import { BackendConnector } from "./connector";
+import { startCustomSync, stopCustomSync } from "./custom-sync";
 import { clearLabFileQueue, startLabFileQueue, stopLabFileQueue } from "./lab-files";
 import { AppSchema } from "./schema";
 
 let db: PowerSyncDatabase | null = null;
 let dbKey: string | null = null;
 
-const consoleLogger = createConsoleLogger({ prefix: "PowerSync", minLevel: LogLevels.info });
+const consoleLogger = createConsoleLogger({ prefix: "sync", minLevel: LogLevels.info });
 /** Drop multi-tab capability notices when SharedWorker is unavailable (some embeds / browsers). */
 const logger = {
   ...consoleLogger,
@@ -32,6 +32,7 @@ export function getDb(userId: string, tenantId: string): PowerSyncDatabase {
   if (db && dbKey === key) return db;
   if (db) {
     // Previous chamber's file stays on disk for a later switch-back; only disconnect.
+    stopCustomSync();
     void stopLabFileQueue();
     void db.disconnect();
     db = null;
@@ -48,8 +49,10 @@ export function getDb(userId: string, tenantId: string): PowerSyncDatabase {
     },
   });
   dbKey = key;
-  db.connect(new BackendConnector());
-  if (typeof window !== "undefined") startLabFileQueue(db, userId);
+  if (typeof window !== "undefined") {
+    startLabFileQueue(db, userId);
+    startCustomSync(db);
+  }
   return db;
 }
 
@@ -60,6 +63,7 @@ export function getDb(userId: string, tenantId: string): PowerSyncDatabase {
  */
 export async function disconnectSession() {
   if (!db) return;
+  stopCustomSync();
   await stopLabFileQueue();
   await db.disconnect();
   db = null;
@@ -69,6 +73,7 @@ export async function disconnectSession() {
 /** Hard wipe (e.g. shared PC). soft:true keeps sync metadata so the same user re-logins fast. */
 export async function disconnectAndClear() {
   if (!db) return;
+  stopCustomSync();
   await clearLabFileQueue();
   await db.disconnectAndClear({ soft: true });
   db = null;
@@ -78,6 +83,7 @@ export async function disconnectAndClear() {
 /** Switch chamber: drop the live connection (keep local file) so the next getDb opens the other tenant. */
 export async function disconnectForChamberSwitch() {
   if (!db) return;
+  stopCustomSync();
   await stopLabFileQueue();
   await db.disconnect();
   db = null;

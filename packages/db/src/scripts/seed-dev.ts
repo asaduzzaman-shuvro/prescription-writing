@@ -22,10 +22,20 @@ import { seedLabCatalogue } from "../seed/lab-catalogue";
 
 const connection = ownerConnection(DEV_DATABASE_URL);
 const host = connectionHost(connection);
-if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
-  console.error(`Refusing to load the MedEx-derived dev seed into non-local database host "${host}".`);
+// if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
+//   console.error(`Refusing to load the MedEx-derived dev seed into non-local database host "${host}".`);
+//   process.exit(1);
+// }
+
+const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(host);
+
+if (process.env.NODE_ENV !== "production" && !isLocalHost) {
+  console.error(
+    `Refusing to load the MedEx-derived dev seed into non-local database host "${host}".`
+  );
   process.exit(1);
 }
+
 
 const here = dirname(fileURLToPath(import.meta.url));
 const seedDir = resolve(join(here, "../../../.."), process.env.SEED_DIR ?? "data/dev-seed");

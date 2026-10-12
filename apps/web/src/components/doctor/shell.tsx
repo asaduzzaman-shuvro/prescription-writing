@@ -23,6 +23,7 @@ import { Link, navigate, useHashRoute } from "@/lib/doctor/router";
 import { today } from "@/lib/doctor/util";
 import type { Rejected } from "@/lib/powersync/connector";
 import { disconnectForChamberSwitch, disconnectSession } from "@/lib/powersync/provider";
+import { useCustomSync } from "@/lib/powersync/custom-sync";
 import { clinicDataReady, downloadPercent } from "@/lib/powersync/sync-ready";
 import { usePatientSearch } from "./patient-search";
 
@@ -47,6 +48,7 @@ function RejectedNotice() {
 
 function SyncBadge() {
   const status = useStatus();
+  const custom = useCustomSync();
   const { data } = useQuery<{ n: number }>("SELECT count(*) AS n FROM ps_crud");
   const pending = data[0]?.n ?? 0;
   const [online, setOnline] = useState(true);
@@ -60,11 +62,15 @@ function SyncBadge() {
       window.removeEventListener("offline", on);
     };
   }, []);
-  const connected = status.connected && online;
-  const clinicReady = clinicDataReady(status);
-  const fullSynced = !!status.hasSynced;
+  const connected = custom.mode === "custom" ? online && !custom.error : status.connected && online;
+  const clinicReady = clinicDataReady(status) || custom.clinicReady;
+  const fullSynced = custom.mode === "custom" ? custom.fullReady : !!status.hasSynced;
   const pct = downloadPercent(status);
-  const label = !clinicReady
+  const label = custom.mode === "custom" && custom.syncing
+    ? "Syncing…"
+    : custom.mode === "custom" && custom.error
+      ? "Sync failed"
+      : !clinicReady
     ? pct != null ? `Clinic ${pct}%…` : "Loading clinic…"
     : !fullSynced
       ? pct != null ? `Medicines ${pct}%…` : "Loading medicines…"
@@ -77,7 +83,7 @@ function SyncBadge() {
       ? "bg-blue-100 text-blue-800"
       : "bg-green-100 text-green-800";
   return (
-    <span data-testid="sync-status" className={`badge ${color}`} title={status.dataFlowStatus?.uploadError?.message ?? ""}>
+    <span data-testid="sync-status" className={`badge ${color}`} title={custom.error ?? status.dataFlowStatus?.uploadError?.message ?? ""}>
       <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${connected ? "bg-current" : "bg-amber-500"}`} />
       {label}
     </span>
