@@ -16,6 +16,7 @@ import {
   UI_PREF_STEP,
   type UiPrefs,
 } from "@/lib/doctor/ui-prefs";
+import { SaveButton } from "@/components/save-button";
 import { BillingPanel } from "./billing";
 import { ChamberManager } from "./chambers";
 
@@ -218,6 +219,29 @@ function MfaPanel() {
   );
 }
 
+/** Number box that can be cleared. A controlled `value={0}` snaps back as soon as the field is emptied. */
+function NumberField({ label, value, step, onChange }: { label: string; value: number; step?: number; onChange: (n: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <label className="text-sm">
+      <span className="label">{label}</span>
+      <input
+        type="number"
+        step={step}
+        className="input"
+        value={draft ?? (Number.isFinite(value) ? value : "")}
+        onFocus={() => setDraft(Number.isFinite(value) ? String(value) : "")}
+        onChange={(e) => {
+          const raw = e.target.value;
+          setDraft(raw);
+          if (raw.trim() !== "" && Number.isFinite(Number(raw))) onChange(Number(raw));
+        }}
+        onBlur={() => setDraft(null)}
+      />
+    </label>
+  );
+}
+
 export function SettingsScreen() {
   const db = usePowerSync();
   const session = useSession();
@@ -225,6 +249,7 @@ export function SettingsScreen() {
   const { chambers, current, select } = useChambers();
   const [s, setS] = useState<PrintSettings>(DEFAULT_PRINT_SETTINGS);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const { data: prof } = useQuery<{ name_en: string; bmdc_number: string; bmdc_verified_at: string | null; bmdc_expiry: string | null; degrees_en: string | null }>(
     "SELECT name_en, bmdc_number, bmdc_verified_at, bmdc_expiry, degrees_en FROM doctor_profile WHERE id = ?",
     [session.userId],
@@ -245,16 +270,19 @@ export function SettingsScreen() {
     setS((p) => ({ ...p, [k]: v }));
   };
   const num = (k: keyof PrintSettings, label: string, step = 0.5) => (
-    <label className="text-sm">
-      <span className="label">{label}</span>
-      <input type="number" step={step} className="input" value={s[k] as number} onChange={(e) => set(k, Number(e.target.value) as never)} />
-    </label>
+    <NumberField label={label} value={s[k] as number} step={step} onChange={(n) => set(k, n as never)} />
   );
 
   async function save() {
-    if (!current) return;
-    await savePrintSettings(db, current.id, s);
-    setSaved(true);
+    if (!current || saving) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      await savePrintSettings(db, current.id, s);
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function testPrint() {
@@ -310,7 +338,7 @@ export function SettingsScreen() {
           <h2 className="font-semibold">Print layout</h2>
           {chambers.length > 1 && (
             <select className="input w-auto" value={current?.id ?? ""} onChange={(e) => select(e.target.value)}>
-              {chambers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {chambers.map((c) => <option key={c.id} value={c.id}>{c.name.replace(/\s*\n\s*/g, " ")}</option>)}
             </select>
           )}
           {current && chambers.length === 1 && <span className="text-sm text-slate-500">{current.name}</span>}
@@ -328,8 +356,8 @@ export function SettingsScreen() {
           </label>
           {typeof s.paper === "object" && (
             <>
-              <label className="text-sm"><span className="label">Width mm</span><input type="number" className="input" value={s.paper.widthMm} onChange={(e) => set("paper", { ...(s.paper as { widthMm: number; heightMm: number }), widthMm: Number(e.target.value) })} /></label>
-              <label className="text-sm"><span className="label">Height mm</span><input type="number" className="input" value={s.paper.heightMm} onChange={(e) => set("paper", { ...(s.paper as { widthMm: number; heightMm: number }), heightMm: Number(e.target.value) })} /></label>
+              <NumberField label="Width mm" value={s.paper.widthMm} onChange={(widthMm) => set("paper", { ...(s.paper as { widthMm: number; heightMm: number }), widthMm })} />
+              <NumberField label="Height mm" value={s.paper.heightMm} onChange={(heightMm) => set("paper", { ...(s.paper as { widthMm: number; heightMm: number }), heightMm })} />
             </>
           )}
           {num("fontSizePt", "Font size (pt)", 0.5)}
@@ -390,7 +418,7 @@ export function SettingsScreen() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="btn-primary" onClick={save} data-testid="save-print">Save</button>
+          <SaveButton type="button" className="btn-primary" saving={saving} onClick={save} data-testid="save-print">Save</SaveButton>
           <button className="btn-secondary" onClick={testPrint}>Print alignment test sheet</button>
           {saved && <span className="text-sm text-green-700">Saved</span>}
         </div>

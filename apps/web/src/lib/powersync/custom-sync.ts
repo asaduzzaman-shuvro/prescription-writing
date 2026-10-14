@@ -195,6 +195,9 @@ async function pull(db: PowerSyncDatabase, gen: number) {
   // Start both downloads together. The screen opens as soon as the smaller clinic half is in.
   const clinicReq = fetchPart("clinic", clinicEtag, gen);
   const catalogueReq = fetchPart("catalogue", catalogueEtag, gen);
+  // A rejection is unhandled until something awaits it. Catalogue can fail while clinic is still in flight.
+  void clinicReq.catch(() => {});
+  void catalogueReq.catch(() => {});
   const clinic = await clinicReq;
   if (gen !== generation) return;
   if (!clinic.unchanged && clinic.rows) {

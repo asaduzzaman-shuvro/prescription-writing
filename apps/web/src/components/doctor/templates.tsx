@@ -7,6 +7,7 @@ import { deleteTemplate, hiddenTemplateIds, hideTemplate, saveTemplate, toggleFa
 import { useSession } from "@/lib/doctor/context";
 import { useMyProfile } from "@/lib/doctor/hooks";
 import { parseJson, uuid } from "@/lib/doctor/util";
+import { SaveButton } from "@/components/save-button";
 import { ChipList } from "./chips";
 import { MedicineSearch } from "./med-search";
 import { RxItemRow } from "./rx-item";
@@ -200,7 +201,7 @@ function TemplateForm({ existing, mine, onClose }: { existing?: TemplateRow; min
         />
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="btn-primary" disabled={saving} data-testid="tpl-save">{saving ? "Saving…" : copying ? "Save my copy" : "Save template"}</button>
+      <SaveButton type="submit" className="btn-primary" saving={saving} data-testid="tpl-save">{copying ? "Save my copy" : "Save template"}</SaveButton>
     </form>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { SaveButton } from "@/components/save-button";
 import { AsyncPicker, type Option } from "@/components/admin/generic-picker";
 import { createGeneric, saveProduct, searchGenerics, type ProductInputT } from "./actions";
 
@@ -140,7 +141,7 @@ export function ProductForm({
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button className="btn-primary" disabled={pending}>{pending ? "Saving…" : "Save medicine"}</button>
+      <SaveButton className="btn-primary" saving={pending}>Save medicine</SaveButton>
     </form>
   );
 }

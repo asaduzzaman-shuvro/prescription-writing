@@ -2,6 +2,7 @@
 
 import { classifyDosageForm, formatInstruction, parseShortcut, type RxItem } from "@rx/core";
 import { useRef, useState, useTransition } from "react";
+import { SaveButton } from "@/components/save-button";
 import { findProducts, saveSharedTemplate, type SharedTemplateInput } from "./actions";
 
 type Hit = Awaited<ReturnType<typeof findProducts>>[number];
@@ -115,7 +116,7 @@ export function TemplateEditor({ initial, specialties }: { initial: SharedTempla
       <div className="card p-4"><Lines label="উপদেশ / Advice" value={t.advice} onChange={(v) => setT({ ...t, advice: v })} /></div>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={t.isActive} onChange={(e) => setT({ ...t, isActive: e.target.checked })} /> Active</label>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button className="btn-primary" disabled={pending} onClick={() => start(async () => { const r = await saveSharedTemplate(t); if (r?.error) setError(r.error); })}>Save template</button>
+      <SaveButton className="btn-primary" saving={pending} onClick={() => start(async () => { const r = await saveSharedTemplate(t); if (r?.error) setError(r.error); })}>Save template</SaveButton>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { s } from "@rx/db";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FormSaveButton } from "@/components/save-button";
 import { PageHeader } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { saveLabCatalogueEntry } from "../../actions";
@@ -80,7 +81,7 @@ export default async function LabCatalogueEntryPage({ params, searchParams }: {
           </span>
           <textarea name="spec" rows={14} className="input font-mono text-xs" defaultValue={JSON.stringify(row?.spec ?? (isTest ? {} : { sections: [{ tests: [] }] }), null, 2)} data-testid="admin-lab-spec" />
         </label>
-        <button className="btn-primary" data-testid="admin-lab-save">Save</button>
+        <FormSaveButton className="btn-primary" data-testid="admin-lab-save">Save</FormSaveButton>
       </form>
     </>
   );

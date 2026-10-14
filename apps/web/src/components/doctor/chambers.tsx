@@ -7,6 +7,7 @@ import { saveChamber, setChamberActive, type ChamberInput } from "@/lib/doctor/d
 import { useSession } from "@/lib/doctor/context";
 import type { ChamberRow } from "@/lib/doctor/hooks";
 import { parseJson } from "@/lib/doctor/util";
+import { SaveButton } from "@/components/save-button";
 
 const DAY_LABEL: Record<Weekday, string> = { sat: "শনি", sun: "রবি", mon: "সোম", tue: "মঙ্গল", wed: "বুধ", thu: "বৃহঃ", fri: "শুক্র" };
 const SLOT_LABELS = ["রোগী দেখার সময়", "অপারেশন", "সিরিয়াল দেওয়ার সময়"];
@@ -47,6 +48,7 @@ function SlotEditor({ slot, onChange, onRemove }: { slot: ChamberSlot; onChange:
 function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: ChamberInput; legacyHours?: string | null; onSave: (c: ChamberInput) => Promise<void>; onCancel: () => void }) {
   const [c, setC] = useState<ChamberInput>(initial);
   const [error, setError] = useState<string>();
+  const [saving, setSaving] = useState(false);
   const set = <K extends keyof ChamberInput>(k: K, v: ChamberInput[K]) => setC((p) => ({ ...p, [k]: v }));
 
   async function onLogo(file: File | undefined) {
@@ -61,9 +63,15 @@ function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: Cham
   }
 
   async function save() {
+    if (saving) return;
     if (!c.name.trim() || !c.address.trim()) return setError("Name and address are required.");
     setError(undefined);
-    await onSave({ ...c, schedule: c.schedule.filter((s) => s.days.length || s.from || s.to || s.label) });
+    setSaving(true);
+    try {
+      await onSave({ ...c, schedule: c.schedule.filter((s) => s.days.length || s.from || s.to || s.label) });
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -71,9 +79,9 @@ function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: Cham
       <datalist id="chamber-slot-labels">{SLOT_LABELS.map((l) => <option key={l} value={l} />)}</datalist>
       <div className="grid gap-2 md:grid-cols-2">
         <label className="text-sm"><span className="label">Chamber / hospital name *</span>
-          <input className="input" value={c.name} onChange={(e) => set("name", e.target.value)} data-testid="chamber-name" /></label>
+          <textarea className="input" rows={3} value={c.name} onChange={(e) => set("name", e.target.value)} data-testid="chamber-name" /></label>
         <label className="text-sm"><span className="label">Address *</span>
-          <input className="input" value={c.address} onChange={(e) => set("address", e.target.value)} data-testid="chamber-address" /></label>
+          <textarea className="input" rows={3} value={c.address} onChange={(e) => set("address", e.target.value)} data-testid="chamber-address" /></label>
         <label className="text-sm"><span className="label">Phone</span>
           <input className="input" inputMode="tel" value={c.phone} onChange={(e) => set("phone", e.target.value)} /></label>
         <label className="text-sm"><span className="label">Serial phone</span>
@@ -108,7 +116,7 @@ function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: Cham
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex gap-1.5">
-        <button type="button" className="btn-primary" onClick={save} data-testid="chamber-save">Save chamber</button>
+        <SaveButton type="button" className="btn-primary" saving={saving} onClick={save} data-testid="chamber-save">Save chamber</SaveButton>
         <button type="button" className="btn-ghost" onClick={onCancel}>Cancel</button>
       </div>
     </div>
@@ -145,8 +153,8 @@ export function ChamberManager() {
               ) : (
                 <div className="flex flex-wrap items-start gap-2">
                   <div className="flex-1">
-                    <div className="font-medium">{r.name}{!active && " (inactive)"}</div>
-                    <div className="text-slate-600">{r.address}</div>
+                    <div className="font-medium whitespace-pre-line">{r.name}{!active && " (inactive)"}</div>
+                    <div className="whitespace-pre-line text-slate-600">{r.address}</div>
                     {parseJson<ChamberSlot[]>(r.schedule, []).map((sl, i) => <div key={i} className="text-slate-500">{formatSlot(sl, "bn", "bn")}</div>)}
                     {!parseJson<ChamberSlot[]>(r.schedule, []).length && r.hours && <div className="text-slate-500">{r.hours}</div>}
                     {r.serial_phone && <div className="text-slate-500">সিরিয়াল: {r.serial_phone}</div>}

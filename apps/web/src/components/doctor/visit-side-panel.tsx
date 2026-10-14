@@ -12,6 +12,8 @@ export type VisitRxActions = {
   readOnly: boolean;
   version: number;
   blocked: boolean;
+  /** True while the prescription write is in flight. */
+  saving: boolean;
   finalize: () => void;
   editVersion: () => void;
 };
@@ -143,11 +145,19 @@ export function VisitSidePanel({
             type="button"
             className="btn-primary w-full py-1.5"
             onClick={actions.finalize}
-            disabled={actions.blocked}
+            disabled={actions.blocked || actions.saving}
+            aria-busy={actions.saving}
             data-testid={`finalize${testIdSuffix}`}
             title="Ctrl+Enter"
           >
-            Finalise & print
+            {actions.saving ? (
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />
+                Saving…
+              </span>
+            ) : (
+              "Finalise & print"
+            )}
           </button>
         </div>
       )}

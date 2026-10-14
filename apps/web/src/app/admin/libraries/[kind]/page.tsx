@@ -2,6 +2,7 @@ import { s } from "@rx/db";
 import { asc, eq, isNull } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ClearingForm, FormSaveButton } from "@/components/save-button";
 import { PageHeader, Pager } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { saveLibraryItem, toggleLibraryItem } from "../actions";
@@ -46,14 +47,14 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           <Link key={k} href={`/admin/libraries/${k}`} className={`rounded-md px-3 py-1 text-sm ${k === kind ? "bg-brand-600 text-white" : "bg-white text-slate-600 border border-slate-200"}`}>{l.title}</Link>
         ))}
       </div>
-      <form action={saveLibraryItem} className="card mb-4 flex flex-wrap items-end gap-2 p-3">
+      <ClearingForm action={saveLibraryItem} className="card mb-4 flex flex-wrap items-end gap-2 p-3">
         <input type="hidden" name="kind" value={kind} />
         {lib.fields.map((f) => (
           <div key={f.key} className="min-w-48 flex-1"><label className="label">{f.label}</label><input name={f.key} className="input" required={f === lib.fields[0]} /></div>
         ))}
         <SpecSelect />
-        <button className="btn-primary">Add</button>
-      </form>
+        <FormSaveButton className="btn-primary" pendingLabel="Adding…">Add</FormSaveButton>
+      </ClearingForm>
       <div className="mb-2 flex gap-2 text-sm">
         Filter:
         <Link href={`/admin/libraries/${kind}`} className="underline">All</Link>
@@ -68,7 +69,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
               <input type="hidden" name="id" value={r.id} />
               {lib.fields.map((f) => <input key={f.key} name={f.key} defaultValue={r[f.key] ?? ""} className="input min-w-40 flex-1" aria-label={f.label} />)}
               <SpecSelect value={r.specialtyCode} />
-              <button className="btn-ghost text-xs">Save</button>
+              <FormSaveButton className="btn-ghost text-xs">Save</FormSaveButton>
             </form>
             <form action={toggleLibraryItem}>
               <input type="hidden" name="kind" value={kind} />

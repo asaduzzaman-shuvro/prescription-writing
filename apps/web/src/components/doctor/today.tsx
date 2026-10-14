@@ -175,24 +175,26 @@ export function Today() {
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-500">
-            {profile?.name_en ?? session.name}
-            {profile?.specialty_code ? ` · ${profile.specialty_code.replace(/_/g, " ")}` : ""}
-            {chamber ? ` · ${chamber.name}` : ""}
-            {` · ${date}`}
+            {profile?.specialty_code ? `${profile.specialty_code.replace(/_/g, " ")} · ` : ""}
+            {date}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {chambers.length > 1 && (
-            <select className="input w-auto" value={chamber?.id ?? ""} onChange={(e) => select(e.target.value)} aria-label="Chamber">
-              {chambers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          )}
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <div className="rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1 text-right" data-testid="active-chamber">
+            <div className="text-[10px] font-semibold tracking-wide text-brand-700 uppercase">Active chamber</div>
+            {chambers.length > 1 ? (
+              <select className="mt-0.5 h-7 w-auto max-w-64 bg-transparent text-right text-sm font-semibold text-slate-900 outline-none" value={chamber?.id ?? ""} onChange={(e) => select(e.target.value)} aria-label="Active chamber">
+                {chambers.map((c) => <option key={c.id} value={c.id}>{c.name.replace(/\s*\n\s*/g, " ")}</option>)}
+              </select>
+            ) : (
+              <div className="text-sm font-semibold whitespace-pre-line text-slate-900">{chamber?.name ?? "No chamber selected"}</div>
+            )}
+          </div>
           {!isDoctor && doctors.length > 1 && (
             <select className="input w-auto" value={effectiveDoctor} onChange={(e) => setDoctorId(e.target.value)} aria-label="Doctor">
               {doctors.map((d) => <option key={d.id} value={d.id}>{d.name_en}</option>)}
             </select>
           )}
-          <Link to="/patients/new" className="btn-primary">+ New prescription</Link>
         </div>
       </div>
 
