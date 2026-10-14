@@ -15,6 +15,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useEffect, useState, type ReactNode } from "react";
 import { startVisit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
@@ -26,6 +27,8 @@ import { disconnectForChamberSwitch, disconnectSession } from "@/lib/powersync/p
 import { useCustomSync } from "@/lib/powersync/custom-sync";
 import { clinicDataReady, downloadPercent } from "@/lib/powersync/sync-ready";
 import { usePatientSearch } from "./patient-search";
+
+const NewPatientModal = dynamic(() => import("./patient-form").then((m) => m.NewPatientModal));
 
 function RejectedNotice() {
   const [items, setItems] = useState<Rejected[]>([]);
@@ -265,6 +268,8 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
   const isDoctor = session.tenantRole === "doctor";
   const [signingOut, setSigningOut] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [newPatientOpen, setNewPatientOpen] = useState(false);
   const date = today();
 
   const { data: queueStats } = useQuery<{ waiting: number | null; active: number | null; done: number | null; total: number | null }>(
@@ -356,8 +361,6 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
           <span className="text-base font-semibold tracking-tight text-white">RxPad</span>
           <span className="rounded bg-sakura-500/90 px-1.5 py-0.5 text-[10px] font-semibold text-white uppercase">Clinic</span>
         </div>
-        <p className="mt-1 truncate text-sm font-medium text-white">{doctorLabel}</p>
-        <p className="truncate text-xs capitalize text-slate-400">{specialty}</p>
       </div>
       <nav className="flex-1 overflow-y-auto px-1.5 pb-2" aria-label="Main">
         <NavGroup title="Home" items={home} />
@@ -371,6 +374,8 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       <div className="relative overflow-hidden border-t border-white/10 p-2">
+        <p className="truncate px-2 text-sm font-medium text-white" title={doctorLabel}>{doctorLabel}</p>
+        <p className="truncate px-2 text-xs capitalize text-slate-400">{specialty}</p>
         <button
           type="button"
           disabled={signingOut}
@@ -390,7 +395,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="h-dvh overflow-hidden bg-slate-100">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-52 flex-col bg-[#0a3d39] print:hidden md:flex">
+      <aside className={`fixed inset-y-0 left-0 z-40 w-52 flex-col bg-[#0a3d39] print:hidden ${sidebarOpen ? "hidden md:flex" : "hidden"}`}>
         {sidebar}
       </aside>
 
@@ -406,16 +411,28 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <div className="flex h-dvh flex-col md:pl-52">
+      <div className={`flex h-dvh flex-col ${sidebarOpen ? "md:pl-52" : ""}`}>
         <header className="z-30 shrink-0 border-b border-slate-200 bg-white print:hidden">
           <div className="flex h-12 items-center gap-2 px-3">
-            <button type="button" className="shrink-0 rounded-md p-1.5 text-slate-600 hover:bg-slate-100 md:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+            <button
+              type="button"
+              className="shrink-0 rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+              aria-label="Menu"
+              data-testid="drawer-menu"
+              onClick={() => {
+                if (window.matchMedia("(min-width: 768px)").matches) setSidebarOpen((open) => !open);
+                else setMobileOpen(true);
+              }}
+            >
               <Menu className="h-5 w-5" />
             </button>
             <div className="hidden w-40 shrink-0 sm:block">
               <ChamberSwitcher />
             </div>
             <HeaderSearch />
+            <button type="button" className="btn-primary h-8 shrink-0 whitespace-nowrap px-2.5 text-xs" data-testid="new-appointment" onClick={() => setNewPatientOpen(true)}>
+              New appointment
+            </button>
             <div className="flex shrink-0 items-center gap-2">
               <div className="hidden h-8 items-center overflow-hidden rounded-md border border-slate-200 text-[11px] font-medium sm:flex" data-testid="queue-status">
                 <span className="flex h-full items-center bg-amber-50 px-2 text-amber-900 tabular-nums" title="Waiting">{qs.waiting}<span className="ml-1 hidden font-normal lg:inline">waiting</span></span>
@@ -435,6 +452,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+      {newPatientOpen && <NewPatientModal open onClose={() => setNewPatientOpen(false)} />}
     </div>
   );
 }

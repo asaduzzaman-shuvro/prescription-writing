@@ -23,6 +23,7 @@ import {
 } from "@/lib/doctor/data";
 import { useMyProfile } from "@/lib/doctor/hooks";
 import { PrescriptionLoading } from "@/components/loading-states";
+import { SaveButton } from "@/components/save-button";
 import { Link, navigate } from "@/lib/doctor/router";
 import { checkSafety, type SafetyResult } from "@/lib/doctor/safety";
 import {
@@ -380,6 +381,11 @@ function RxEditor({
   const rx = rxRows[0];
   const [doc, setDoc] = useState<PrescriptionDoc | null>(null);
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
+  const [finalizing, setFinalizing] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const finalizingRef = useRef(false);
+  /** Draft writes run one after another so a slow save cannot overlap the next one. */
+  const draftSave = useRef<Promise<void>>(Promise.resolve());
   const [safety, setSafety] = useState<SafetyResult>({
     byItem: {},
     general: [],
@@ -450,10 +456,17 @@ function RxEditor({
         setSaved("saving");
         pending.current = next;
         clearTimeout(timer.current);
-        timer.current = setTimeout(async () => {
+        timer.current = setTimeout(() => {
           pending.current = null;
-          await saveDraftDoc(db, prescriptionId, next);
-          setSaved("saved");
+          draftSave.current = draftSave.current.then(async () => {
+            if (finalizingRef.current) return;
+            try {
+              await saveDraftDoc(db, prescriptionId, next);
+              if (!finalizingRef.current) setSaved("saved");
+            } catch {
+              if (!finalizingRef.current) setSaved("idle");
+            }
+          });
         }, 600);
         return next;
       });
@@ -499,7 +512,7 @@ function RxEditor({
       if (t?.tagName === "TEXTAREA" && e.key === "Enter") return;
       if (e.key === "Enter") {
         e.preventDefault();
-        finalizeRef.current();
+        if (!finalizingRef.current) finalizeRef.current();
       } else if (e.key === "p" || e.key === "P") {
         e.preventDefault();
         navigate(`/rx/${prescriptionId}/print`);
@@ -516,6 +529,7 @@ function RxEditor({
       readOnly: rx.status === "final",
       version: rx.version,
       blocked: safety.blockers.length > 0,
+      saving: finalizing,
       finalize: () => finalizeRef.current(),
       editVersion: () => editVersionRef.current(),
     });
@@ -525,6 +539,7 @@ function RxEditor({
     rx?.status,
     rx?.version,
     safety.blockers.length,
+    finalizing,
     prescriptionId,
     onActionsChange,
   ]);
@@ -544,7 +559,7 @@ function RxEditor({
       ORDER BY specialty_code IS NULL, sort_order LIMIT 12`;
 
   async function finalize() {
-    if (!doc || readOnly) return;
+    if (!doc || readOnly || finalizingRef.current) return;
     setError(undefined);
     if (!doc.items.length) return setError("Add at least one medicine");
     const noDuration = doc.items.find(
@@ -559,12 +574,23 @@ function RxEditor({
         safety.blockers[0] ?? "Resolve safety blockers before finalising",
       );
     }
+    finalizingRef.current = true;
+    setFinalizing(true);
+    setSaved("saving");
     clearTimeout(timer.current);
     pending.current = null;
-    await finalizePrescription(db, prescriptionId, doc, vitals);
-    // The browser's Back from the print screen resumes editing in the next version (the link passes ?edit=1).
-    resumeEditAfterPrint.set(encounterId);
-    navigate(`/rx/${prescriptionId}/print`);
+    try {
+      await draftSave.current;
+      await finalizePrescription(db, prescriptionId, doc, vitals);
+      // The browser's Back from the print screen resumes editing in the next version (the link passes ?edit=1).
+      resumeEditAfterPrint.set(encounterId);
+      navigate(`/rx/${prescriptionId}/print`);
+    } catch {
+      finalizingRef.current = false;
+      setFinalizing(false);
+      setSaved("idle");
+      setError("Could not save the prescription. Try again.");
+    }
   }
   finalizeRef.current = () => {
     void finalize();
@@ -600,7 +626,7 @@ function RxEditor({
   }
 
   async function saveAsTemplate() {
-    if (!doc) return;
+    if (!doc || savingTemplate) return;
     const name = prompt(
       "Template name (e.g. Acute tonsillitis — adult)",
       doc.diagnoses[0] ?? "",
@@ -614,15 +640,20 @@ function RxEditor({
       advice: doc.advice,
       followUp: doc.followUp,
     };
-    await saveTemplate(
-      db,
-      session.tenantId,
-      session.userId,
-      name,
-      specialtyCode,
-      payload,
-    );
-    alert("Template saved");
+    setSavingTemplate(true);
+    try {
+      await saveTemplate(
+        db,
+        session.tenantId,
+        session.userId,
+        name,
+        specialtyCode,
+        payload,
+      );
+      alert("Template saved");
+    } finally {
+      setSavingTemplate(false);
+    }
   }
 
   const items = doc.items;
@@ -682,13 +713,14 @@ function RxEditor({
             >
               Copy last Rx
             </button>
-            <button
+            <SaveButton
               type="button"
               className="btn-secondary h-7 shrink-0 whitespace-nowrap px-2 py-0 text-xs"
+              saving={savingTemplate}
               onClick={saveAsTemplate}
             >
               Save as template
-            </button>
+            </SaveButton>
           </>
         ) : (
           <span className="flex-1" />
@@ -696,14 +728,20 @@ function RxEditor({
         <span
           className="shrink-0 rounded bg-slate-100 px-2 py-1 text-[11px] font-medium tabular-nums text-slate-500 xl:ml-auto"
           data-testid="save-state"
+          aria-live="polite"
         >
-          {readOnly
-            ? `Finalised · v${rx.version}`
-            : saved === "saving"
-              ? "Saving…"
-              : saved === "saved"
-                ? "Saved"
-                : `Draft v${rx.version}`}
+          {readOnly ? (
+            `Finalised · v${rx.version}`
+          ) : saved === "saving" ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" aria-hidden />
+              Saving…
+            </span>
+          ) : saved === "saved" ? (
+            "Saved"
+          ) : (
+            `Draft v${rx.version}`
+          )}
         </span>
       </div>
 
@@ -1072,11 +1110,19 @@ function RxEditor({
               <button
                 className="btn-primary"
                 onClick={() => void finalize()}
-                disabled={!!safety.blockers.length}
+                disabled={!!safety.blockers.length || finalizing}
+                aria-busy={finalizing}
                 data-testid="finalize-mobile"
                 title="Ctrl+Enter"
               >
-                Finalise & print
+                {finalizing ? (
+                  <span className="inline-flex items-center justify-center gap-1.5">
+                    <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />
+                    Saving…
+                  </span>
+                ) : (
+                  "Finalise & print"
+                )}
               </button>
             </>
           )}

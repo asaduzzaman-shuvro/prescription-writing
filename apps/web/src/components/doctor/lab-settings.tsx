@@ -20,6 +20,7 @@ import { useSession } from "@/lib/doctor/context";
 import { LAB_PROFILE_LIMITS, saveLabCatalogueRow, saveLabProfile } from "@/lib/doctor/data";
 import { useLabCatalogue, useLabCatalogueRows } from "@/lib/doctor/hooks";
 import { Link } from "@/lib/doctor/router";
+import { SaveButton } from "@/components/save-button";
 import { parseJson } from "@/lib/doctor/util";
 
 /**
@@ -63,6 +64,7 @@ function LabProfileForm() {
   const [logo, setLogo] = useState<string | null>(null);
   const [signatories, setSignatories] = useState<LabSignatory[]>([]);
   const [status, setStatus] = useState<{ ok?: boolean; error?: string }>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!row) return;
@@ -87,11 +89,16 @@ function LabProfileForm() {
   }
 
   async function save() {
+    if (saving) return;
+    setSaving(true);
+    setStatus({});
     try {
       await saveLabProfile(db, session.tenantId, { labName, address, phone, logoDataUrl: logo, signatories, footerText: footer });
       setStatus({ ok: true });
     } catch (e) {
       setStatus({ error: (e as Error).message });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -134,7 +141,7 @@ function LabProfileForm() {
         <input className="input" value={footer} onChange={(e) => setFooter(e.target.value)} maxLength={300} placeholder="e.g. Reports are to be correlated clinically." data-testid="lab-profile-footer" />
       </label>
       <div className="flex items-center gap-2">
-        <button className="btn-primary" onClick={save} data-testid="lab-profile-save">Save heading</button>
+        <SaveButton type="button" className="btn-primary" saving={saving} onClick={save} data-testid="lab-profile-save">Save heading</SaveButton>
         {status.ok && <span className="text-sm text-green-700">Saved</span>}
         {status.error && <span className="text-sm text-red-700">{status.error}</span>}
       </div>
@@ -280,10 +287,12 @@ function TestEditor({ test, platformTest, clinicRow, onDone }: { test: LabTest; 
   const [options, setOptions] = useState((test.options ?? []).join(", "));
   const [normal, setNormal] = useState((test.normal ?? []).join(", "));
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const numeric = test.kind === "numeric";
   const listed = test.kind === "coded" || test.kind === "text";
 
   async function save() {
+    if (saving) return;
     if (!name.trim() || !short.trim()) return setError("A test needs a name and a short name.");
     for (const [lo, hi] of [[low, high], [mLow, mHigh], [fLow, fHigh]] as const) {
       if ((lo.trim() && toNum(lo) === undefined) || (hi.trim() && toNum(hi) === undefined)) return setError("Ranges must be numbers.");
@@ -296,11 +305,13 @@ function TestEditor({ test, platformTest, clinicRow, onDone }: { test: LabTest; 
       name: name.trim(), short: short.trim(), unit: unit.trim(), kind: test.kind, department: test.department,
       range, refText: refText.trim(), options: listed ? listOf(options) : test.options, normal: listed ? listOf(normal) : test.normal,
     });
+    setSaving(true);
     try {
       await saveLabCatalogueRow(db, session.tenantId, "lab_test", test.code, cols);
       onDone();
     } catch (e) {
       setError((e as Error).message);
+      setSaving(false);
     }
   }
 
@@ -346,7 +357,7 @@ function TestEditor({ test, platformTest, clinicRow, onDone }: { test: LabTest; 
       <div>{field("Printed range (instead of the numbers above; blank prints the numbers)", refText, setRefText, "ref-text", "w-[32rem] max-w-full")}</div>
       {error && <p className="text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
-        <button className="btn-primary py-1 text-sm" onClick={save} data-testid="lab-edit-save">Save</button>
+        <SaveButton type="button" className="btn-primary py-1 text-sm" saving={saving} onClick={save} data-testid="lab-edit-save">Save</SaveButton>
         <button className="btn-ghost py-1 text-sm" onClick={onDone}>Cancel</button>
         {platformTest && clinicRow && <button className="btn-ghost py-1 text-sm" onClick={reset} data-testid="lab-edit-reset">Use the standard values</button>}
       </div>
@@ -377,8 +388,10 @@ function CustomTestForm({ cat, platformPanels, clinicPanels, clinicTests, onDone
   const [normal, setNormal] = useState("");
   const [panel, setPanel] = useState(OWN_PANEL);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function save() {
+    if (saving) return;
     if (!name.trim() || !short.trim()) return setError("A test needs a name and a short name.");
     if ((low.trim() && toNum(low) === undefined) || (high.trim() && toNum(high) === undefined)) return setError("Ranges must be numbers.");
     if (kind === "coded" && !listOf(options).length) return setError("List the choices, separated by commas.");
@@ -389,6 +402,7 @@ function CustomTestForm({ cat, platformPanels, clinicPanels, clinicTests, onDone
       ...(range ? { range } : {}), ...(kind !== "numeric" && listOf(options).length ? { options: listOf(options) } : {}), ...(kind !== "numeric" && listOf(normal).length ? { normal: listOf(normal) } : {}),
     });
     const sortOrder = 100_000 + clinicTests.size;
+    setSaving(true);
     try {
       await saveLabCatalogueRow(db, session.tenantId, "lab_test", code, { ...cols, sort_order: sortOrder, is_active: true });
       if (panel === OWN_PANEL) {
@@ -404,6 +418,7 @@ function CustomTestForm({ cat, platformPanels, clinicPanels, clinicTests, onDone
       onDone();
     } catch (e) {
       setError((e as Error).message);
+      setSaving(false);
     }
   }
 
@@ -446,7 +461,7 @@ function CustomTestForm({ cat, platformPanels, clinicPanels, clinicTests, onDone
       </div>
       {error && <p className="text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
-        <button className="btn-primary py-1 text-sm" onClick={save} data-testid="lab-new-save">Add test</button>
+        <SaveButton type="button" className="btn-primary py-1 text-sm" saving={saving} onClick={save} pendingLabel="Adding…" data-testid="lab-new-save">Add test</SaveButton>
         <button className="btn-ghost py-1 text-sm" onClick={onDone}>Cancel</button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { SaveButton } from "@/components/save-button";
 import { saveGeneric } from "../actions";
 
 export interface GenericFormValue {
@@ -37,7 +38,7 @@ export function GenericForm({ g }: { g: GenericFormValue }) {
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isActive" defaultChecked={g.isActive} /> Active</label>
       </div>
       <div className="flex items-center gap-3 md:col-span-2">
-        <button className="btn-primary" disabled={pending}>{pending ? "Saving…" : "Save"}</button>
+        <SaveButton className="btn-primary" saving={pending}>Save</SaveButton>
         {state && "ok" in state && <span className="text-sm text-green-700">Saved.</span>}
         {state && "error" in state && <span className="text-sm text-red-600">{state.error}</span>}
       </div>

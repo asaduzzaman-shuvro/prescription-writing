@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AsyncPicker, type Option } from "@/components/admin/generic-picker";
+import { SaveButton } from "@/components/save-button";
 import { saveInteraction, searchGenericOptions } from "./actions";
 
 export function InteractionForm() {
@@ -22,11 +23,11 @@ export function InteractionForm() {
       <div className="md:col-span-3"><label className="label">Effect</label><input className="input" value={effect} onChange={(e) => setEffect(e.target.value)} placeholder="↑ statin levels — risk of myopathy" /></div>
       <div className="md:col-span-3"><label className="label">Management</label><input className="input" value={management} onChange={(e) => setManagement(e.target.value)} placeholder="Avoid; withhold statin during the course" /></div>
       <div className="flex items-center gap-2 md:col-span-6">
-        <button className="btn-primary" disabled={pending || !a || !b} onClick={() => start(async () => {
+        <SaveButton className="btn-primary" saving={pending} disabled={!a || !b} onClick={() => start(async () => {
           const r = await saveInteraction({ a: a!.id, b: b!.id, severity, effect, management, reviewedBy });
           setMsg(r.error ?? "Saved — doctors receive it on next sync");
-          if (!r.error) { setA(null); setB(null); setEffect(""); setManagement(""); }
-        })}>Save interaction</button>
+          if (!r.error) { setA(null); setB(null); setEffect(""); setManagement(""); setReviewedBy(""); setSeverity("moderate"); }
+        })}>Save interaction</SaveButton>
         {msg && <span className="text-sm text-slate-600">{msg}</span>}
       </div>
     </div>

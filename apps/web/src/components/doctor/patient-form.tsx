@@ -7,6 +7,7 @@ import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { navigate } from "@/lib/doctor/router";
 import { ageParts, dobFromAge, normaliseMobile, parseJson } from "@/lib/doctor/util";
+import { SaveButton } from "@/components/save-button";
 
 interface FormState {
   name: string;
@@ -221,13 +222,13 @@ export function PatientEdit({
   const actions = (
     <div className="flex flex-wrap gap-2">
       {!patientId && (
-        <button className="btn-primary" disabled={saving} data-testid="patient-save-visit">
+        <SaveButton className="btn-primary" saving={saving} data-testid="patient-save-visit">
           {session.tenantRole === "doctor" ? "Save & start visit" : "Save & add to queue"}
-        </button>
+        </SaveButton>
       )}
-      <button type="button" className={patientId ? "btn-primary" : "btn-secondary"} disabled={saving} onClick={(e) => save(e, false)}>
+      <SaveButton type="button" className={patientId ? "btn-primary" : "btn-secondary"} saving={saving} onClick={(e) => save(e, false)}>
         Save
-      </button>
+      </SaveButton>
       <button type="button" className="btn-ghost" onClick={() => (onClose ? onClose() : history.back())}>
         Cancel
       </button>

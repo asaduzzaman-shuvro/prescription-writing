@@ -10,6 +10,7 @@ import { buildLabPrintHtml, provisionalLabRef } from "@/lib/doctor/lab-print";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, parseJson, uuid } from "@/lib/doctor/util";
 import { ReportLoading } from "@/components/loading-states";
+import { SaveButton } from "@/components/save-button";
 import { ListPager } from "@/components/list-pager";
 import { EMPTY_ROW, FLAG_STYLE, LabValueInput, rowFromResult, rowResult, type RowInput } from "./lab-entry";
 import { PatientSearch } from "./patient-search";
@@ -155,6 +156,7 @@ function LabRequestEditor({ requestId }: { requestId?: string }) {
   };
 
   async function save(thenPrint: boolean) {
+    if (saving) return;
     setError(null);
     if (!patientId) return setError("Choose the patient first.");
     if (!panels.length) return setError("Choose at least one test.");
@@ -243,8 +245,8 @@ function LabRequestEditor({ requestId }: { requestId?: string }) {
 
       {error && <p className="text-sm text-red-700" data-testid="lab-request-error">{error}</p>}
       <div className="flex gap-2">
-        <button className="btn-primary" onClick={() => save(true)} disabled={saving} data-testid="lab-save-print">Save & print</button>
-        <button className="btn-secondary" onClick={() => save(false)} disabled={saving} data-testid="lab-save-request">Save</button>
+        <SaveButton type="button" className="btn-primary" saving={saving} onClick={() => save(true)} data-testid="lab-save-print">Save & print</SaveButton>
+        <SaveButton type="button" className="btn-secondary" saving={saving} onClick={() => save(false)} data-testid="lab-save-request">Save</SaveButton>
       </div>
     </div>
   );

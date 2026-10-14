@@ -200,17 +200,26 @@ function birthNotes(p: PatientInfo): string[] {
   ].filter(Boolean);
 }
 
+/** Lines the doctor typed, without a blank line at either end. */
+function keptLines(s: string | undefined | null): string[] {
+  const t = (s ?? "").replace(/\r\n/g, "\n").trim();
+  return t ? t.split("\n") : [];
+}
+
 /** Name, address, schedule (or free-text hours) and phones of one chamber. */
 function chamberBlock(c: ChamberHeader, lang: Lang, n: Numerals): string {
-  if (!c.name && !c.address) return "";
+  const nameLines = keptLines(c.name);
+  const addressLines = keptLines(c.address);
+  if (!nameLines.length && !addressLines.length) return "";
   const slots = (c.schedule ?? []).map((sl) => formatSlot(sl, lang, n)).filter(Boolean);
   const lines = [
-    c.address,
+    ...addressLines,
     ...(slots.length ? slots : c.hours ? [c.hours] : []),
     c.serialPhone ? `${lang === "bn" ? "সিরিয়াল" : "Serial"}: ${c.serialPhone}` : "",
     c.phone ?? "",
   ].filter(Boolean);
-  return `<div class="chamber"><b>${esc(c.name)}</b>${lines.map((l) => `<br>${esc(l)}`).join("")}</div>`;
+  const name = nameLines.map((l) => `<b>${esc(l)}</b>`).join("<br>");
+  return `<div class="chamber">${name}${lines.map((l) => `<br>${esc(l)}`).join("")}</div>`;
 }
 
 /** Bangla rendering of a BMDC number: "A-39542" → "এ-৩৯৫৪২". */

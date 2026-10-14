@@ -92,6 +92,16 @@ describe("renderPrescriptionHtml: chambers, logo, barcode", () => {
       settings: { ...DEFAULT_PRINT_SETTINGS, ...settings }, fonts: { bengali: "", latin: "" },
     });
 
+  it("keeps line breaks in the chamber name and address", () => {
+    const html = renderPrescriptionHtml({
+      doc: SAMPLE_DOC, patient: SAMPLE_PATIENT, doctor: SAMPLE_DOCTOR, date: "2026-06-11",
+      chamber: { ...chamber, name: "Popular Diagnostic Centre\nDhanmondi", address: "House 16, Road 2\nDhanmondi, Dhaka-1205" },
+      settings: DEFAULT_PRINT_SETTINGS, fonts: { bengali: "", latin: "" },
+    });
+    expect(html).toContain("<b>Popular Diagnostic Centre</b><br><b>Dhanmondi</b>");
+    expect(html).toContain("<br>House 16, Road 2<br>Dhanmondi, Dhaka-1205");
+  });
+
   it("prints the schedule (not the old hours), serial phone and policy line in the footer", () => {
     const html = render();
     expect(html).toContain("রবিবার, মঙ্গলবার ও বৃহস্পতিবার, সকাল ৯টা - ১০টা");

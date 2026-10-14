@@ -8,6 +8,7 @@ import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { navigate } from "@/lib/doctor/router";
 import { ageLabel, normaliseMobile, today } from "@/lib/doctor/util";
 import { ListPager } from "@/components/list-pager";
+import { SaveButton } from "@/components/save-button";
 
 export interface ApptRow {
   id: string;
@@ -67,6 +68,7 @@ export function BookingsScreen() {
   const [patientPage, setPatientPage] = useState(0);
   const [msg, setMsg] = useState<string>();
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [booking, setBooking] = useState(false);
   const { data } = useAppointments(date);
   const checkIn = useCheckIn();
   const isDoctor = session.tenantRole === "doctor";
@@ -100,11 +102,17 @@ export function BookingsScreen() {
 
   async function book(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim() || !doctorId) return;
+    if (booking || !form.name.trim() || !doctorId) return;
     const mobile = normaliseMobile(form.mobile);
-    const serial = await bookAppointment(db, { tenantId: session.tenantId, userId: session.userId, doctorUserId: doctorId, chamberId: chamber?.id ?? null, name: form.name, mobile, date, note: form.note });
-    setMsg(`Booked serial #${serial} for ${form.name} on ${date}`);
-    setForm({ ...form, name: "", mobile: "", note: "" });
+    const name = form.name;
+    setBooking(true);
+    try {
+      const serial = await bookAppointment(db, { tenantId: session.tenantId, userId: session.userId, doctorUserId: doctorId, chamberId: chamber?.id ?? null, name, mobile, date, note: form.note });
+      setMsg(`Booked serial #${serial} for ${name} on ${date}`);
+      setForm({ ...form, name: "", mobile: "", note: "" });
+    } finally {
+      setBooking(false);
+    }
   }
 
   async function bookPatient(p: { id: string; name: string; mobile: string | null }) {
@@ -153,7 +161,7 @@ export function BookingsScreen() {
           <div><label className="label">Doctor</label><select className="input" value={doctorId} onChange={(e) => setForm({ ...form, doctorId: e.target.value })}>{doctors.map((d) => <option key={d.id} value={d.id}>{d.name_en}</option>)}</select></div>
         )}
         <div className="min-w-40 flex-1"><label className="label">Note</label><input className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="New / follow-up / report" /></div>
-        <button className="btn-primary" data-testid="book-submit">Book serial</button>
+        <SaveButton className="btn-primary" saving={booking} data-testid="book-submit">Book serial</SaveButton>
       </form>
       {msg && <p className="text-sm text-green-700" data-testid="book-msg">{msg}</p>}
 
@@ -178,9 +186,9 @@ export function BookingsScreen() {
                   {p.appt_status ? (
                     <span className="ml-2 text-xs text-slate-500">Serial #{p.serial_no}</span>
                   ) : (
-                    <button type="button" className="btn-secondary ml-1.5 text-xs" disabled={bookingId === p.id} onClick={() => bookPatient(p)} data-testid="book-patient">
+                    <SaveButton type="button" className="btn-secondary ml-1.5 text-xs" saving={bookingId === p.id} pendingLabel="Booking…" onClick={() => bookPatient(p)} data-testid="book-patient">
                       Book
-                    </button>
+                    </SaveButton>
                   )}
                 </td>
               </tr>

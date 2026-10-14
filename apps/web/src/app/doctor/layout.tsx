@@ -1,3 +1,4 @@
+import { logout } from "@/app/login/actions";
 import { requireClinic } from "@/lib/session";
 import { tenantBrief } from "@/lib/tenant-access";
 import { DoctorRoot } from "./root";
@@ -9,7 +10,17 @@ export default async function DoctorLayout({ children }: { children: React.React
   await connection();
   const session = await requireClinic();
   const t = await tenantBrief(session.tenantId);
-  if (t?.status === "suspended") {
+  if (!t) {
+    return (
+      <main className="mx-auto max-w-md p-8 text-center text-slate-600">
+        <p>This sign-in is for a chamber that is not on this server.</p>
+        <form action={logout} className="mt-4">
+          <button type="submit" className="btn-primary">Sign in again</button>
+        </form>
+      </main>
+    );
+  }
+  if (t.status === "suspended") {
     return <main className="p-8 text-center text-slate-600">This chamber is suspended. Please contact RxPad support.</main>;
   }
   return (

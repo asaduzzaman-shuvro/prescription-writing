@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { SaveButton } from "@/components/save-button";
 import { addMember, resetPassword, saveDoctorProfile } from "../actions";
 
 export interface ProfileValue {
@@ -40,7 +41,7 @@ export function ProfileForm({ p, specialties }: { p: ProfileValue; specialties: 
       </div>
       <F label="Specialty line (printed, বাংলা)" name="specialtyLabel" defaultValue={p.specialtyLabel} />
       <div className="flex items-end gap-3 md:col-span-3">
-        <button className="btn-primary" disabled={pending}>Save profile</button>
+        <SaveButton className="btn-primary" saving={pending}>Save profile</SaveButton>
         {state && "ok" in state && <span className="text-sm text-green-700">Saved.{state.reverify && " BMDC/degrees changed — verification reset."}</span>}
         {state && "error" in state && <span className="text-sm text-red-600">{state.error}</span>}
       </div>

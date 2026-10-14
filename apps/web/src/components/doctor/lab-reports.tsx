@@ -28,6 +28,7 @@ import { deleteLabReport, lastFinalDoc, recordReportFilesConsent, saveLabReport 
 import { useLabCatalogue } from "@/lib/doctor/hooks";
 import { parseJson, today, uuid } from "@/lib/doctor/util";
 import { addLabFile, readLabFile, removeLabFile } from "@/lib/powersync/lab-files";
+import { SaveButton } from "@/components/save-button";
 import { EMPTY_ROW, FLAG_STYLE, LabValueInput, rowFromResult, rowResult, type RowInput } from "./lab-entry";
 
 export interface LabReportView {
@@ -201,6 +202,7 @@ export function LabReports({
   const reports = useLabReports(patientId);
   const [editing, setEditing] = useState<{ panel: string; report?: LabReportView; title?: string } | null>(null);
   const [quick, setQuick] = useState("");
+  const [quickSaving, setQuickSaving] = useState(false);
   const [quickError, setQuickError] = useState<string | null>(null);
   const [ordered, setOrdered] = useState<string[]>([]);
   const thisVisit = reports.filter((r) => r.encounterId === encounterId);
@@ -224,6 +226,7 @@ export function LabReports({
 
   /** "hb 9.2 wbc 11800 rbs 11.4": one report per panel, dated today, from the last lab. */
   async function saveQuick() {
+    if (quickSaving) return;
     const parsed = parseLabShorthand(quick, cat);
     if (parsed.unknown.length) return setQuickError(`Didn't recognise: ${parsed.unknown.join(", ")}`);
     if (!parsed.results.length) return;
@@ -233,6 +236,7 @@ export function LabReports({
       const panel = panelOfTest(x.code, cat)?.id ?? OTHER_PANEL;
       byPanel.set(panel, [...(byPanel.get(panel) ?? []).filter((r) => r.code !== x.code), labResult(test, x, sex)]);
     }
+    setQuickSaving(true);
     try {
       for (const [panel, results] of byPanel) {
         await saveLabReport(db, { patientId, encounterId, reportDate: today(), labName: lastLab, panel, title: labPanel(panel, cat)?.name ?? "Reports", results, conclusion: "" });
@@ -241,6 +245,8 @@ export function LabReports({
       setQuickError(null);
     } catch (e) {
       setQuickError((e as Error).message);
+    } finally {
+      setQuickSaving(false);
     }
   }
 
@@ -280,7 +286,7 @@ export function LabReports({
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <input className="input min-w-0 flex-1 py-1 text-sm" value={quick} placeholder="Quick entry: hb 9.2 wbc 11800 rbs 11.4 hbsag neg — Enter to save"
+        <input className="input min-w-0 flex-1 py-1 text-sm" value={quick} disabled={quickSaving} placeholder={quickSaving ? "Saving…" : "Quick entry: hb 9.2 wbc 11800 rbs 11.4 hbsag neg — Enter to save"}
           onChange={(e) => { setQuick(e.target.value); setQuickError(null); }} onKeyDown={(e) => e.key === "Enter" && void saveQuick()} data-testid="lab-quick" />
       </div>
       {quickError && <p className="text-sm text-red-700" data-testid="lab-quick-error">{quickError}</p>}
@@ -366,6 +372,7 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
   const added = useRef<string[]>([]);
   const removed = useRef<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   /** `list` is copied from the input first: clearing the input empties its live FileList. */
   async function addFiles(list: File[]) {
@@ -422,15 +429,18 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
   };
 
   async function save() {
+    if (saving) return;
     const entered = codes.map((c) => resultOf(byCode[c]!)).filter((x): x is LabResult => x !== null);
     const results = [...entered, ...kept];
     if (!results.length && !conclusion.trim() && !files.length) return setError(isOther ? "Write the report's finding." : "Enter at least one value.");
+    setSaving(true);
     try {
       await saveLabReport(db, { patientId, encounterId: report ? report.encounterId : encounterId, reportDate: date, labName, panel, title, results, conclusion, files }, reportId);
       for (const id of removed.current) await removeLabFile(id);
       onDone();
     } catch (e) {
       setError((e as Error).message);
+      setSaving(false);
     }
   }
 
@@ -551,7 +561,7 @@ function LabReportEditor({ panel, report, initialTitle, patientId, encounterId, 
       </div>
       {error && <p className="text-sm text-red-700" data-testid="lab-error">{error}</p>}
       <div className="flex gap-2">
-        <button className="btn-primary px-3 py-1 text-sm" onClick={save} disabled={busy} data-testid="lab-save">Save report</button>
+        <SaveButton type="button" className="btn-primary px-3 py-1 text-sm" saving={saving} disabled={busy} onClick={save} data-testid="lab-save">Save report</SaveButton>
         <button className="btn-ghost px-3 py-1 text-sm" onClick={cancel}>Cancel</button>
       </div>
     </div>
