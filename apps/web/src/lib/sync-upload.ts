@@ -94,7 +94,7 @@ const SPECS: Record<string, TableSpec> = {
     columns: {
       name: "text", address: "text", phone: "text", hours: "text", print_settings: "jsonb", doctor_user_id: "uuid",
       schedule: "jsonb", serial_phone: "text", footer_text: "text", logo_data_url: "text", is_active: "bool", created_at: "ts",
-      free_report_days: "int",
+      free_report_days: "int", report_fee: "int",
     },
   },
   rx_template: {

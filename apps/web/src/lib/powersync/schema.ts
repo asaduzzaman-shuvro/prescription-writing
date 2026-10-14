@@ -177,6 +177,7 @@ const chamber = new Table({
   footer_text: column.text,
   logo_data_url: column.text,
   free_report_days: column.integer,
+  report_fee: column.integer,
   print_settings: column.text,
   is_active: column.integer,
   ...timestamps,

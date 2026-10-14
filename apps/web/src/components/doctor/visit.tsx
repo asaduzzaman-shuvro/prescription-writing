@@ -65,16 +65,23 @@ function VitalsPanel({
   encounterId,
   initial,
   readOnly,
+  embedded = false,
 }: {
   encounterId: string;
   initial: Vitals;
   readOnly: boolean;
+  /** Inside the patient card on tablet and phone. No section chrome, and no test ids (the editor copy keeps those). */
+  embedded?: boolean;
 }) {
   const db = usePowerSync();
   const [v, setV] = useState<Vitals>(initial);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const pending = useRef<Vitals | null>(null);
-  useEffect(() => setV(initial), [encounterId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const incoming = JSON.stringify(initial);
+  // The card and the editor each have a copy. Adopt a save from the other one when this copy is not mid-edit.
+  useEffect(() => {
+    if (!pending.current) setV(JSON.parse(incoming) as Vitals);
+  }, [incoming]);
   useEffect(
     () => () => {
       clearTimeout(timer.current);
@@ -94,15 +101,15 @@ function VitalsPanel({
     }, 500);
   };
   const field = (k: keyof Vitals, label: string) => (
-    <label className="flex w-[4.25rem] shrink-0 flex-col text-[11px] font-medium text-slate-500">
+    <label className={`flex min-w-0 flex-col text-[11px] font-medium text-slate-500 ${embedded ? "flex-1" : "w-[4.25rem] shrink-0"}`}>
       {label}
       <input
-        className="input h-7 w-full min-w-0 py-0.5 text-sm tabular-nums"
+        className="input h-7 w-full min-w-0 px-1 py-0.5 text-sm tabular-nums"
         inputMode="decimal"
         disabled={readOnly}
         value={v[k] ?? ""}
         onChange={(e) => set(k, e.target.value)}
-        data-testid={`vital-${k}`}
+        data-testid={embedded ? undefined : `vital-${k}`}
       />
     </label>
   );
@@ -117,20 +124,14 @@ function VitalsPanel({
     v.weightKg,
     v.heightCm,
   ].filter((x) => x != null).length;
-  return (
-    <VisitSection
-      id="vitals"
-      title="O/E — Vitals"
-      badge={filled || (b ? `BMI ${b}` : null)}
-      className="lg:col-span-2"
-      inline
-    >
-      <div className="flex flex-wrap items-end gap-1.5">
-        <label className="flex w-[7.25rem] shrink-0 flex-col text-[11px] font-medium text-slate-500">
+  const fields = (
+    <>
+      <div className={embedded ? "flex flex-nowrap items-end gap-1" : "flex flex-wrap items-end gap-1.5"}>
+        <label className={`flex min-w-0 flex-col text-[11px] font-medium text-slate-500 ${embedded ? "flex-[1.55]" : "w-[7.25rem] shrink-0"}`}>
           BP
           <span className="flex items-center gap-0.5">
             <input
-              className="input h-7 min-w-0 flex-1 py-0.5 text-sm tabular-nums"
+              className="input h-7 min-w-0 flex-1 px-1 py-0.5 text-sm tabular-nums"
               inputMode="numeric"
               disabled={readOnly}
               value={v.bpSystolic ?? ""}
@@ -139,7 +140,7 @@ function VitalsPanel({
             />
             <span className="shrink-0 text-slate-300">/</span>
             <input
-              className="input h-7 min-w-0 flex-1 py-0.5 text-sm tabular-nums"
+              className="input h-7 min-w-0 flex-1 px-1 py-0.5 text-sm tabular-nums"
               inputMode="numeric"
               disabled={readOnly}
               value={v.bpDiastolic ?? ""}
@@ -155,9 +156,32 @@ function VitalsPanel({
         {field("weightKg", "Wt")}
         {field("heightCm", "Ht")}
       </div>
-      {b && (
-        <p className="text-[11px] tabular-nums text-slate-500">BMI {b}</p>
+      {b && !embedded && (
+        <p className="mt-1 text-[11px] tabular-nums text-slate-500">BMI {b}</p>
       )}
+    </>
+  );
+  if (embedded) {
+    return (
+      <div className="flex items-end gap-1 xl:hidden" data-testid="visit-oe-card">
+        <div className="min-w-0 flex-1">{fields}</div>
+        {b && (
+          <span className="shrink-0 pb-1 text-[10px] font-medium tabular-nums text-slate-500">
+            BMI {b}
+          </span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <VisitSection
+      id="vitals"
+      title="O/E — Vitals"
+      badge={filled || (b ? `BMI ${b}` : null)}
+      className="max-xl:hidden lg:col-span-2"
+      inline
+    >
+      {fields}
     </VisitSection>
   );
 }
@@ -663,7 +687,7 @@ function RxEditor({
 
   return (
     <VisitPaneProvider>
-    <div className="flex flex-col gap-1.5 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
+    <div className="flex flex-col gap-1.5 xl:min-h-0 xl:flex-1 xl:overflow-hidden">
       <div
         className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-white p-1 xl:flex-nowrap"
         data-testid="rx-toolbar"
@@ -774,8 +798,8 @@ function RxEditor({
         </div>
       ))}
 
-      {/* Phone/tablet: natural height + page scroll. Desktop: 2|3 side by side, fill height. */}
-      <div className="flex flex-col gap-2 lg:min-h-0 lg:flex-1 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
+      {/* Phone and tablet, including landscape: natural height, the page scrolls. Laptop/desktop: columns fill the leftover height and scroll inside. */}
+      <div className="flex flex-col gap-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] xl:min-h-0 xl:flex-1 xl:grid-rows-[auto_minmax(0,1fr)] xl:overflow-hidden">
         <VitalsPanel
           encounterId={encounterId}
           initial={vitals}
@@ -784,7 +808,7 @@ function RxEditor({
         <VisitSection
           id="clinical"
           title="Clinical"
-          className="lg:h-full lg:min-h-0"
+          className="xl:h-full xl:min-h-0 xl:row-start-2"
           badge={
             doc.chiefComplaints.length || doc.diagnoses.length
               ? [doc.chiefComplaints.length && `${doc.chiefComplaints.length} C/C`, doc.diagnoses.length && `${doc.diagnoses.length} Dx`].filter(Boolean).join(" · ")
@@ -897,7 +921,7 @@ function RxEditor({
         <VisitSection
           id="medicines"
           title="℞ Medicines"
-          className="lg:h-full lg:min-h-0"
+          className="xl:h-full xl:min-h-0 xl:row-start-2"
           badge={items.length || null}
         >
           <div className="space-y-2" data-testid="rx-meds-pane">
@@ -1144,18 +1168,21 @@ function VisitTypeControl({
   visitDate,
   chamberId,
   visitType,
+  fee,
 }: {
   encounterId: string;
   patientId: string;
   visitDate: string;
   chamberId: string | null;
   visitType: VisitType | null;
+  fee: number | null;
 }) {
   const db = usePowerSync();
   const { data: chambers } = useQuery<{
     free_report_days: number | null;
+    report_fee: number | null;
     schedule: string | null;
-  }>("SELECT free_report_days, schedule FROM chamber WHERE id = ?", [
+  }>("SELECT free_report_days, report_fee, schedule FROM chamber WHERE id = ?", [
     chamberId ?? "",
   ]);
   const [last, setLast] = useState<string | null>(null);
@@ -1169,6 +1196,14 @@ function VisitTypeControl({
     ch?.free_report_days,
     chamberWorkdays(parseJson<ChamberSlot[]>(ch?.schedule, [])),
   );
+  // A report visit with no fee yet picks up this chamber's report fee (or ৳0 inside the free window).
+  useEffect(() => {
+    if (visitType !== "report" || !ch) return;
+    const next = free ? 0 : ch.report_fee;
+    if (next == null || next === fee) return;
+    if (fee != null && !free) return;
+    void saveFee(db, encounterId, next);
+  }, [visitType, ch?.report_fee, fee, free, db, encounterId]);
   return (
     <>
       <select
@@ -1176,9 +1211,13 @@ function VisitTypeControl({
         value={visitType ?? ""}
         aria-label="Visit type"
         data-testid="visit-type"
-        onChange={(e) =>
-          saveVisitType(db, encounterId, e.target.value as VisitType)
-        }
+        onChange={(e) => {
+          const next = e.target.value as VisitType;
+          if (next === "report") {
+            const fee = free ? 0 : ch?.report_fee;
+            void saveVisitType(db, encounterId, next, fee == null ? undefined : fee);
+          } else void saveVisitType(db, encounterId, next);
+        }}
       >
         {!visitType && <option value="">Visit type…</option>}
         <option value="new">New</option>
@@ -1314,7 +1353,7 @@ export function VisitScreen({
         className="min-w-0 flex-1 overflow-hidden rounded-md border border-slate-200 bg-white"
         data-testid="visit-patient"
       >
-        <div className="flex items-center justify-between gap-1.5 border-b border-brand-100 bg-brand-50/80 px-2 py-1">
+        <div className="hidden items-center justify-between gap-1.5 border-b border-brand-100 bg-brand-50/80 px-2 py-1 xl:flex">
           <span className="rounded bg-brand-600 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
             #{enc.serial_no}
           </span>
@@ -1323,55 +1362,74 @@ export function VisitScreen({
           </span>
         </div>
         <div className="space-y-1.5 p-2">
-          <div className="flex flex-wrap items-end gap-x-2 gap-y-1.5">
-            <div className="min-w-0 flex-1 basis-[7rem]">
-              <Link
-                to={`/patients/${p.id}`}
-                className="block truncate text-[15px] font-semibold leading-tight text-brand-700 hover:underline"
-              >
-                {p.name}
-              </Link>
-              <p className="mt-0.5 truncate text-[11px] leading-snug text-slate-500">
-                {ageLabel(p.dob)} · {p.sex ?? "—"} · {p.mobile}
-              </p>
-              <p className="truncate text-[11px] text-slate-400">
-                {p.code ?? "ID pending"}
-              </p>
+          <div className="grid grid-cols-2 items-start gap-3 xl:grid-cols-1 xl:gap-1.5">
+          <div className="min-w-0">
+            <div className="mb-1 flex h-5 items-center xl:hidden">
+              <span className="rounded bg-brand-600 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
+                #{enc.serial_no}
+              </span>
             </div>
-            <div className="flex shrink-0 flex-nowrap items-end gap-1.5">
-              <label className="w-[6.5rem] shrink-0">
-                <span className="label mb-0 text-[10px]">Fee ৳</span>
-                <input
-                  className="input h-7 w-full py-0.5 text-sm tabular-nums"
-                  inputMode="numeric"
-                  defaultValue={enc.fee ?? ""}
-                  key={`fee-${enc.id}-${enc.fee}`}
-                  data-testid="visit-fee"
-                  onBlur={(e) =>
-                    saveFee(
-                      db,
-                      encounterId,
-                      e.target.value
-                        ? Number(e.target.value.replace(/\D/g, ""))
-                        : null,
-                    )
-                  }
-                />
-              </label>
-              <label className="w-[7.25rem] shrink-0">
-                <span className="label mb-0 text-[10px]">Type</span>
-                <div className="[&_select]:h-7 [&_select]:w-full [&_select]:py-0.5 [&_select]:text-xs">
-                  <VisitTypeControl
-                    encounterId={encounterId}
-                    patientId={p.id}
-                    visitDate={enc.visit_date}
-                    chamberId={enc.chamber_id}
-                    visitType={enc.visit_type}
-                  />
-                </div>
-              </label>
-            </div>
+            <Link
+              to={`/patients/${p.id}`}
+              className="block truncate text-[15px] font-semibold leading-tight text-brand-700 hover:underline"
+            >
+              {p.name}
+            </Link>
+            <p className="mt-0.5 truncate text-[11px] leading-snug text-slate-500">
+              {ageLabel(p.dob)} · {p.sex ?? "—"} · {p.mobile}
+            </p>
+            <p className="truncate text-[11px] text-slate-400">
+              {p.code ?? "ID pending"}
+            </p>
           </div>
+          <div className="min-w-0">
+            <div className="mb-1 flex h-5 items-center justify-end xl:hidden">
+              <span className="text-[11px] tabular-nums text-slate-500">
+                {enc.visit_date}
+              </span>
+            </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="min-w-0">
+              <span className="label mb-0 text-[10px]">{enc.visit_type === "report" ? "Report fee ৳" : "Fee ৳"}</span>
+              <input
+                className="input h-7 w-full py-0.5 text-sm tabular-nums"
+                inputMode="numeric"
+                defaultValue={enc.fee ?? ""}
+                key={`fee-${enc.id}-${enc.fee}`}
+                data-testid="visit-fee"
+                onBlur={(e) =>
+                  saveFee(
+                    db,
+                    encounterId,
+                    e.target.value
+                      ? Number(e.target.value.replace(/\D/g, ""))
+                      : null,
+                  )
+                }
+              />
+            </label>
+            <label className="min-w-0">
+              <span className="label mb-0 text-[10px]">Type</span>
+              <div className="flex flex-col gap-1 [&_select]:h-7 [&_select]:w-full [&_select]:py-0.5 [&_select]:text-xs">
+                  <VisitTypeControl
+                  encounterId={encounterId}
+                  patientId={p.id}
+                  visitDate={enc.visit_date}
+                  chamberId={enc.chamber_id}
+                  visitType={enc.visit_type}
+                  fee={enc.fee}
+                />
+              </div>
+            </label>
+          </div>
+          </div>
+          </div>
+          <VitalsPanel
+            encounterId={encounterId}
+            initial={vitals}
+            readOnly={enc.status === "done"}
+            embedded
+          />
           {(allergies.length > 0 ||
             (p.pregnancy_status && p.pregnancy_status !== "none")) && (
             <div className="flex flex-wrap gap-1">
@@ -1451,9 +1509,9 @@ export function VisitScreen({
   return (
     <div
       data-visit-fill
-      className="flex flex-col gap-2 lg:min-h-0 lg:flex-1 lg:overflow-hidden xl:grid xl:h-full xl:grid-cols-[minmax(0,1fr)_16.5rem] xl:grid-rows-1"
+      className="flex flex-col gap-2 xl:grid xl:h-full xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_16.5rem] xl:grid-rows-1 xl:overflow-hidden"
     >
-      <div className="flex min-w-0 flex-col gap-1.5 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
+      <div className="flex min-w-0 flex-col gap-1.5 xl:min-h-0 xl:flex-1 xl:overflow-hidden">
         {/* Below xl the patient block sits above the editor: actions on the left, identity on the right. */}
         <div className="flex shrink-0 items-stretch gap-1.5 xl:hidden">
           {sectionTabs}
@@ -1526,7 +1584,7 @@ export function VisitScreen({
               </nav>
               {/* Assistants: vitals here. Doctors: §1 inside RxEditor (accordion on phone/tablet). */}
               {!isDoctor && (
-                <div className="min-w-0 w-full border-t border-slate-100 pt-2 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-3">
+                <div className="hidden min-w-0 w-full border-slate-100 xl:block xl:border-l xl:border-t-0 xl:pt-0 xl:pl-3">
                   <VitalsPanel
                     encounterId={encounterId}
                     initial={vitals}
@@ -1537,7 +1595,7 @@ export function VisitScreen({
             </div>
             {isDoctor ? (
               rxId ? (
-                <div className="flex flex-col lg:min-h-0 lg:flex-1 lg:overflow-hidden">
+                <div className="flex flex-col xl:min-h-0 xl:flex-1 xl:overflow-hidden">
                   <RxEditor
                     key={rxId}
                     prescriptionId={rxId}

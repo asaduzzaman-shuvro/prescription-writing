@@ -12,13 +12,13 @@ import { SaveButton } from "@/components/save-button";
 const DAY_LABEL: Record<Weekday, string> = { sat: "শনি", sun: "রবি", mon: "সোম", tue: "মঙ্গল", wed: "বুধ", thu: "বৃহঃ", fri: "শুক্র" };
 const SLOT_LABELS = ["রোগী দেখার সময়", "অপারেশন", "সিরিয়াল দেওয়ার সময়"];
 
-const blank = (): ChamberInput => ({ name: "", address: "", phone: "", serialPhone: "", schedule: [], footerText: "", logoDataUrl: null, freeReportDays: null });
+const blank = (): ChamberInput => ({ name: "", address: "", phone: "", serialPhone: "", schedule: [], footerText: "", logoDataUrl: null, freeReportDays: null, reportFee: null });
 
 function inputOf(c: ChamberRow): ChamberInput {
   return {
     name: c.name, address: c.address, phone: c.phone ?? "", serialPhone: c.serial_phone ?? "",
     schedule: parseJson<ChamberSlot[]>(c.schedule, []), footerText: c.footer_text ?? "", logoDataUrl: c.logo_data_url,
-    freeReportDays: c.free_report_days,
+    freeReportDays: c.free_report_days, reportFee: c.report_fee,
   };
 }
 
@@ -77,7 +77,7 @@ function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: Cham
   return (
     <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
       <datalist id="chamber-slot-labels">{SLOT_LABELS.map((l) => <option key={l} value={l} />)}</datalist>
-      <div className="grid gap-2 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="text-sm"><span className="label">Chamber / hospital name *</span>
           <textarea className="input" rows={3} value={c.name} onChange={(e) => set("name", e.target.value)} data-testid="chamber-name" /></label>
         <label className="text-sm"><span className="label">Address *</span>
@@ -95,12 +95,19 @@ function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: Cham
         ))}
         <button type="button" className="btn-ghost text-xs" onClick={() => set("schedule", [...c.schedule, { days: [] }])} data-testid="chamber-add-slot">+ Add days / times</button>
       </div>
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className="text-sm"><span className="label">Report showing fee (৳)</span>
+          <input className="input" inputMode="numeric" value={c.reportFee ?? ""} data-testid="chamber-report-fee" placeholder="e.g. 300"
+            onChange={(e) => set("reportFee", e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")) : null)} />
+          <span className="mt-0.5 block text-[11px] text-slate-500">Shown as the visit fee when the type is Report showing.</span>
+        </label>
         <label className="text-sm"><span className="label">Free report showing within (working days)</span>
-          <input className="input w-24" inputMode="numeric" value={c.freeReportDays ?? ""} data-testid="chamber-free-days"
-            onChange={(e) => set("freeReportDays", e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")) : null)} /></label>
+          <input className="input" inputMode="numeric" value={c.freeReportDays ?? ""} data-testid="chamber-free-days"
+            onChange={(e) => set("freeReportDays", e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")) : null)} />
+          <span className="mt-0.5 block text-[11px] text-slate-500">Inside this window the report fee is ৳0.</span>
+        </label>
         {!!c.freeReportDays && (
-          <button type="button" className="btn-ghost text-xs" onClick={() => set("footerText", freeReportPolicyText(c.freeReportDays!, "bn", "bn"))}>
+          <button type="button" className="btn-ghost self-end text-xs sm:col-span-2" onClick={() => set("footerText", freeReportPolicyText(c.freeReportDays!, "bn", "bn"))}>
             Use as footer note
           </button>
         )}

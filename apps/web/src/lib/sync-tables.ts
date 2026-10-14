@@ -69,7 +69,7 @@ export const SYNC_COLUMNS: Record<string, readonly string[]> = {
   ],
   chamber: [
     "id", "tenant_id", "doctor_user_id", "name", "address", "phone", "hours", "schedule", "serial_phone",
-    "footer_text", "logo_data_url", "free_report_days", "print_settings", "is_active", "created_at", "updated_at",
+    "footer_text", "logo_data_url", "free_report_days", "report_fee", "print_settings", "is_active", "created_at", "updated_at",
   ],
   doctor_profile: [
     "id", "tenant_id", "name_en", "name_bn", "degrees_en", "degrees_bn", "designation", "institution",
@@ -90,5 +90,5 @@ export const SYNC_COLUMNS: Record<string, readonly string[]> = {
 
 export const INT_COLUMNS = new Set([
   "sort_order", "is_antibiotic", "position", "version", "is_active", "dob_estimated", "gestational_age_weeks",
-  "serial_no", "fee", "free_report_days", "use_count",
+  "serial_no", "fee", "free_report_days", "report_fee", "use_count",
 ]);

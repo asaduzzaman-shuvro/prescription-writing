@@ -620,6 +620,7 @@ export interface ChamberInput {
   footerText: string;
   logoDataUrl: string | null;
   freeReportDays: number | null;
+  reportFee: number | null;
 }
 
 /** Create (no id) or update a chamber on this device; it syncs like any other local write. */
@@ -627,11 +628,11 @@ export async function saveChamber(db: Db, opts: { tenantId: string; doctorUserId
   const now = nowIso();
   const vals = [
     c.name.trim(), c.address.trim(), c.phone.trim() || null, c.serialPhone.trim() || null, JSON.stringify(c.schedule), c.footerText.trim() || null,
-    c.logoDataUrl, c.freeReportDays,
+    c.logoDataUrl, c.freeReportDays, c.reportFee,
   ];
   if (opts.id) {
     await db.execute(
-      `UPDATE chamber SET name = ?, address = ?, phone = ?, serial_phone = ?, schedule = ?, footer_text = ?, logo_data_url = ?, free_report_days = ?,
+      `UPDATE chamber SET name = ?, address = ?, phone = ?, serial_phone = ?, schedule = ?, footer_text = ?, logo_data_url = ?, free_report_days = ?, report_fee = ?,
               updated_at = ? WHERE id = ?`,
       [...vals, now, opts.id],
     );
@@ -639,9 +640,9 @@ export async function saveChamber(db: Db, opts: { tenantId: string; doctorUserId
   }
   const id = uuid();
   await db.execute(
-    `INSERT INTO chamber (id, tenant_id, doctor_user_id, name, address, phone, serial_phone, schedule, footer_text, logo_data_url, free_report_days,
+    `INSERT INTO chamber (id, tenant_id, doctor_user_id, name, address, phone, serial_phone, schedule, footer_text, logo_data_url, free_report_days, report_fee,
                           print_settings, is_active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     [id, opts.tenantId, opts.doctorUserId, ...vals, JSON.stringify(DEFAULT_PRINT_SETTINGS), now, now],
   );
   return id;

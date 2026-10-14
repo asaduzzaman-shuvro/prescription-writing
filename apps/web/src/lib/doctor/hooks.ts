@@ -16,6 +16,7 @@ export interface ChamberRow {
   footer_text: string | null;
   logo_data_url: string | null;
   free_report_days: number | null;
+  report_fee: number | null;
   print_settings: string | null;
   doctor_user_id: string | null;
   is_active: number | null;
