@@ -194,6 +194,9 @@ function PlanBanner() {
 
 function ChamberSwitcher() {
   const session = useSession();
+  const profile = useMyProfile();
+  // Profile name is synced, so a rename shows here without a new login. Assistants keep the clinic name.
+  const label = (session.tenantRole === "doctor" ? profile?.name_en?.trim() : "") || (session.tenantRole === "doctor" ? session.name : session.tenantName);
   const [open, setOpen] = useState(false);
   const [chambers, setChambers] = useState<{ tenantId: string; name: string; role: string; current: boolean }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -229,13 +232,13 @@ function ChamberSwitcher() {
   }
 
   if (chambers.length <= 1 && !open) {
-    return <span className="block truncate text-sm font-medium text-slate-800" title={session.tenantName}>{session.tenantName}</span>;
+    return <span className="block truncate text-sm font-medium text-slate-800" title={label} data-testid="header-doctor-name">{label}</span>;
   }
 
   return (
     <details className="relative" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
       <summary className="cursor-pointer list-none truncate text-sm text-slate-600 hover:text-slate-900" title="Switch clinic">
-        {session.tenantName} ▾
+        {label} ▾
       </summary>
       <div className="absolute left-0 z-40 mt-1 w-64 rounded-md border border-slate-200 bg-white p-2 text-xs shadow-lg">
         <p className="mb-1 px-1 font-medium text-slate-700">Your clinics</p>
@@ -426,7 +429,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="hidden w-40 shrink-0 sm:block">
+            <div className="hidden w-44 shrink-0 sm:block">
               <ChamberSwitcher />
             </div>
             <HeaderSearch />
