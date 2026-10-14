@@ -12,8 +12,8 @@ import {
 export type VisitPaneId = "vitals" | "clinical" | "medicines";
 
 const STORAGE_PREFIX = "rx.visitSection.";
-/** Tailwind `lg` — laptop/desktop: no minimise. */
-const DESKTOP_MQ = "(min-width: 1024px)";
+/** Tailwind `xl` — laptop/desktop: panes fill the screen and scroll inside. Below that (phone and tablet, including landscape) the page scrolls. */
+const DESKTOP_MQ = "(min-width: 1280px)";
 
 type OpenMap = Record<VisitPaneId, boolean>;
 

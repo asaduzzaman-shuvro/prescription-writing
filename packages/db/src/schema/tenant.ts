@@ -159,6 +159,8 @@ export const chamber = pgTable(
     logoDataUrl: text(),
     /** Working days after a consultation in which showing reports needs no fee (null = no such rule). */
     freeReportDays: integer(),
+    /** Fee (৳) charged when the visit is “report showing”, unless the free-report window applies. */
+    reportFee: integer(),
     /** @rx/core PrintSettings */
     printSettings: jsonb().notNull().default({}),
     isActive: boolean().notNull().default(true),

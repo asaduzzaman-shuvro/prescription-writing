@@ -155,6 +155,13 @@
       "when": 1791654000000,
       "tag": "0021_history_item_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791655000000,
+      "tag": "0022_chamber_report_fee",
+      "breakpoints": true
     }
   ]
 }

@@ -109,7 +109,7 @@ function DisplayPrefsPanel() {
           Font size, padding and gaps on this device. 1 is the default. Use + / − to change by {UI_PREF_STEP}. Does not change printed prescriptions.
         </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <PrefStepper label="Font size" testId="ui-pref-font" value={prefs.font} onChange={(font) => update({ font })} />
         <PrefStepper label="Padding" testId="ui-pref-padding" value={prefs.padding} onChange={(padding) => update({ padding })} />
         <PrefStepper label="Gap" testId="ui-pref-gap" value={prefs.gap} onChange={(gap) => update({ gap })} />
@@ -343,7 +343,7 @@ export function SettingsScreen() {
           )}
           {current && chambers.length === 1 && <span className="text-sm text-slate-500">{current.name}</span>}
         </div>
-        <div className="grid gap-2 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="text-sm"><span className="label">Mode</span>
             <select className="input" value={s.mode} onChange={(e) => set("mode", e.target.value as PrintSettings["mode"])}>
               <option value="letterhead">Full letterhead (plain paper)</option><option value="pad">Pre-printed pad (body only)</option>
@@ -406,7 +406,7 @@ export function SettingsScreen() {
         <div>
           <h3 className="mb-1 text-sm font-semibold">Section headings</h3>
           <p className="mb-2 text-xs text-slate-500">Rename a heading (e.g. Dx → Δ, Ix → Investigations) or untick it to keep that section off the print.</p>
-          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {SECTION_KEYS.map((k: SectionKey) => (
               <label key={k} className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={!s.hiddenSections.includes(k)} aria-label={`Print ${defaultSectionLabel(k, s.instructionLang)}`}
