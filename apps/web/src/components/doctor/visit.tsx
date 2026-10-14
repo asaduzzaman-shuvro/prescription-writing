@@ -101,10 +101,10 @@ function VitalsPanel({
     }, 500);
   };
   const field = (k: keyof Vitals, label: string) => (
-    <label className={`flex min-w-0 flex-col text-[11px] font-medium text-slate-500 ${embedded ? "flex-1" : "w-[4.25rem] shrink-0"}`}>
+    <label className={`flex min-w-0 flex-col font-medium text-slate-500 ${embedded ? "text-[10px] leading-none lg:flex-1" : "w-[4.25rem] shrink-0 text-[11px]"}`}>
       {label}
       <input
-        className="input h-7 w-full min-w-0 px-1 py-0.5 text-sm tabular-nums"
+        className={`input w-full min-w-0 px-1 py-0.5 tabular-nums ${embedded ? "mt-0.5 h-7 text-xs" : "h-7 text-sm"}`}
         inputMode="decimal"
         disabled={readOnly}
         value={v[k] ?? ""}
@@ -126,12 +126,12 @@ function VitalsPanel({
   ].filter((x) => x != null).length;
   const fields = (
     <>
-      <div className={embedded ? "flex flex-nowrap items-end gap-1" : "flex flex-wrap items-end gap-1.5"}>
-        <label className={`flex min-w-0 flex-col text-[11px] font-medium text-slate-500 ${embedded ? "flex-[1.55]" : "w-[7.25rem] shrink-0"}`}>
+      <div className={embedded ? "grid grid-cols-4 items-end gap-1 lg:flex lg:flex-nowrap" : "flex flex-wrap items-end gap-1.5"}>
+        <label className={`flex min-w-0 flex-col font-medium text-slate-500 ${embedded ? "col-span-2 text-[10px] leading-none lg:col-span-1 lg:flex-[1.55]" : "w-[7.25rem] shrink-0 text-[11px]"}`}>
           BP
-          <span className="flex items-center gap-0.5">
+          <span className={`flex items-center gap-0.5 ${embedded ? "mt-0.5" : ""}`}>
             <input
-              className="input h-7 min-w-0 flex-1 px-1 py-0.5 text-sm tabular-nums"
+              className={`input min-w-0 flex-1 px-1 py-0.5 tabular-nums ${embedded ? "h-7 text-xs" : "h-7 text-sm"}`}
               inputMode="numeric"
               disabled={readOnly}
               value={v.bpSystolic ?? ""}
@@ -140,7 +140,7 @@ function VitalsPanel({
             />
             <span className="shrink-0 text-slate-300">/</span>
             <input
-              className="input h-7 min-w-0 flex-1 px-1 py-0.5 text-sm tabular-nums"
+              className={`input min-w-0 flex-1 px-1 py-0.5 tabular-nums ${embedded ? "h-7 text-xs" : "h-7 text-sm"}`}
               inputMode="numeric"
               disabled={readOnly}
               value={v.bpDiastolic ?? ""}
@@ -1196,14 +1196,23 @@ function VisitTypeControl({
     ch?.free_report_days,
     chamberWorkdays(parseJson<ChamberSlot[]>(ch?.schedule, [])),
   );
-  // A report visit with no fee yet picks up this chamber's report fee (or ৳0 inside the free window).
+  const seeded = useRef(false);
+  // Report visits pick up this chamber's report fee (৳0 inside the free window).
+  // Any visit whose fee is still empty shows that same fee, so the amount set in Settings appears on the card.
   useEffect(() => {
-    if (visitType !== "report" || !ch) return;
-    const next = free ? 0 : ch.report_fee;
-    if (next == null || next === fee) return;
-    if (fee != null && !free) return;
-    void saveFee(db, encounterId, next);
-  }, [visitType, ch?.report_fee, fee, free, db, encounterId]);
+    if (!ch) return;
+    if (visitType === "report") {
+      const next = free ? 0 : ch.report_fee;
+      if (next == null || next === fee) return;
+      if (fee != null && !free) return;
+      seeded.current = true;
+      void saveFee(db, encounterId, next);
+      return;
+    }
+    if (seeded.current || fee != null || ch.report_fee == null) return;
+    seeded.current = true;
+    void saveFee(db, encounterId, ch.report_fee);
+  }, [visitType, ch, fee, free, db, encounterId]);
   return (
     <>
       <select
@@ -1361,29 +1370,29 @@ export function VisitScreen({
             {enc.visit_date}
           </span>
         </div>
-        <div className="space-y-1.5 p-2">
-          <div className="grid grid-cols-2 items-start gap-3 xl:grid-cols-1 xl:gap-1.5">
+        <div className="space-y-1 px-2 py-1 xl:space-y-1.5 xl:p-2">
+          <div className="grid grid-cols-2 items-start gap-2 xl:grid-cols-1 xl:gap-1.5">
           <div className="min-w-0">
-            <div className="mb-1 flex h-5 items-center xl:hidden">
+            <div className="mb-0.5 flex h-4 items-center xl:hidden">
               <span className="rounded bg-brand-600 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
                 #{enc.serial_no}
               </span>
             </div>
             <Link
               to={`/patients/${p.id}`}
-              className="block truncate text-[15px] font-semibold leading-tight text-brand-700 hover:underline"
+              className="block truncate text-sm font-semibold leading-none text-brand-700 hover:underline xl:text-[15px] xl:leading-tight"
             >
               {p.name}
             </Link>
-            <p className="mt-0.5 truncate text-[11px] leading-snug text-slate-500">
+            <p className="mt-px truncate text-[11px] leading-none text-slate-500 xl:mt-0.5 xl:leading-snug">
               {ageLabel(p.dob)} · {p.sex ?? "—"} · {p.mobile}
             </p>
-            <p className="truncate text-[11px] text-slate-400">
+            <p className="truncate text-[11px] leading-none text-slate-400 xl:leading-normal">
               {p.code ?? "ID pending"}
             </p>
           </div>
           <div className="min-w-0">
-            <div className="mb-1 flex h-5 items-center justify-end xl:hidden">
+            <div className="mb-0.5 flex h-4 items-center justify-end xl:hidden">
               <span className="text-[11px] tabular-nums text-slate-500">
                 {enc.visit_date}
               </span>
@@ -1392,7 +1401,7 @@ export function VisitScreen({
             <label className="min-w-0">
               <span className="label mb-0 text-[10px]">{enc.visit_type === "report" ? "Report fee ৳" : "Fee ৳"}</span>
               <input
-                className="input h-7 w-full py-0.5 text-sm tabular-nums"
+                className="input h-6 w-full py-0.5 text-sm tabular-nums xl:h-7"
                 inputMode="numeric"
                 defaultValue={enc.fee ?? ""}
                 key={`fee-${enc.id}-${enc.fee}`}
@@ -1410,7 +1419,7 @@ export function VisitScreen({
             </label>
             <label className="min-w-0">
               <span className="label mb-0 text-[10px]">Type</span>
-              <div className="flex flex-col gap-1 [&_select]:h-7 [&_select]:w-full [&_select]:py-0.5 [&_select]:text-xs">
+              <div className="flex flex-col gap-0.5 [&_select]:h-6 [&_select]:w-full [&_select]:py-0.5 [&_select]:text-xs xl:[&_select]:h-7">
                   <VisitTypeControl
                   encounterId={encounterId}
                   patientId={p.id}

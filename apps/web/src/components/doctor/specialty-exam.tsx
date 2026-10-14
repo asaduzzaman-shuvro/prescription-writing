@@ -324,7 +324,7 @@ function EardrumField({
           >
             Reset
           </button>
-          <span className="text-slate-400">
+          <span className="basis-full text-slate-400">
             {tool === "perforation" || tool === "retraction"
               ? "Tap quadrants: attic, AS, AI, PS, PI"
               : tool === "mark"
@@ -344,7 +344,7 @@ function EardrumField({
             <div key={side} className="flex flex-col items-center">
               <svg
                 viewBox="0 0 100 108"
-                className="h-48 w-48 select-none"
+                className="h-36 w-36 select-none @min-[36rem]:h-48 @min-[36rem]:w-48"
                 data-testid={`eardrum-${side}`}
                 style={{ touchAction: disabled ? undefined : "none" }}
                 onPointerDown={(e) => onDown(side, e)}
@@ -616,7 +616,7 @@ export function SpecialtyExam({
       .fields.filter((f) => findings[f.id] !== undefined).length;
 
   return (
-    <section className="space-y-2" data-testid="specialty-exam">
+    <section className="@container space-y-2" data-testid="specialty-exam">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
         {tpl!.name}
       </h3>
@@ -646,7 +646,7 @@ export function SpecialtyExam({
               {s.fields.map((f) => (
                 <div
                   key={f.id}
-                  className="grid items-start gap-1 sm:grid-cols-[8rem_1fr]"
+                  className="grid items-start gap-1 @min-[36rem]:grid-cols-[7.5rem_1fr]"
                 >
                   <span className="pt-1.5 text-xs text-slate-600">
                     {f.label}
@@ -671,9 +671,9 @@ export function SpecialtyExam({
                       disabled={readOnly}
                     />
                   ) : f.lateral ? (
-                    <div className="grid grid-cols-[1fr_1fr_auto] items-start gap-1">
+                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-1">
                       {(["right", "left"] as const).map((side) => (
-                        <div key={side} className="flex items-start gap-1">
+                        <div key={side} className="flex min-w-0 items-start gap-1">
                           <span
                             className={`pt-1.5 text-xs font-semibold ${side === "right" ? "text-red-700" : "text-blue-700"}`}
                           >
