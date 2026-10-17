@@ -162,6 +162,13 @@
       "when": 1791655000000,
       "tag": "0022_chamber_report_fee",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792262103179,
+      "tag": "0023_chamber_room",
+      "breakpoints": true
     }
   ]
 }
