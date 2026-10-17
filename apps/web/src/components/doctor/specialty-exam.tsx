@@ -58,7 +58,8 @@ function SelectField({
   disabled: boolean;
 }) {
   if (f.type === "multiselect") {
-    const arr = Array.isArray(value) ? (value as string[]) : [];
+    // A field that was a single select before keeps its saved answer as a one-item list.
+    const arr = Array.isArray(value) ? (value as string[]) : typeof value === "string" && value ? [value] : [];
     return (
       <div className="flex flex-wrap gap-1">
         {f.options!.map((o) => {
