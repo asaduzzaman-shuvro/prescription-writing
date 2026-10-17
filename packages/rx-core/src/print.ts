@@ -292,6 +292,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
       <span><b>Sex:</b> ${esc(patient.sex ? patient.sex[0]!.toUpperCase() : "")}</span>
       ${patient.address ? `<span><b>Address:</b> ${esc(patient.address)}</span>` : ""}
       <span><b>Date:</b> ${esc(formatDateDmy(input.date, "en", "/"))}</span>
+      ${doc.visitNo ? `<span class="visit-no"><b>Visit No:</b> ${doc.visitNo}</span>` : ""}
       ${patient.patientCode ? `<span><b>ID:</b> ${esc(patient.patientCode)}</span>` : ""}
       ${doc.referredBy?.trim() ? `<span><b>Ref By:</b> ${esc(doc.referredBy)}</span>` : ""}
     </div>`;
@@ -329,7 +330,6 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const barcodeSvg = s.showBarcode && patient.patientCode ? code39Svg(patient.patientCode) : null;
   const left = [
     barcodeSvg ? `<div class="barcode">${barcodeSvg}<div>*${esc(patient.patientCode!.toUpperCase())}*</div></div>` : "",
-    doc.visitNo ? `<div class="visit-no">Visit No: ${doc.visitNo}</div>` : "",
     sec("cc", list(doc.chiefComplaints)),
     sec("history", (doc.history?.trim() ? `<p class="pre">${esc(doc.history.trim())}</p>` : "") + list(doc.histories ?? [])),
     sec("oe", oeBlock(doc)),
@@ -422,7 +422,6 @@ ul { margin: 0; padding-left: 4mm; }
 ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .rx-item { margin-bottom: 2.5mm; break-inside: avoid; display: grid; grid-template-columns: 1fr auto; column-gap: 4mm; }
 .rx-item .dur { align-self: center; white-space: nowrap; }
-.visit-no { font-weight: 700; margin-bottom: 2mm; }
 .kv { border-collapse: collapse; }
 .kv td { padding: 0 1mm 0 0; vertical-align: top; }
 .kv .k { font-weight: 600; white-space: nowrap; }
