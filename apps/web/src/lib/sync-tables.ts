@@ -68,7 +68,7 @@ export const SYNC_COLUMNS: Record<string, readonly string[]> = {
     "prepared_by_name", "verified_by_name", "verified_at", "comment", "created_by", "deleted_at", "created_at", "updated_at",
   ],
   chamber: [
-    "id", "tenant_id", "doctor_user_id", "name", "address", "phone", "hours", "schedule", "serial_phone",
+    "id", "tenant_id", "doctor_user_id", "name", "address", "room", "phone", "hours", "schedule", "serial_phone",
     "footer_text", "logo_data_url", "free_report_days", "report_fee", "print_settings", "is_active", "created_at", "updated_at",
   ],
   doctor_profile: [

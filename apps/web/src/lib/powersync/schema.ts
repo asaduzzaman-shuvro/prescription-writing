@@ -170,6 +170,7 @@ const chamber = new Table({
   doctor_user_id: column.text,
   name: column.text,
   address: column.text,
+  room: column.text,
   phone: column.text,
   hours: column.text,
   schedule: column.text,

@@ -165,7 +165,7 @@ function clinicParts(tenantId: string, userId: string): Part[] {
     {
       table: "chamber",
       query: sql`SELECT id::text AS id, tenant_id::text AS tenant_id, doctor_user_id::text AS doctor_user_id, name, address,
-            phone, hours, schedule::text AS schedule, serial_phone, footer_text, logo_data_url, free_report_days,
+            room, phone, hours, schedule::text AS schedule, serial_phone, footer_text, logo_data_url, free_report_days,
             report_fee, print_settings::text AS print_settings, is_active::int AS is_active,
             ${sql.raw(ts("created_at"))}, ${sql.raw(ts("updated_at"))}
           FROM chamber WHERE tenant_id = ${tenant}`,

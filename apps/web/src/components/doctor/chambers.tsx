@@ -12,11 +12,11 @@ import { SaveButton } from "@/components/save-button";
 const DAY_LABEL: Record<Weekday, string> = { sat: "শনি", sun: "রবি", mon: "সোম", tue: "মঙ্গল", wed: "বুধ", thu: "বৃহঃ", fri: "শুক্র" };
 const SLOT_LABELS = ["রোগী দেখার সময়", "অপারেশন", "সিরিয়াল দেওয়ার সময়"];
 
-const blank = (): ChamberInput => ({ name: "", address: "", phone: "", serialPhone: "", schedule: [], footerText: "", logoDataUrl: null, freeReportDays: null, reportFee: null });
+const blank = (): ChamberInput => ({ name: "", address: "", room: "", phone: "", serialPhone: "", schedule: [], footerText: "", logoDataUrl: null, freeReportDays: null, reportFee: null });
 
 function inputOf(c: ChamberRow): ChamberInput {
   return {
-    name: c.name, address: c.address, phone: c.phone ?? "", serialPhone: c.serial_phone ?? "",
+    name: c.name, address: c.address, room: c.room ?? "", phone: c.phone ?? "", serialPhone: c.serial_phone ?? "",
     schedule: parseJson<ChamberSlot[]>(c.schedule, []), footerText: c.footer_text ?? "", logoDataUrl: c.logo_data_url,
     freeReportDays: c.free_report_days, reportFee: c.report_fee,
   };
@@ -82,6 +82,8 @@ function ChamberForm({ initial, legacyHours, onSave, onCancel }: { initial: Cham
           <textarea className="input" rows={3} value={c.name} onChange={(e) => set("name", e.target.value)} data-testid="chamber-name" /></label>
         <label className="text-sm"><span className="label">Address *</span>
           <textarea className="input" rows={3} value={c.address} onChange={(e) => set("address", e.target.value)} data-testid="chamber-address" /></label>
+        <label className="text-sm"><span className="label">Room no</span>
+          <input className="input" value={c.room} placeholder="e.g. 305, 3rd floor" onChange={(e) => set("room", e.target.value)} data-testid="chamber-room" /></label>
         <label className="text-sm"><span className="label">Phone</span>
           <input className="input" inputMode="tel" value={c.phone} onChange={(e) => set("phone", e.target.value)} /></label>
         <label className="text-sm"><span className="label">Serial phone</span>
@@ -161,6 +163,7 @@ export function ChamberManager() {
                 <div className="flex flex-wrap items-start gap-2">
                   <div className="flex-1">
                     <div className="font-medium whitespace-pre-line">{r.name}{!active && " (inactive)"}</div>
+                    {r.room && <div className="text-slate-600">রুম নং: {r.room}</div>}
                     <div className="whitespace-pre-line text-slate-600">{r.address}</div>
                     {parseJson<ChamberSlot[]>(r.schedule, []).map((sl, i) => <div key={i} className="text-slate-500">{formatSlot(sl, "bn", "bn")}</div>)}
                     {!parseJson<ChamberSlot[]>(r.schedule, []).length && r.hours && <div className="text-slate-500">{r.hours}</div>}

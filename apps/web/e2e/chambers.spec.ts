@@ -10,6 +10,7 @@ test("doctor adds a chamber with a schedule, serial phone and footer note", asyn
   await page.getByTestId("chamber-new").click();
   await page.getByTestId("chamber-name").fill(name);
   await page.getByTestId("chamber-address").fill("Rajbari");
+  await page.getByTestId("chamber-room").fill("305");
   await page.getByTestId("chamber-serial").fill("01781-000000");
   await page.getByTestId("chamber-add-slot").click();
   for (const d of ["রবি", "মঙ্গল", "বৃহঃ"]) await page.getByRole("button", { name: d, exact: true }).click();
@@ -21,6 +22,7 @@ test("doctor adds a chamber with a schedule, serial phone and footer note", asyn
   const row = page.getByTestId("chamber-row").filter({ hasText: name });
   await expect(row).toContainText("রবিবার, মঙ্গলবার ও বৃহস্পতিবার, সকাল ৯টা - ১০টা");
   await expect(row).toContainText("সিরিয়াল: 01781-000000");
+  await expect(row).toContainText("রুম নং: 305");
   // The new chamber reaches the server through the sync upload.
   await expect(page.getByTestId("sync-status")).toHaveText("Synced", { timeout: 60_000 });
 
