@@ -108,6 +108,8 @@ export interface PatientInput {
   allergies: string[];
   pregnancyStatus: PregnancyStatus | null;
   guardianName: string;
+  /** Referring doctor; pre-fills the first prescription's Ref By. */
+  referredBy: string;
   nid: string;
   brn: string;
   healthId: string;
@@ -121,12 +123,12 @@ export async function createPatient(db: Db, userId: string, tenantId: string, p:
   const id = uuid();
   const now = nowIso();
   await db.execute(
-    `INSERT INTO patient (id, tenant_id, name, dob, dob_estimated, sex, mobile, address, allergies, pregnancy_status, guardian_name, nid, brn, health_id,
-                          notes, consent_at, birth_weight_kg, gestational_age_weeks, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO patient (id, tenant_id, name, dob, dob_estimated, sex, mobile, address, allergies, pregnancy_status, guardian_name, referred_by, nid, brn,
+                          health_id, notes, consent_at, birth_weight_kg, gestational_age_weeks, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id, tenantId, p.name.trim(), p.dob, p.dobEstimated ? 1 : 0, p.sex, p.mobile || null, p.address || null,
-      JSON.stringify(p.allergies), p.pregnancyStatus, p.guardianName || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null,
+      JSON.stringify(p.allergies), p.pregnancyStatus, p.guardianName || null, p.referredBy.trim() || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null,
       p.consent ? now : null, p.birthWeightKg, p.gestationalAgeWeeks, userId, localNowIso(), now,
     ],
   );
@@ -136,11 +138,11 @@ export async function createPatient(db: Db, userId: string, tenantId: string, p:
 export async function updatePatient(db: Db, id: string, p: PatientInput) {
   await db.execute(
     `UPDATE patient SET name = ?, dob = ?, dob_estimated = ?, sex = ?, mobile = ?, address = ?, allergies = ?, pregnancy_status = ?, guardian_name = ?,
-            nid = ?, brn = ?, health_id = ?, notes = ?, consent_at = COALESCE(consent_at, ?), birth_weight_kg = ?, gestational_age_weeks = ?,
+            referred_by = ?, nid = ?, brn = ?, health_id = ?, notes = ?, consent_at = COALESCE(consent_at, ?), birth_weight_kg = ?, gestational_age_weeks = ?,
             updated_at = ? WHERE id = ?`,
     [
       p.name.trim(), p.dob, p.dobEstimated ? 1 : 0, p.sex, p.mobile || null, p.address || null, JSON.stringify(p.allergies), p.pregnancyStatus,
-      p.guardianName || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null, p.consent ? nowIso() : null,
+      p.guardianName || null, p.referredBy.trim() || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null, p.consent ? nowIso() : null,
       p.birthWeightKg, p.gestationalAgeWeeks, nowIso(), id,
     ],
   );
@@ -199,12 +201,19 @@ export async function ensureDraft(db: Db, encounterId: string, doctorUserId: str
     `SELECT tenant_id, patient_id, chamber_id FROM encounter WHERE id = ?`,
     [encounterId],
   );
+  // The referrer named at registration fills Ref By on the patient's first prescription only.
+  const ref = await db.getOptional<{ r: string }>(
+    `SELECT referred_by AS r FROM patient WHERE id = ? AND TRIM(COALESCE(referred_by, '')) <> ''
+       AND NOT EXISTS (SELECT 1 FROM prescription WHERE patient_id = patient.id)`,
+    [enc.patient_id],
+  );
+  const doc: PrescriptionDoc = ref ? { ...emptyDoc(), referredBy: ref.r.trim() } : emptyDoc();
   const id = uuid();
   const now = nowIso();
   await db.execute(
     `INSERT INTO prescription (id, tenant_id, encounter_id, patient_id, doctor_user_id, chamber_id, version, status, doc, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, 1, 'draft', ?, ?, ?)`,
-    [id, enc.tenant_id, encounterId, enc.patient_id, doctorUserId, enc.chamber_id, JSON.stringify(emptyDoc()), now, now],
+    [id, enc.tenant_id, encounterId, enc.patient_id, doctorUserId, enc.chamber_id, JSON.stringify(doc), now, now],
   );
   await db.execute(`UPDATE encounter SET status = 'in_progress', updated_at = ? WHERE id = ? AND status = 'waiting'`, [now, encounterId]);
   return id;

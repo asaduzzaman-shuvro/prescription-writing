@@ -14,12 +14,13 @@ export async function waitSynced(page: Page) {
   await expect(page.getByTestId("sync-status")).toHaveText("Synced", { timeout: 60_000 });
 }
 
-export async function registerPatient(page: Page, p: { name: string; age: string; sex: "Male" | "Female"; mobile: string }) {
+export async function registerPatient(page: Page, p: { name: string; age: string; sex: "Male" | "Female"; mobile: string; refBy?: string }) {
   await page.goto("/doctor#/patients/new");
   await page.getByTestId("patient-name").fill(p.name);
   await page.getByTestId("patient-age").fill(p.age);
   await page.getByRole("button", { name: p.sex, exact: true }).click();
   await page.getByTestId("patient-mobile").fill(p.mobile);
+  if (p.refBy) await page.getByTestId("patient-ref-by").fill(p.refBy);
   await page.getByTestId("patient-consent").check();
   await page.getByTestId("patient-save-visit").click();
 }
