@@ -63,6 +63,12 @@ describe("flattenFindings", () => {
     expect(pinna({ right: "Swelling" })).toEqual({ label: "Pinna / mastoid", value: "R Swelling" });
     expect(pinna({ right: ["Normal"], left: ["Normal"] })).toBeUndefined();
   });
+  it("prints several ear discharges, without None, and still reads an old single answer", () => {
+    const discharge = (v: unknown) => flattenFindings(ENT_TEMPLATE, { ear_discharge: v }).groups[0]?.lines.find((l) => l.label === "Discharge");
+    expect(discharge({ right: ["Mucopurulent", "Foul smelling"], left: ["None"] })).toEqual({ label: "Discharge", value: "R Mucopurulent, Foul smelling" });
+    expect(discharge({ right: "Purulent" })).toEqual({ label: "Discharge", value: "R Purulent" });
+    expect(discharge({ right: ["None"], left: ["None"] })).toBeUndefined();
+  });
   it("prints the grouped tuning fork tests as their own lines", () => {
     const ear = flattenFindings(ENT_TEMPLATE, { ear_rinne: { right: "−ve", left: "+ve" }, ear_weber: "Lateralised to right", ear_abc: { right: "Reduced" } }).groups[0]!.lines;
     expect(ear).toEqual([{ label: "Rinne", value: "R −ve, L +ve" }, { label: "Weber", value: "Lateralised to right" }, { label: "ABC", value: "R Reduced" }]);
