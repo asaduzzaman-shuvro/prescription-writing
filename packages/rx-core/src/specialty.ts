@@ -21,6 +21,8 @@ export interface TemplateField {
   normal?: string;
   /** For `type: "sketch"`: which picture (nose, oropharynx, larynx, neck). */
   sketch?: SketchId;
+  /** Sub-heading inside the section; consecutive fields with the same group fold under it, collapsed until opened. */
+  group?: string;
 }
 
 export interface TemplateSection {
@@ -118,6 +120,12 @@ export function validateTemplateSchema(raw: unknown): string[] {
       if (f.type === "sketch" && !isSketchId(f.sketch)) errors.push(`field ${f.id}: "sketch" must be one of ${SKETCH_IDS.join(", ")}`);
       if ((f.type === "select" || f.type === "multiselect") && (!Array.isArray(f.options) || !f.options.length))
         errors.push(`field ${f.id}: options required for ${f.type}`);
+    });
+    s.fields.forEach((f, i) => {
+      if (f.group === undefined) return;
+      if (typeof f.group !== "string" || !f.group.trim()) return errors.push(`field ${f.id}: group must be a non-empty name`);
+      const first = s.fields.findIndex((x) => x.group === f.group);
+      if (s.fields.slice(first, i).some((x) => x.group !== f.group)) errors.push(`field ${f.id}: group "${f.group}" must be next to its other fields`);
     });
   });
   return errors;

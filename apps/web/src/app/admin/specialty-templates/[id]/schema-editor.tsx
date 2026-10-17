@@ -31,10 +31,10 @@ export function SchemaEditor({ initial, specialties }: { initial: { specialtyCod
         {check.parsed?.sections?.map((s) => (
           <div key={s.id} className="mb-2">
             <b>{s.title}</b>
-            <ul className="text-xs text-slate-600">{s.fields?.map((f) => <li key={f.id}>{f.label} <span className="text-slate-400">· {f.type}{f.lateral ? " · R/L" : ""}</span></li>)}</ul>
+            <ul className="text-xs text-slate-600">{s.fields?.map((f) => <li key={f.id}>{f.label} <span className="text-slate-400">· {f.type}{f.lateral ? " · R/L" : ""}{f.group ? ` · group: ${f.group}` : ""}</span></li>)}</ul>
           </div>
         ))}
-        <p className="mt-3 text-xs text-slate-500">Field types: select, multiselect, text, number, eardrum, audiogram. Add <code>lateral: true</code> for right/left answers and <code>normal</code> to hide the normal option from print.</p>
+        <p className="mt-3 text-xs text-slate-500">Field types: select, multiselect, text, number, eardrum, audiogram. Add <code>lateral: true</code> for right/left answers, <code>normal</code> to hide the normal option from print, and the same <code>group</code> on neighbouring fields to fold them under a collapsible heading.</p>
       </aside>
     </form>
   );
