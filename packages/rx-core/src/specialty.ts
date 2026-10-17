@@ -564,7 +564,8 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
         }
         continue;
       }
-      if (f.lateral) {
+      // A plain answer saved before the field became right/left still prints, without a side.
+      if (f.lateral && v !== null && typeof v === "object" && !Array.isArray(v)) {
         const lv = v as LateralValue<unknown>;
         const r = text(lv.right, f), l = text(lv.left, f);
         if (r && r === l) lines.push({ label: f.label, value: `${side.both} ${r}` });
