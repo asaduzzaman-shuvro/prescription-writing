@@ -15,6 +15,7 @@ export const SAMPLE_DOCTOR: DoctorHeader = {
 export const SAMPLE_CHAMBER: ChamberHeader = {
   name: "Popular Diagnostic Centre, Dhanmondi",
   address: "House 16, Road 2, Dhanmondi, Dhaka-1205",
+  room: "305 (3rd floor)",
   phone: "Serial: 01700-000000",
   hours: "Sat–Thu, 5pm–9pm",
 };
