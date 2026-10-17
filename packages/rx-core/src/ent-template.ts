@@ -15,7 +15,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
         { id: "ear_tm", label: "TM", type: "select", lateral: true, options: ["Intact (Normal)", "Perforated", "Retracted", "Bulging", "Congested", "Dull", "Not visible"] },
         { id: "ear_tm_map", label: "TM map", type: "eardrum" },
         { id: "ear_perf_type", label: "Perforation", type: "select", lateral: true, options: ["Central (small)", "Central (medium)", "Central (large)", "Central (subtotal)", "Total", "Attic", "Marginal"] },
-        { id: "ear_discharge", label: "Discharge", type: "select", lateral: true, options: ["None", "Mucoid", "Mucopurulent", "Purulent", "Foul smelling", "Blood stained"], normal: "None" },
+        { id: "ear_discharge", label: "Discharge", type: "multiselect", lateral: true, options: ["None", "Mucoid", "Mucopurulent", "Purulent", "Foul smelling", "Blood stained"], normal: "None" },
         { id: "ear_middle", label: "Middle ear", type: "multiselect", lateral: true, options: ["Healthy mucosa", "Oedematous mucosa", "Granulation", "Polyp", "Cholesteatoma flakes"] },
         { id: "ear_rinne", label: "Rinne", type: "select", lateral: true, options: ["+ve", "−ve", "False −ve"], group: "Tuning Fork Test (TFT)" },
         { id: "ear_weber", label: "Weber", type: "select", options: ["Central", "Lateralised to right", "Lateralised to left"], group: "Tuning Fork Test (TFT)" },
