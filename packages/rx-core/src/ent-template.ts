@@ -20,7 +20,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
         { id: "ear_rinne", label: "Rinne", type: "select", lateral: true, options: ["+ve", "−ve", "False −ve"], group: "Tuning Fork Test (TFT)" },
         { id: "ear_weber", label: "Weber", type: "select", options: ["Central", "Lateralised to right", "Lateralised to left"], group: "Tuning Fork Test (TFT)" },
         { id: "ear_abc", label: "ABC", type: "select", lateral: true, options: ["Same as examiner", "Reduced"], group: "Tuning Fork Test (TFT)" },
-        { id: "ear_fistula", label: "Fistula test", type: "select", options: ["Negative", "Positive"], normal: "Negative" },
+        { id: "ear_fistula", label: "Fistula test", type: "select", lateral: true, options: ["Negative", "Positive"], normal: "Negative" },
         { id: "ear_facial", label: "Facial nerve", type: "select", options: ["Intact", "Palsy (right)", "Palsy (left)"], normal: "Intact" },
       ],
     },

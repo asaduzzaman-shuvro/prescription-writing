@@ -69,6 +69,13 @@ describe("flattenFindings", () => {
     expect(discharge({ right: "Purulent" })).toEqual({ label: "Discharge", value: "R Purulent" });
     expect(discharge({ right: ["None"], left: ["None"] })).toBeUndefined();
   });
+  it("prints the fistula test per ear, and an answer from before it was per ear", () => {
+    const fistula = (v: unknown) => flattenFindings(ENT_TEMPLATE, { ear_fistula: v }).groups[0]?.lines.find((l) => l.label === "Fistula test");
+    expect(fistula({ right: "Positive", left: "Negative" })).toEqual({ label: "Fistula test", value: "R Positive" });
+    expect(fistula({ right: "Positive", left: "Positive" })).toEqual({ label: "Fistula test", value: "B/L Positive" });
+    expect(fistula("Positive")).toEqual({ label: "Fistula test", value: "Positive" });
+    expect(fistula({ right: "Negative", left: "Negative" })).toBeUndefined();
+  });
   it("prints the grouped tuning fork tests as their own lines", () => {
     const ear = flattenFindings(ENT_TEMPLATE, { ear_rinne: { right: "−ve", left: "+ve" }, ear_weber: "Lateralised to right", ear_abc: { right: "Reduced" } }).groups[0]!.lines;
     expect(ear).toEqual([{ label: "Rinne", value: "R −ve, L +ve" }, { label: "Weber", value: "Lateralised to right" }, { label: "ABC", value: "R Reduced" }]);
