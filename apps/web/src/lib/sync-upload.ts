@@ -92,7 +92,7 @@ const SPECS: Record<string, TableSpec> = {
   chamber: {
     roles: ["doctor", "clinic_admin"],
     columns: {
-      name: "text", address: "text", phone: "text", hours: "text", print_settings: "jsonb", doctor_user_id: "uuid",
+      name: "text", address: "text", room: "text", phone: "text", hours: "text", print_settings: "jsonb", doctor_user_id: "uuid",
       schedule: "jsonb", serial_phone: "text", footer_text: "text", logo_data_url: "text", is_active: "bool", created_at: "ts",
       free_report_days: "int", report_fee: "int",
     },

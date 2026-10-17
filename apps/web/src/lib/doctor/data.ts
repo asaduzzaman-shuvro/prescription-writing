@@ -614,6 +614,7 @@ export async function savePrintSettings(db: Db, chamberId: string, settings: Pri
 export interface ChamberInput {
   name: string;
   address: string;
+  room: string;
   phone: string;
   serialPhone: string;
   schedule: ChamberSlot[];
@@ -628,12 +629,12 @@ export async function saveChamber(db: Db, opts: { tenantId: string; doctorUserId
   const now = nowIso();
   const vals = [
     c.name.trim(), c.address.trim(), c.phone.trim() || null, c.serialPhone.trim() || null, JSON.stringify(c.schedule), c.footerText.trim() || null,
-    c.logoDataUrl, c.freeReportDays, c.reportFee,
+    c.logoDataUrl, c.freeReportDays, c.reportFee, c.room.trim() || null,
   ];
   if (opts.id) {
     await db.execute(
       `UPDATE chamber SET name = ?, address = ?, phone = ?, serial_phone = ?, schedule = ?, footer_text = ?, logo_data_url = ?, free_report_days = ?, report_fee = ?,
-              updated_at = ? WHERE id = ?`,
+              room = ?, updated_at = ? WHERE id = ?`,
       [...vals, now, opts.id],
     );
     return opts.id;
@@ -641,8 +642,8 @@ export async function saveChamber(db: Db, opts: { tenantId: string; doctorUserId
   const id = uuid();
   await db.execute(
     `INSERT INTO chamber (id, tenant_id, doctor_user_id, name, address, phone, serial_phone, schedule, footer_text, logo_data_url, free_report_days, report_fee,
-                          print_settings, is_active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+                          room, print_settings, is_active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     [id, opts.tenantId, opts.doctorUserId, ...vals, JSON.stringify(DEFAULT_PRINT_SETTINGS), now, now],
   );
   return id;

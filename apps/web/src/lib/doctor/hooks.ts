@@ -9,6 +9,7 @@ export interface ChamberRow {
   id: string;
   name: string;
   address: string;
+  room: string | null;
   phone: string | null;
   hours: string | null;
   schedule: string | null;
