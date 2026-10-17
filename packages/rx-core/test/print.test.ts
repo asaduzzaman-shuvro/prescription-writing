@@ -258,18 +258,20 @@ describe("page margins", () => {
 });
 
 describe("signature and QR placement", () => {
-  const html = renderPrescriptionHtml({
-    doc: SAMPLE_DOC,
-    patient: SAMPLE_PATIENT,
-    doctor: SAMPLE_DOCTOR,
-    chamber: SAMPLE_CHAMBER,
-    date: "2026-06-11",
-    settings: DEFAULT_PRINT_SETTINGS,
-    fonts: { bengali: "", latin: "" },
-    qrSvg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`,
-  });
-  const left = html.slice(html.indexOf(`<div class="left">`), html.indexOf(`<div class="right">`));
-  const right = html.slice(html.indexOf(`<div class="right">`));
+  const renderWith = (mode: "letterhead" | "pad") =>
+    renderPrescriptionHtml({
+      doc: SAMPLE_DOC,
+      patient: SAMPLE_PATIENT,
+      doctor: SAMPLE_DOCTOR,
+      chamber: SAMPLE_CHAMBER,
+      date: "2026-06-11",
+      settings: { ...DEFAULT_PRINT_SETTINGS, mode },
+      fonts: { bengali: "", latin: "" },
+      qrSvg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`,
+    });
+  const leftOf = (html: string) => html.slice(html.indexOf(`<div class="left">`), html.indexOf(`<div class="right">`));
+  const html = renderWith("letterhead");
+  const right = html.slice(html.indexOf(`<div class="right">`), html.indexOf("<footer>"));
 
   it("signs right after the last line of the prescription", () => {
     expect(right).toContain(`class="sign"`);
@@ -277,8 +279,15 @@ describe("signature and QR placement", () => {
     expect(right.indexOf(`class="sign"`)).toBeGreaterThan(right.indexOf("পুনরায় সাক্ষাৎ"));
   });
 
-  it("puts the QR at the end of the left column, with no row under the body", () => {
-    expect(left).toContain(`class="qr"`);
+  it("centres the QR in the letterhead footer, with no row under the body", () => {
+    expect(html).toMatch(/<div class="foot-qr"><div class="qr"><svg/);
+    expect(leftOf(html)).not.toContain(`class="qr"`);
     expect(html).not.toContain(`class="bottom"`);
+  });
+
+  it("keeps the QR at the end of the left column on a pre-printed pad, which has no footer", () => {
+    const pad = renderWith("pad");
+    expect(leftOf(pad)).toContain(`class="qr"`);
+    expect(pad).not.toContain("<footer>");
   });
 });

@@ -166,3 +166,46 @@ describe("free report-showing window", () => {
     expect(freeReportPolicyText(5, "bn", "bn")).toBe("পরামর্শের ৫ কর্মদিবসের মধ্যে রিপোর্ট দেখাতে সিরিয়াল বা ভিজিট লাগবে না।");
   });
 });
+
+describe("renderPrescriptionHtml: footer layout", () => {
+  const chamber: ChamberHeader = {
+    name: "Popular Diagnostic Centre",
+    room: "305",
+    address: "Dhanmondi, Dhaka",
+    schedule: [{ days: ["sun", "tue", "thu"], from: "09:00", to: "10:00" }],
+    serialPhone: "01717-021090",
+    phone: "02-9661491",
+    footerText: "Policy line",
+  };
+  const render = (settings: Partial<PrintSettings> = {}) => {
+    const html = renderPrescriptionHtml({
+      doc: SAMPLE_DOC, patient: SAMPLE_PATIENT, doctor: SAMPLE_DOCTOR, chamber, date: "2026-06-11",
+      settings: { ...DEFAULT_PRINT_SETTINGS, ...settings }, fonts: { bengali: "", latin: "" },
+      qrSvg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`,
+    });
+    const cell = (cls: string) => html.slice(html.indexOf(`<div class="${cls}">`), html.indexOf("</div>", html.indexOf(`<div class="${cls}">`)));
+    return { html, left: cell("foot-left"), right: cell("foot-right") };
+  };
+
+  it("puts the chamber name, room and address on the left and the visiting information on the right", () => {
+    const { html, left, right } = render();
+    expect(left).toContain("<b>Popular Diagnostic Centre</b><br>রুম নং: 305<br>Dhanmondi, Dhaka");
+    expect(left).not.toContain("সিরিয়াল");
+    expect(right).toContain("রবিবার, মঙ্গলবার ও বৃহস্পতিবার, সকাল ৯টা - ১০টা<br>সিরিয়াল: 01717-021090<br>02-9661491");
+    expect(right).not.toContain("Dhanmondi");
+    expect(html).toMatch(/<div class="foot-qr"><div class="qr">/);
+    expect(html).toContain(`<div class="policy">Policy line</div>`);
+  });
+
+  it("labels the room in English with English instructions", () => {
+    expect(render({ instructionLang: "en" }).left).toContain("Room No: 305");
+  });
+
+  it("leaves out each visiting detail the doctor switches off", () => {
+    const { right } = render({ showSchedule: false, showSerialPhone: false });
+    expect(right).not.toContain("রবিবার");
+    expect(right).not.toContain("01717-021090");
+    expect(right).toContain("02-9661491");
+    expect(render({ showChamberPhone: false }).right).not.toContain("02-9661491");
+  });
+});

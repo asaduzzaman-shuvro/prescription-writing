@@ -173,6 +173,8 @@ export interface ChamberSlot {
 export interface ChamberHeader {
   name: string;
   address: string;
+  /** Room number inside the hospital/diagnostic centre. */
+  room?: string;
   phone?: string;
   /** Free-text hours (older chambers); `schedule` is printed instead when present. */
   hours?: string;

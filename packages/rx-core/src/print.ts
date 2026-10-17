@@ -31,6 +31,10 @@ export interface PrintSettings {
   instructionLang: Lang;
   numerals: Numerals;
   showQr: boolean;
+  /** Chamber details printed with the visiting information (footer right, or the header chamber list). */
+  showSchedule: boolean;
+  showSerialPhone: boolean;
+  showChamberPhone: boolean;
   /** Custom section headings, e.g. `{ dx: "Δ", ix: "Investigations" }`; missing keys use the defaults. */
   sectionLabels: Partial<Record<SectionKey, string>>;
   /** Sections that are recorded but not printed. */
@@ -75,6 +79,9 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   instructionLang: "bn",
   numerals: "bn",
   showQr: true,
+  showSchedule: true,
+  showSerialPhone: true,
+  showChamberPhone: true,
   sectionLabels: {},
   hiddenSections: [],
   showBarcode: false,
@@ -206,20 +213,32 @@ function keptLines(s: string | undefined | null): string[] {
   return t ? t.split("\n") : [];
 }
 
-/** Name, address, schedule (or free-text hours) and phones of one chamber. */
-function chamberBlock(c: ChamberHeader, lang: Lang, n: Numerals): string {
+/** Where the chamber is: name (bold), room number and address, as HTML lines. */
+function chamberIdentity(c: ChamberHeader, lang: Lang): string {
   const nameLines = keptLines(c.name);
   const addressLines = keptLines(c.address);
   if (!nameLines.length && !addressLines.length) return "";
-  const slots = (c.schedule ?? []).map((sl) => formatSlot(sl, lang, n)).filter(Boolean);
-  const lines = [
-    ...addressLines,
-    ...(slots.length ? slots : c.hours ? [c.hours] : []),
-    c.serialPhone ? `${lang === "bn" ? "সিরিয়াল" : "Serial"}: ${c.serialPhone}` : "",
-    c.phone ?? "",
-  ].filter(Boolean);
+  const room = c.room?.trim();
+  const lines = [room ? `${lang === "bn" ? "রুম নং" : "Room No"}: ${room}` : "", ...addressLines].filter(Boolean);
   const name = nameLines.map((l) => `<b>${esc(l)}</b>`).join("<br>");
-  return `<div class="chamber">${name}${lines.map((l) => `<br>${esc(l)}`).join("")}</div>`;
+  return `${name}${lines.map((l) => `<br>${esc(l)}`).join("")}`;
+}
+
+/** When and how to reach the doctor there: schedule (or free-text hours), serial and chamber phone, as each is enabled. */
+function chamberContactLines(c: ChamberHeader, s: PrintSettings, lang: Lang): string[] {
+  const slots = s.showSchedule ? (c.schedule ?? []).map((sl) => formatSlot(sl, lang, s.numerals)).filter(Boolean) : [];
+  return [
+    ...(slots.length ? slots : s.showSchedule && c.hours ? [c.hours] : []),
+    s.showSerialPhone && c.serialPhone ? `${lang === "bn" ? "সিরিয়াল" : "Serial"}: ${c.serialPhone}` : "",
+    s.showChamberPhone ? (c.phone ?? "") : "",
+  ].filter(Boolean);
+}
+
+/** One chamber's identity and contact lines in a single block (the header chamber list). */
+function chamberBlock(c: ChamberHeader, s: PrintSettings, lang: Lang): string {
+  const identity = chamberIdentity(c, lang);
+  if (!identity) return "";
+  return `<div class="chamber">${identity}${chamberContactLines(c, s, lang).map((l) => `<br>${esc(l)}`).join("")}</div>`;
 }
 
 /** Bangla rendering of a BMDC number: "A-39542" → "এ-৩৯৫৪২". */
@@ -263,7 +282,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
         }
       </header>${
         s.chambersInHeader && input.chambers?.length
-          ? `<div class="chambers">${input.chambers.map((c) => chamberBlock(c, lang, s.numerals)).join("")}</div>`
+          ? `<div class="chambers">${input.chambers.map((c) => chamberBlock(c, s, lang)).join("")}</div>`
           : ""
       }`;
 
@@ -305,6 +324,8 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     .join("");
   const diagrams = figures(allDiagrams.filter((d) => !placed(d)));
 
+  // Letterhead: centred in the footer. Pad: the pad prints its own footer, so the QR stays in the body.
+  const qr = s.showQr && input.qrSvg ? `<div class="qr">${sanitizeSvg(input.qrSvg)}</div>` : "";
   const barcodeSvg = s.showBarcode && patient.patientCode ? code39Svg(patient.patientCode) : null;
   const left = [
     barcodeSvg ? `<div class="barcode">${barcodeSvg}<div>*${esc(patient.patientCode!.toUpperCase())}*</div></div>` : "",
@@ -320,7 +341,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     sec("plan", list(doc.plan ?? [])),
     sec("notes", list([...birthNotes(patient), ...(doc.notes ?? [])])),
     // Pinned to the bottom of the column, so nothing sits under the body to cut the divider short.
-    s.showQr && input.qrSvg ? `<div class="qr">${sanitizeSvg(input.qrSvg)}</div>` : "",
+    pad ? qr : "",
   ].join("");
 
   const items = doc.items
@@ -351,12 +372,19 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     input.footerNote ? `<div class="footnote">${esc(input.footerNote)}</div>` : "",
   ].join("");
 
+  // Footer: where the chamber is on the left, QR in the middle, when/how to reach the doctor on the right.
   const footerText = chamber.footerText?.trim();
-  const footerChamber = s.chambersInHeader && input.chambers?.length ? "" : chamberBlock(chamber, lang, s.numerals);
+  const listedInHeader = s.chambersInHeader && !!input.chambers?.length;
+  const footLeft = listedInHeader ? "" : chamberIdentity(chamber, lang);
+  const footRight = listedInHeader ? "" : chamberContactLines(chamber, s, lang).map(esc).join("<br>");
   const footer =
-    pad || (!footerChamber && !footerText)
+    pad || (!footLeft && !qr && !footRight && !footerText)
       ? ""
-      : `<footer>${footerChamber}${footerText ? `<div class="policy">${esc(footerText)}</div>` : ""}</footer>`;
+      : `<footer>${
+          footLeft || qr || footRight
+            ? `<div class="foot"><div class="foot-left">${footLeft}</div><div class="foot-qr">${qr}</div><div class="foot-right">${footRight}</div></div>`
+            : ""
+        }${footerText ? `<div class="policy">${esc(footerText)}</div>` : ""}</footer>`;
 
   const m = pageMargins(s);
   const contentHeightMm = heightMm - m.top - m.bottom;
@@ -416,6 +444,9 @@ ul + .diagrams { margin-top: 1.5mm; }
 .sign .line { border-top: 0.75pt solid #000; padding-top: 1mm; }
 footer { border-top: 1.5pt solid #000; padding-top: 2mm; font-size: 0.9em; break-inside: avoid; }
 footer .policy { text-align: center; margin-top: 1mm; }
+.foot { display: grid; grid-template-columns: 1fr auto 1fr; gap: 4mm; align-items: start; }
+.foot-right { text-align: right; }
+footer .qr { margin: 0; padding: 0; }
 header .logo { display: flex; align-items: center; }
 header .logo img { max-height: 18mm; max-width: 30mm; }
 .chambers { display: grid; grid-template-columns: repeat(auto-fit, minmax(50mm, 1fr)); gap: 2mm 4mm; padding: 1.5mm 0; border-bottom: 0.75pt solid #000; font-size: 0.85em; }
