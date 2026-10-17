@@ -194,11 +194,13 @@ export function renderLabReportHtml(input: LabPrintInput): string {
 <style>
 @font-face { font-family: "RxBengali"; src: url("${input.fonts.bengali}") format("truetype"); font-weight: 100 900; }
 @font-face { font-family: "RxLatin"; src: url("${input.fonts.latin}") format("truetype"); font-weight: 100 900; }
-@page { size: 210mm 297mm; margin: 12mm 14mm; }
+/* A zero page margin leaves the browser no room for its own header/footer (date, title, URL, page number);
+   the sheet's padding is the margin, cloned onto every page a long report flows onto. */
+@page { size: 210mm 297mm; margin: 0; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: #fff; color: #000; }
 body { font-family: "RxLatin", "RxBengali", sans-serif; font-size: 10pt; line-height: 1.35; }
-.sheet { min-height: 272mm; display: flex; flex-direction: column; break-after: page; }
+.sheet { min-height: 296mm; padding: 12mm 14mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; display: flex; flex-direction: column; break-after: page; }
 .sheet:last-child { break-after: auto; }
 header { display: flex; align-items: center; gap: 4mm; border-bottom: 1.5pt solid #000; padding-bottom: 2mm; }
 header .logo img { max-height: 18mm; max-width: 30mm; }
@@ -234,7 +236,7 @@ table { border-collapse: collapse; width: 100%; }
 footer { border-top: 0.75pt solid #000; margin-top: 2mm; padding-top: 1mm; text-align: center; font-size: 0.85em; }
 @media screen {
   body { background: #e5e7eb; }
-  .sheet { width: 210mm; min-height: 297mm; margin: 8mm auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2); padding: 12mm 14mm; }
+  .sheet { width: 210mm; min-height: 297mm; margin: 8mm auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
 }
 </style>
 </head>

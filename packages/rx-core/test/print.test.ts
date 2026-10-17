@@ -248,3 +248,11 @@ describe("exam pictures print under their own section", () => {
     expect(at(noEar, `<section class="diagrams">`)).toBeLessThan(at(noEar, "Right TM</figcaption>"));
   });
 });
+
+describe("page margins", () => {
+  it("leaves no @page margin for the browser's header/footer and pads every page instead", () => {
+    const html = render({}, {}, { ...DEFAULT_PRINT_SETTINGS, mode: "pad" });
+    expect(html).toMatch(/@page \{ size: [\d.]+mm [\d.]+mm; margin: 0; \}/);
+    expect(html).toContain(".sheet { padding: 55mm 10mm 30mm 10mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; }");
+  });
+});

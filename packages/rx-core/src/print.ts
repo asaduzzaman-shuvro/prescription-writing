@@ -370,11 +370,13 @@ export function renderPrescriptionHtml(input: RenderInput): string {
 <style>
 @font-face { font-family: "RxBengali"; src: url("${input.fonts.bengali}") format("truetype"); font-weight: 100 900; }
 @font-face { font-family: "RxLatin"; src: url("${input.fonts.latin}") format("truetype"); font-weight: 100 900; }
-/* Page margins carry the pad's pre-printed header/footer space and the printer offset,
-   so they repeat on every page when a long prescription flows onto page 2. */
-@page { size: ${widthMm}mm ${heightMm}mm; margin: ${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm; }
+/* A zero page margin leaves the browser no room for its own header/footer (date, title, URL, page number).
+   The sheet's padding carries the margins instead: the pad's pre-printed header/footer space and the printer
+   offset. It is cloned onto every page, so it repeats when a long prescription flows onto page 2. */
+@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+.sheet { padding: ${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 body { font-family: "RxLatin", "RxBengali", sans-serif; font-size: ${s.fontSizePt}pt; line-height: 1.35; }
 .page { min-height: ${contentHeightMm}mm; display: flex; flex-direction: column; }
 header { display: flex; justify-content: space-between; border-bottom: 1.5pt solid #000; padding-bottom: 2mm; }
@@ -423,8 +425,7 @@ header .logo img { max-height: 18mm; max-width: 30mm; }
 .footnote { font-size: 0.75em; text-align: center; color: #333; }
 @media screen {
   body { background: #e5e7eb; }
-  .sheet { width: ${widthMm}mm; min-height: ${heightMm}mm; margin: 8mm auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2);
-    padding: ${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm; }
+  .sheet { width: ${widthMm}mm; min-height: ${heightMm}mm; margin: 8mm auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
 }
 </style>
 </head>

@@ -76,3 +76,11 @@ describe("lab report print", () => {
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
   });
 });
+
+describe("lab report page margins", () => {
+  it("leaves no @page margin for the browser's header/footer and pads every page instead", () => {
+    const html = renderLabReportHtml(base);
+    expect(html).toContain("@page { size: 210mm 297mm; margin: 0; }");
+    expect(html).toMatch(/\.sheet \{[^}]*padding: 12mm 14mm;[^}]*box-decoration-break: clone;/);
+  });
+});
