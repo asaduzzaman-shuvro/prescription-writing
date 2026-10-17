@@ -52,7 +52,7 @@ export const SYNC_COLUMNS: Record<string, readonly string[]> = {
   patient: [
     "id", "tenant_id", "code", "name", "dob", "dob_estimated", "sex", "mobile", "address", "nid", "brn", "health_id",
     "birth_weight_kg", "gestational_age_weeks", "allergies", "pregnancy_status", "notes", "consent_at",
-    "report_files_consent_at", "guardian_name", "created_by", "deleted_at", "created_at", "updated_at",
+    "report_files_consent_at", "guardian_name", "referred_by", "created_by", "deleted_at", "created_at", "updated_at",
   ],
   encounter: [
     "id", "tenant_id", "patient_id", "doctor_user_id", "chamber_id", "visit_date", "serial_no", "status",
