@@ -107,7 +107,8 @@ test("TM answer draws on the TM map; Reset clears both maps after confirming", a
   await reset.click();
   await expect(right.locator('[data-zone="ai"]')).toHaveAttribute("fill", "#f8fafc");
   await expect(left.locator('circle[fill="#bbb"]')).toHaveCount(0);
-  await expect(tm.nth(0)).toHaveValue("Retracted"); // answers stay; only the maps are reset
+  await expect(tm.nth(0)).toHaveValue("Retracted"); // TM answers stay
+  await expect(exam.getByLabel("Perforation", { exact: true }).nth(0)).toHaveValue(""); // Perforation goes back to —
 });
 
 test("Throat & neck answers draw on the pictures; Reset clears a picture after confirming", async ({ page }) => {
