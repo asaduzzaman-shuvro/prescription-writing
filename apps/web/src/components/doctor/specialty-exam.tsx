@@ -37,8 +37,9 @@ import {
   type SketchValue,
   type SpecialtyTemplateSchema,
   type TemplateField,
+  type TemplateSection,
 } from "@rx/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SketchField } from "./sketch-field";
 
 type Flatten = (
@@ -591,6 +592,8 @@ export function SpecialtyExam({
   if (findings) latest.current = findings;
   // The first section starts open (Ear for ENT, Vision for eyes).
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  /** Field groups inside a section (e.g. Tuning Fork Test), keyed `section:group`; closed until opened. */
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const lastFlat = useRef("");
   const pending = useRef<Findings | null>(null);
@@ -646,6 +649,41 @@ export function SpecialtyExam({
     }, 400);
   }
 
+  /** A section's field rows; a run of fields sharing a `group` folds under its own collapsible heading. */
+  function sectionFields(s: TemplateSection, row: (f: TemplateField) => ReactNode): ReactNode[] {
+    const out: ReactNode[] = [];
+    for (let i = 0; i < s.fields.length; ) {
+      const g = s.fields[i]!.group;
+      if (!g) {
+        out.push(row(s.fields[i++]!));
+        continue;
+      }
+      const run: TemplateField[] = [];
+      while (i < s.fields.length && s.fields[i]!.group === g) run.push(s.fields[i++]!);
+      const key = `${s.id}:${g}`;
+      const isOpen = !!openGroups[key];
+      const answered = run.filter((f) => findings![f.id] !== undefined).length;
+      out.push(
+        <div key={key} className="rounded border border-slate-200" data-testid="exam-group">
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-slate-700"
+            onClick={() => setOpenGroups((o) => ({ ...o, [key]: !o[key] }))}
+          >
+            <span>
+              {g}
+              {answered > 0 && <span className="badge ml-1 bg-brand-50 text-brand-700">{answered}</span>}
+            </span>
+            <span className="text-slate-400">{isOpen ? "−" : "+"}</span>
+          </button>
+          {isOpen && <div className="space-y-2 border-t border-slate-100 p-2">{run.map(row)}</div>}
+        </div>,
+      );
+    }
+    return out;
+  }
+
   const filled = (sid: string) =>
     schema.sections
       .find((s) => s.id === sid)!
@@ -679,7 +717,7 @@ export function SpecialtyExam({
           </button>
           {(open[s.id] ?? si === 0) && (
             <div className="space-y-2 border-t border-slate-100 p-2">
-              {s.fields.map((f) => (
+              {sectionFields(s, (f) => (
                 <div
                   key={f.id}
                   className="grid items-start gap-1 @min-[36rem]:grid-cols-[7.5rem_1fr]"

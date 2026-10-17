@@ -10,6 +10,11 @@ describe("ENT template", () => {
     expect(
       validateTemplateSchema({ sections: [{ id: "a", title: "A", fields: [{ id: "x", label: "X", type: "select" }, { id: "x", label: "Y", type: "bogus" }] }] }),
     ).toEqual(["field x: options required for select", 'duplicate field id "x"', 'field x: unknown type "bogus"']);
+    const grouped = (groups: (string | undefined)[]) =>
+      validateTemplateSchema({ sections: [{ id: "s", title: "S", fields: groups.map((group, i) => ({ id: `f${i}`, label: "F", type: "text" as const, group })) }] });
+    expect(grouped(["TFT", "TFT", undefined])).toEqual([]);
+    expect(grouped([" "])).toEqual(["field f0: group must be a non-empty name"]);
+    expect(grouped(["A", "B", "A"])).toEqual(['field f2: group "A" must be next to its other fields']);
   });
 });
 
