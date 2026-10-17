@@ -89,7 +89,8 @@ describe("renderPrescriptionHtml", () => {
 
   it("prints visit number, address, infant age and dd/mm/yyyy date", () => {
     const html = render({ visitNo: 3 }, { ageYears: undefined, ageMonths: 1, address: "Dhaka" });
-    expect(html).toContain("Visit No: 3");
+    const strip = html.slice(html.indexOf(`<div class="patient">`), html.indexOf(`<div class="body">`));
+    expect(strip).toContain("<b>Visit No:</b> 3");
     expect(html).toContain("<b>Address:</b> Dhaka");
     expect(html).toContain("<b>Age:</b> 1 M");
     expect(html).toContain("<b>Date:</b> 11/06/2026");
