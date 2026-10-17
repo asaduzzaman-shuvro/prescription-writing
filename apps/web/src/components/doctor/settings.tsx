@@ -391,6 +391,9 @@ export function SettingsScreen() {
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showQr} onChange={(e) => set("showQr", e.target.checked)} /> QR verification code</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showSchedule} onChange={(e) => set("showSchedule", e.target.checked)} data-testid="show-schedule" /> Visiting days &amp; times</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showSerialPhone} onChange={(e) => set("showSerialPhone", e.target.checked)} data-testid="show-serial-phone" /> Serial phone</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showChamberPhone} onChange={(e) => set("showChamberPhone", e.target.checked)} data-testid="show-chamber-phone" /> Chamber phone</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showBarcode} onChange={(e) => set("showBarcode", e.target.checked)} data-testid="show-barcode" /> Patient ID barcode</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.chambersInHeader} onChange={(e) => set("chambersInHeader", e.target.checked)} /> List all chambers under the header</label>
           {hasTm && (

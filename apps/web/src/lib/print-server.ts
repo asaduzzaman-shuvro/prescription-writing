@@ -94,7 +94,7 @@ export async function prescriptionPdf(
   if (!data?.patient || !data.doctor) return null;
   const { rx, patient, doctor, chamber, enc, chambers, labs } = data;
   const header = (c: typeof chamber | undefined): ChamberHeader => ({
-    name: c?.name ?? "", address: c?.address ?? "", phone: c?.phone ?? undefined, hours: c?.hours ?? undefined,
+    name: c?.name ?? "", address: c?.address ?? "", room: c?.room ?? undefined, phone: c?.phone ?? undefined, hours: c?.hours ?? undefined,
     schedule: (c?.schedule as ChamberSlot[] | undefined) ?? [], serialPhone: c?.serialPhone ?? undefined,
     footerText: c?.footerText ?? undefined, logoDataUrl: c?.logoDataUrl ?? undefined,
   });
