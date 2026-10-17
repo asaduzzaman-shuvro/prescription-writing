@@ -115,8 +115,7 @@ describe("renderPrescriptionHtml", () => {
       rxNote: "Dear Dr. Saad,\nThank you for the referral.",
     });
     expect(html).toContain("<b>Ref By:</b> Dr. Imran");
-    expect(html).toContain(`<td class="k">Pulse</td><td>: Normal</td>`);
-    expect(html).toContain(`<td class="k">Skin condition</td><td>: color change</td>`);
+    expect(html).toContain(`<span>Pulse: Normal</span>, <span>Skin condition: color change</span>`);
     expect(html).not.toContain("ignored");
     expect(html).toContain("<h3>Plan</h3><ul><li>Refd to Paediatric ophthalmology Dept., BSMMU — Dr. Tarek Reza Ali (01766683417)</li></ul>");
     expect(html).toContain("<h3>Note</h3><ul><li>Birth wt 1.7 kg</li></ul>");
@@ -290,5 +289,29 @@ describe("signature and QR placement", () => {
     const pad = renderWith("pad");
     expect(leftOf(pad)).toContain(`class="qr"`);
     expect(pad).not.toContain("<footer>");
+  });
+});
+
+describe("O/E", () => {
+  const render = (doc: Partial<PrescriptionDoc>, settings = DEFAULT_PRINT_SETTINGS) =>
+    renderPrescriptionHtml({
+      doc: { ...SAMPLE_DOC, ...doc }, patient: SAMPLE_PATIENT, doctor: SAMPLE_DOCTOR, chamber: SAMPLE_CHAMBER, date: "2026-06-11",
+      settings, fonts: { bengali: "", latin: "" },
+    });
+
+  it("prints the bold heading and the vitals and findings as one comma-separated line", () => {
+    const html = render({ oeFindings: [{ label: "Throat", value: "congested" }] });
+    expect(html).toContain(
+      `<section><p class="oe"><b>O/E:</b> <span class="v">BP: 120/80 mmHg</span>, <span class="v">Pulse: 78 b/m</span>, <span class="v">Temp: 99.2 °F</span>, ` +
+        `<span class="v">Wt: 68 kg</span>, <span class="v">Ht: 170 cm</span>, <span class="v">BMI: 23.5</span>, <span>Throat: congested</span></p>`,
+    );
+    expect(html).not.toContain("<h3>O/E</h3>");
+  });
+
+  it("uses a renamed heading, puts the heading before a lone examination note, and can be hidden", () => {
+    const renamed = render({}, { ...DEFAULT_PRINT_SETTINGS, sectionLabels: { oe: "On exam:" } });
+    expect(renamed).toContain(`<p class="oe"><b>On exam:</b> <span class="v">BP:`);
+    expect(render({ vitals: {}, oeFindings: [], examination: "Throat congested" })).toContain(`<p class="pre"><b>O/E:</b> Throat congested</p>`);
+    expect(render({}, { ...DEFAULT_PRINT_SETTINGS, hiddenSections: ["oe"] })).not.toContain("BP: 120/80");
   });
 });

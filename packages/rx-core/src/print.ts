@@ -167,7 +167,8 @@ export function historyLines(doc: Pick<PrescriptionDoc, "history" | "histories">
   return [...(doc.history ?? "").split("\n"), ...(doc.histories ?? [])].map((s) => s.trim()).filter(Boolean);
 }
 
-function oeBlock(doc: PrescriptionDoc): string {
+/** O/E as one run under its heading: "<b>O/E:</b> BP: …, Pulse: …", then any free-text examination. */
+function oeBlock(doc: PrescriptionDoc, title: string): string {
   const v = doc.vitals;
   const rows: string[] = [];
   if (v.bpSystolic && v.bpDiastolic) rows.push(`BP: ${v.bpSystolic}/${v.bpDiastolic} mmHg`);
@@ -180,11 +181,17 @@ function oeBlock(doc: PrescriptionDoc): string {
   const b = bmi(v.weightKg, v.heightCm);
   if (b) rows.push(`BMI: ${b}`);
   const kv = (doc.oeFindings ?? []).filter((l) => l.label.trim() && l.value.trim());
-  const findings = kv.length
-    ? `<table class="kv">${kv.map((l) => `<tr><td class="k">${esc(l.label)}</td><td>: ${esc(l.value)}</td></tr>`).join("")}</table>`
-    : "";
-  const exam = doc.examination ? `<p class="pre">${esc(doc.examination)}</p>` : "";
-  return list(rows) + findings + exam;
+  // One comma-separated run that wraps between items; a vital never splits across lines.
+  const items = [
+    ...rows.map((r) => `<span class="v">${esc(r)}</span>`),
+    ...kv.map((l) => `<span>${esc(l.label)}: ${esc(l.value)}</span>`),
+  ];
+  const exam = doc.examination?.trim();
+  if (!items.length && !exam) return "";
+  const head = `<b>${esc(title.trim().replace(/:$/, ""))}:</b>`;
+  const line = items.length ? `<p class="oe">${head} ${items.join(", ")}</p>` : "";
+  const text = exam ? `<p class="pre">${items.length ? "" : `${head} `}${esc(exam)}</p>` : "";
+  return `<section>${line}${text}</section>`;
 }
 
 /** "১ মাস পর আসবেন। (তারিখঃ ১১-০৭-২০২৬)": the relative period plus the date it falls on. */
@@ -332,7 +339,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     barcodeSvg ? `<div class="barcode">${barcodeSvg}<div>*${esc(patient.patientCode!.toUpperCase())}*</div></div>` : "",
     sec("cc", list(doc.chiefComplaints)),
     sec("history", (doc.history?.trim() ? `<p class="pre">${esc(doc.history.trim())}</p>` : "") + list(doc.histories ?? [])),
-    sec("oe", oeBlock(doc)),
+    hidden.has("oe") ? "" : oeBlock(doc, s.sectionLabels?.oe?.trim() || defaultSectionLabel("oe", lang)),
     specialty,
     diagrams ? `<section class="diagrams">${diagrams}</section>` : "",
     sec("labs", list((doc.labFindings ?? []).map((l) => l.text))),
@@ -422,9 +429,8 @@ ul { margin: 0; padding-left: 4mm; }
 ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .rx-item { margin-bottom: 2.5mm; break-inside: avoid; display: grid; grid-template-columns: 1fr auto; column-gap: 4mm; }
 .rx-item .dur { align-self: center; white-space: nowrap; }
-.kv { border-collapse: collapse; }
-.kv td { padding: 0 1mm 0 0; vertical-align: top; }
-.kv .k { font-weight: 600; white-space: nowrap; }
+.oe { margin: 0; }
+.oe .v { white-space: nowrap; }
 .rx-note { margin: 0 0 3mm; }
 .rx-item .num { display: inline-block; min-width: 5mm; }
 .rx-item .gen { font-size: 0.85em; }

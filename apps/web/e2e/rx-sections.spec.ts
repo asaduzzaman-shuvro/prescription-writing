@@ -28,7 +28,7 @@ test("referral, O/E findings, plan, note and follow-up date print like a real pa
   const frame = page.frameLocator("[data-testid=print-frame]");
   await expect(frame.locator(".patient")).toContainText("Ref By: Dr. Imran");
   await expect(frame.locator(".visit-no")).toHaveText("Visit No: 1");
-  await expect(frame.locator(".kv")).toContainText("Pulse");
+  await expect(frame.locator(".oe")).toContainText("Pulse: Normal");
   await expect(frame.locator(".left")).toContainText("Refd to Vascular Surgery Dept., BSMMU — Dr. Tarek");
   await expect(frame.locator(".left")).toContainText("H/O DM");
   await expect(frame.locator(".rx-note")).toContainText("Referred back to Dr. Imran.");
