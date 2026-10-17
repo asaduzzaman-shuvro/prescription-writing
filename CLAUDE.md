@@ -18,9 +18,11 @@ before writing Next-specific code.
 ```bash
 pnpm dev                    # web on :3000 (service worker disabled in dev)
 pnpm typecheck              # turbo, all packages (no linter is configured)
-pnpm test                   # turbo: vitest in rx-core + db (db tests hit the local dev DB)
+pnpm test                   # turbo: vitest in rx-core, db and web (db tests hit the local dev DB)
 pnpm db:migrate             # apply packages/db/migrations as the owner role
 pnpm db:seed:dev            # idempotent; needs ./scripts/fetch-dev-seed.sh first
+pnpm db:seed:labs           # curated lab catalogue (rx-core/src/lab-catalogue); safe for production
+./scripts/build-cpanel.sh   # production bundle → dist/rxpad-cpanel.tar.gz; see README "Deploy (shared cPanel)"
 
 pnpm --filter @rx/core test test/dose.test.ts          # one test file
 pnpm --filter @rx/core exec vitest run -t "shortcut"   # by test name
@@ -51,11 +53,16 @@ Full local setup (setup.sql, env files, shared PowerSync JWT secret) is in READM
 
 **Doctor app is offline-first and client-side.** `/doctor` is a single page with hash routing
 (`lib/doctor/router.tsx`). Never add server routes or server components for doctor-app screens: navigation
-must work with no network. `public/sw.js` caches the shell. Data lives in browser SQLite managed by PowerSync:
+must work with no network. `public/sw.js` caches the shell. Data lives in browser SQLite. The PowerSync SDK provides
+only the local database (one file per user+tenant, `lib/powersync/provider.tsx`) and its `ps_crud` upload queue.
+Nothing calls `db.connect()`, so the PowerSync *service* is not on the active sync path. Sync is the app's own:
 - Reads and writes go through `lib/doctor/data.ts` / `hooks.ts` using raw SQLite SQL. On the client, every
   column is text/integer/real: jsonb and arrays are JSON strings, booleans are 0/1.
-- Downloads are defined in `infra/powersync/sync-config.yaml` (streams keyed by the JWT `tenant_id` from
-  `/api/sync/token`).
+- Downloads: `lib/powersync/custom-sync.ts` polls `/api/sync/pull?part=clinic|catalogue` every 20s and on
+  `online`, with etags (304 when unchanged). `lib/sync-pull.ts` holds the per-table server queries and their
+  etag revisions. `lib/sync-tables.ts` lists the tables and client columns (`SYNC_COLUMNS`, and `INT_COLUMNS` for
+  integer/boolean coercion), and `lib/sync-shape.ts` turns Postgres values into SQLite ones. `/api/sync/token` now
+  always answers `{mode: "custom"}`. `infra/powersync/sync-config.yaml` is no longer what decides downloads.
 - Uploads go from `lib/powersync/connector.ts` to `/api/sync/upload` to `lib/sync-upload.ts`. That file holds a
   per-table **allowlist** of writable columns and roles, forces `tenant_id`/owner fields from the session, and
   runs server-side rules: finalised prescriptions are immutable (edits create a new version), antibiotics need a
@@ -70,8 +77,10 @@ must work with no network. `public/sw.js` caches the shell. Data lives in browse
 2. Hand-written SQL for grants to `rx_app`, RLS policy, `GRANT SELECT … TO powersync_role`, and
    `ALTER PUBLICATION powersync ADD TABLE …`. Write it as its own migration file and add it to
    `migrations/meta/_journal.json` (see `0002_rls.sql`, `0005_phase3_rls.sql`, `0008_chamber_insert_grant.sql`).
-3. `infra/powersync/sync-config.yaml`. Streams that use `SELECT *` pick up new columns automatically; the
-   others list columns explicitly.
+3. `apps/web/src/lib/sync-tables.ts`: add the table to `CLINIC_SYNC_TABLES`/`CATALOGUE_SYNC_TABLES` and the
+   column to `SYNC_COLUMNS` (and `INT_COLUMNS` if it is integer/boolean). Then update its query in `lib/sync-pull.ts`,
+   which names the columns explicitly. If anyone still runs the PowerSync service, keep
+   `infra/powersync/sync-config.yaml` in step too.
 4. `apps/web/src/lib/powersync/schema.ts`, the client table definitions.
 5. `apps/web/src/lib/sync-upload.ts` `SPECS`, if clients may write it.
 6. The doctor-app queries in `lib/doctor/data.ts` / `hooks.ts`.
