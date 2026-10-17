@@ -262,6 +262,15 @@ export function eardrumOverlaySvg(value: unknown): string {
 /** ENT template fields that drive the TM map. `perfSize` is legacy: the size is now part of the Perforation answer, e.g. "Central (small)". */
 export const TM_LINK = { tm: "ear_tm", perfType: "ear_perf_type", perfSize: "ear_perf_size", map: "ear_tm_map" } as const;
 
+/** TM answers meaning an intact drum ("Intact" is the older wording); that ear can't have a perforation. */
+export const TM_INTACT: readonly string[] = ["Intact (Normal)", "Intact"];
+
+/** True when this ear's TM is answered intact, so its Perforation answer is blocked. */
+export function perforationBlocked(findings: Findings, side: Side2): boolean {
+  const v = (findings[TM_LINK.tm] as LateralValue<unknown> | undefined)?.[side];
+  return typeof v === "string" && TM_INTACT.includes(v);
+}
+
 /** What one TM answer draws on that ear's map. */
 export interface TmPreset {
   perforation?: EardrumZone[];
@@ -276,6 +285,7 @@ const PARS_TENSA: EardrumZone[] = ["as", "ai", "ps", "pi"];
 /** The picture for a TM answer (option text as in the ENT template; anything else draws nothing). */
 export function tmPreset(tm: string | undefined, perfType?: string, perfSize?: string): TmPreset {
   switch (tm) {
+    case "Intact (Normal)":
     case "Intact":
       return { look: "intact" };
     case "Retracted":
@@ -334,7 +344,7 @@ export function applyTmPreset(ear: unknown, prev: TmPreset, next: TmPreset): Ear
 /**
  * Redraw the TM map for each ear whose TM / perforation answers changed between `prev` and `next`.
  * Choosing a perforation for an ear whose TM isn't answered yet sets that TM to "Perforated", so the choice draws.
- * A TM answer the doctor already gave (e.g. "Retracted") is never overwritten.
+ * A TM answer the doctor already gave (e.g. "Retracted") is never overwritten. An intact TM clears that ear's Perforation.
  * A no-op for templates without these fields (eyes, vascular) or without a TM map.
  */
 export function syncTmMap(schema: SpecialtyTemplateSchema, prev: Findings, next: Findings): Findings {
@@ -350,6 +360,10 @@ export function syncTmMap(schema: SpecialtyTemplateSchema, prev: Findings, next:
       if (perf && perf !== answer(prev, TM_LINK.perfType, side) && !answer(next, TM_LINK.tm, side))
         next = { ...next, [TM_LINK.tm]: { ...(next[TM_LINK.tm] as object), [side]: "Perforated" } };
     }
+  }
+  for (const side of ["right", "left"] as const) {
+    if (perforationBlocked(next, side) && answer(next, TM_LINK.perfType, side) !== undefined)
+      next = { ...next, [TM_LINK.perfType]: { ...(next[TM_LINK.perfType] as object), [side]: undefined } };
   }
   const preset = (f: Findings, side: Side2) => tmPreset(answer(f, TM_LINK.tm, side), answer(f, TM_LINK.perfType, side), answer(f, TM_LINK.perfSize, side));
   let map = next[TM_LINK.map] as LateralValue<EardrumValue> | undefined;

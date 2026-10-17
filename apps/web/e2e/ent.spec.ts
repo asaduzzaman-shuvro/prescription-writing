@@ -11,7 +11,8 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   // Ear section is open by default. Right TM perforated, left intact.
   const tm = exam.getByLabel("TM", { exact: true });
   await tm.nth(0).selectOption("Perforated");
-  await tm.nth(1).selectOption("Intact");
+  await tm.nth(1).selectOption("Intact (Normal)");
+  await expect(exam.getByLabel("Perforation", { exact: true }).nth(1)).toBeDisabled(); // no perforation on an intact drum
   await page.getByTestId("eardrum-right").locator('[data-zone="ai"]').click();
   await page.getByTestId("eardrum-right").locator('[data-zone="pi"]').click();
   // A grommet on the left drum, and a free-hand line on the right one.
@@ -60,7 +61,7 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
 
   const frame = page.frameLocator("[data-testid=print-frame]");
   await expect(frame.locator("section h3", { hasText: "Ear" })).toBeVisible();
-  await expect(frame.getByText("R Perforated, L Intact")).toBeVisible();
+  await expect(frame.getByText("R Perforated, L Intact (Normal)")).toBeVisible();
   // "Perforated" with no type yet draws a central perforation; the AI and PI taps add to it.
   await expect(frame.getByText("R: central perforation (medium); perforation AI+PI; drawing · L: grommet")).toBeVisible();
   await expect(frame.locator("figure.diagram", { hasText: "Right TM" }).locator("polyline")).toHaveCount(1);

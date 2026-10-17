@@ -12,7 +12,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
       fields: [
         { id: "ear_pinna", label: "Pinna / mastoid", type: "multiselect", lateral: true, options: ["Normal", "Tender mastoid", "Pre-auricular sinus", "Post-aural scar", "Swelling"], normal: "Normal" },
         { id: "ear_eac", label: "EAC", type: "multiselect", lateral: true, options: ["Normal", "Wax", "Impacted wax", "Discharge", "Oedematous", "Fungal debris", "Furuncle", "Foreign body", "Narrow"], normal: "Normal" },
-        { id: "ear_tm", label: "TM", type: "select", lateral: true, options: ["Intact", "Perforated", "Retracted", "Bulging", "Congested", "Dull", "Not visible"] },
+        { id: "ear_tm", label: "TM", type: "select", lateral: true, options: ["Intact (Normal)", "Perforated", "Retracted", "Bulging", "Congested", "Dull", "Not visible"] },
         { id: "ear_tm_map", label: "TM map", type: "eardrum" },
         { id: "ear_perf_type", label: "Perforation", type: "select", lateral: true, options: ["Central (small)", "Central (medium)", "Central (large)", "Central (subtotal)", "Total", "Attic", "Marginal"] },
         { id: "ear_discharge", label: "Discharge", type: "select", lateral: true, options: ["None", "Mucoid", "Mucopurulent", "Purulent", "Foul smelling", "Blood stained"], normal: "None" },
