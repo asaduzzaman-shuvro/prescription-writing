@@ -120,6 +120,8 @@ function SelectField({
       {f.options!.map((o) => (
         <option key={o}>{o}</option>
       ))}
+      {/* An answer whose option has since been renamed or merged (e.g. an old "Central") still shows. */}
+      {typeof value === "string" && value && !f.options!.includes(value) && <option>{value}</option>}
     </select>
   );
 }

@@ -91,7 +91,7 @@ test("TM answer draws on the TM map; Reset clears both maps after confirming", a
 
   await tm.nth(0).selectOption("Perforated");
   await expect(right.locator('circle[r="12"][fill="#111"]')).toHaveCount(1); // central, medium until sized
-  await exam.getByLabel("Perforation", { exact: true }).nth(0).selectOption("Subtotal");
+  await exam.getByLabel("Perforation", { exact: true }).nth(0).selectOption("Central (subtotal)");
   await expect(right.locator('circle[r="12"]')).toHaveCount(0);
   await expect(right.locator('[data-zone="ai"]')).toHaveAttribute("fill", "#111");
   await tm.nth(0).selectOption("Retracted");
