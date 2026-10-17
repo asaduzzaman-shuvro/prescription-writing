@@ -201,6 +201,8 @@ export const patient = pgTable(
     /** Consent to keep photos/PDFs of their reports (asked once, before the first one). */
     reportFilesConsentAt: timestamp({ withTimezone: true }),
     guardianName: text(),
+    /** Referring doctor named at registration; pre-fills the first prescription's Ref By. */
+    referredBy: text(),
     createdBy: uuid(),
     deletedAt: timestamp({ withTimezone: true }),
     ...timestamps,

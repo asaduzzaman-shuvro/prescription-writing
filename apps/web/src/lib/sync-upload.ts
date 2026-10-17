@@ -38,7 +38,7 @@ const SPECS: Record<string, TableSpec> = {
     columns: {
       name: "text", dob: "date", dob_estimated: "bool", sex: "enum:sex", mobile: "text", address: "text", nid: "text",
       brn: "text", health_id: "text", allergies: "textarr", pregnancy_status: "text", notes: "text", consent_at: "ts",
-      guardian_name: "text", report_files_consent_at: "ts",
+      guardian_name: "text", report_files_consent_at: "ts", referred_by: "text",
       birth_weight_kg: "num", gestational_age_weeks: "int",
       deleted_at: "ts", created_at: "ts",
     },

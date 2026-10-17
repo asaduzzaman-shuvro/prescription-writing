@@ -127,7 +127,7 @@ function clinicParts(tenantId: string, userId: string): Part[] {
       query: sql`SELECT id::text AS id, tenant_id::text AS tenant_id, code, name, dob::text AS dob, dob_estimated::int AS dob_estimated,
             sex::text AS sex, mobile, address, nid, brn, health_id, birth_weight_kg, gestational_age_weeks,
             to_json(allergies)::text AS allergies, pregnancy_status, notes, ${sql.raw(ts("consent_at"))},
-            ${sql.raw(ts("report_files_consent_at"))}, guardian_name, created_by::text AS created_by,
+            ${sql.raw(ts("report_files_consent_at"))}, guardian_name, referred_by, created_by::text AS created_by,
             ${sql.raw(ts("deleted_at"))}, ${sql.raw(ts("created_at"))}, ${sql.raw(ts("updated_at"))}
           FROM patient WHERE tenant_id = ${tenant} AND deleted_at IS NULL`,
       rev: revUpdated("patient", sql`tenant_id = ${tenant} AND deleted_at IS NULL`),

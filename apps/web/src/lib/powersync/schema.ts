@@ -72,6 +72,7 @@ const patient = new Table(
     consent_at: column.text,
     report_files_consent_at: column.text,
     guardian_name: column.text,
+    referred_by: column.text,
     created_by: column.text,
     deleted_at: column.text,
     ...timestamps,
