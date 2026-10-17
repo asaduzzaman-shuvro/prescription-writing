@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { airBoneGap, applyTmPreset, audiogramSvg, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, ptaAverage, sanitizeSvg, syncTmMap, TM_LOOKS, tmPreset, validateTemplateSchema } from "../src";
+import { airBoneGap, applyTmPreset, audiogramSvg, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, ptaAverage, resetTmMap, sanitizeSvg, syncTmMap, TM_LOOKS, tmPreset, validateTemplateSchema } from "../src";
 
 describe("ENT template", () => {
   it("is a valid schema", () => {
@@ -175,6 +175,9 @@ describe("TM answer draws on the TM map", () => {
     expect(left.ear_tm).toEqual({ right: "Intact", left: "Perforated" });
     expect((left.ear_tm_map as { left: { perforation: string[] } }).left.perforation).toEqual(["as", "ai", "ps", "pi"]);
     expect((left.ear_tm_map as { right?: unknown }).right).toBeUndefined();
+    // Reset empties both maps and the Perforation answers; TM answers and other fields stay.
+    const full = { ear_tm: { right: "Perforated" }, ear_perf_type: { right: "Central (small)" }, ear_perf_size: { left: "Large" }, ear_tm_map: left.ear_tm_map, ear_weber: "Central" };
+    expect(resetTmMap(full)).toEqual({ ear_tm: { right: "Perforated" }, ear_tm_map: {}, ear_weber: "Central" });
     // Templates without a TM map are untouched.
     const eye = { sections: [{ id: "x", title: "X", fields: [{ id: "ear_tm", label: "TM", type: "select" as const, lateral: true, options: ["Intact"] }] }] };
     const f = { ear_tm: { right: "Intact" } };

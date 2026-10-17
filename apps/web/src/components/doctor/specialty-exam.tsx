@@ -18,8 +18,11 @@ import {
   hearingGrade,
   normalizeEardrum,
   ptaAverage,
+  resetTmMap,
   syncSketchMaps,
   syncTmMap,
+  TM_LINK,
+  TM_RESET_KEYS,
   type AudiogramEar,
   type AudiogramValue,
   type Diagram,
@@ -159,21 +162,26 @@ const strokePts = (s: string): Pt[] =>
 function EardrumField({
   value,
   onChange,
+  onReset,
   disabled,
 }: {
   value: LateralValue<EardrumValue> | undefined;
   onChange: (v: LateralValue<EardrumValue>) => void;
+  /** Reset both maps and the answers linked to them; returns how to undo it. Without it, Reset clears the maps only. */
+  onReset?: () => () => void;
   disabled: boolean;
 }) {
   const [tool, setTool] = useState<DrumTool>("perforation");
   const [markKind, setMarkKind] = useState<EardrumMarkKind>("grommet");
   const [undo, setUndo] = useState<LateralValue<EardrumValue> | null>(null);
+  const [undoReset, setUndoReset] = useState<(() => void) | null>(null);
   const [draft, setDraft] = useState<{ side: Side2; pts: Pt[] } | null>(null);
   const groups = useRef<Partial<Record<Side2, SVGGElement | null>>>({});
 
   const ear = (side: Side2) => normalizeEardrum(value?.[side]);
   const setEar = (side: Side2, e: EardrumValue) => {
     setUndo(value ?? {});
+    setUndoReset(null);
     onChange({ ...value, [side]: e });
   };
 
@@ -262,6 +270,12 @@ function EardrumField({
       )
     )
       return;
+    if (onReset) {
+      const restore = onReset();
+      setUndo(null);
+      setUndoReset(() => restore);
+      return;
+    }
     setUndo(value ?? {});
     onChange({});
   }
@@ -312,10 +326,12 @@ function EardrumField({
           <button
             type="button"
             className="btn-ghost px-1 text-xs"
-            disabled={!undo}
+            disabled={!undo && !undoReset}
             onClick={() => {
-              onChange(undo ?? {});
+              if (undoReset) undoReset();
+              else onChange(undo ?? {});
               setUndo(null);
+              setUndoReset(null);
             }}
           >
             Undo
@@ -569,6 +585,9 @@ export function SpecialtyExam({
     ? parseJson<SpecialtyTemplateSchema | null>(tpl.schema, null)
     : null;
   const [findings, setFindings] = useState<Findings | null>(null);
+  /** Newest findings, for an undo that runs after later edits. */
+  const latest = useRef<Findings>({});
+  if (findings) latest.current = findings;
   // The first section starts open (Ear for ENT, Vision for eyes).
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -593,11 +612,24 @@ export function SpecialtyExam({
 
   function update(id: string, v: unknown) {
     // A TM / perforation answer redraws that ear's TM map; a nose, throat or neck answer redraws its picture.
-    const next = syncSketchMaps(
-      schema!,
-      findings!,
-      syncTmMap(schema!, findings!, { ...findings, [id]: v }),
+    commit(
+      syncSketchMaps(
+        schema!,
+        findings!,
+        syncTmMap(schema!, findings!, { ...findings, [id]: v }),
+      ),
     );
+  }
+
+  /** TM map Reset: clears both maps and the Perforation answers; the returned undo puts just those back. */
+  function resetTm(): () => void {
+    const before = Object.fromEntries(TM_RESET_KEYS.map((k) => [k, findings![k]]));
+    commit(resetTmMap(findings!));
+    return () => commit({ ...latest.current, ...before });
+  }
+
+  function commit(next: Findings) {
+    latest.current = next;
     setFindings(next);
     pending.current = next;
     clearTimeout(timer.current);
@@ -658,6 +690,7 @@ export function SpecialtyExam({
                     <EardrumField
                       value={findings[f.id] as LateralValue<EardrumValue>}
                       onChange={(v) => update(f.id, v)}
+                      onReset={f.id === TM_LINK.map ? resetTm : undefined}
                       disabled={readOnly}
                     />
                   ) : f.type === "sketch" && f.sketch ? (
