@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addMedicine, login, mobile, registerPatient, uniq, waitSynced } from "./helpers";
+import { addMedicine, login, mobile, registerPatient, uniq, verifyToken, waitSynced } from "./helpers";
 
 test("doctor writes, finalises and verifies a bilingual prescription", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
@@ -44,8 +44,7 @@ test("doctor writes, finalises and verifies a bilingual prescription", async ({ 
   const pdf = await page.request.get(`/api/print/${rxId}/pdf`);
   expect(pdf.headers()["content-type"]).toBe("application/pdf");
   expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
-  const footnote = await frame.locator(".footnote").innerText();
-  const token = footnote.split("/v/")[1]!.trim();
+  const token = await verifyToken(page);
   await page.goto(`/v/${token}`);
   await expect(page.getByText("Genuine prescription issued via RxPad")).toBeVisible();
   await expect(page.getByText("MOXACIL")).toBeVisible();

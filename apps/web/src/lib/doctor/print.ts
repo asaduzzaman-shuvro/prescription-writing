@@ -100,7 +100,7 @@ export async function buildPrintHtml(
     qrSvg,
     signatureDataUrl: doctor?.signature_data_url ?? undefined,
     fonts: { bengali: `${origin}/fonts/NotoSansBengali.ttf`, latin: `${origin}/fonts/NotoSans.ttf` },
-    footerNote: verifyUrl ? `Verify: ${verifyUrl.replace(/^https?:\/\//, "")}` : rx.status !== "final" ? "DRAFT — not valid" : undefined,
+    footerNote: !verifyUrl && rx.status !== "final" ? "DRAFT — not valid" : undefined,
   });
   return { html, settings, chamberId: rx.chamber_id, status: rx.status, verifyUrl };
 }

@@ -30,6 +30,12 @@ export async function openVisitReports(page: Page) {
   await expect(page.getByTestId("lab-reports")).toBeVisible();
 }
 
+/** Print view of a finalised prescription: the verify token, read from the WhatsApp share link (patient needs a mobile). */
+export async function verifyToken(page: Page): Promise<string> {
+  const href = await page.getByRole("link", { name: "WhatsApp" }).getAttribute("href");
+  return decodeURIComponent(href ?? "").split("/v/")[1]!.trim();
+}
+
 export async function addMedicine(page: Page, query: string, shortcut: string) {
   const items = page.getByTestId("rx-item");
   const before = await items.count();
