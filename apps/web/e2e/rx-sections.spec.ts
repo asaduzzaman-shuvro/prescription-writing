@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { addMedicine, login, mobile, registerPatient, uniq, waitSynced } from "./helpers";
 
-test("referral, O/E findings, plan, note and follow-up date print like a real pad", async ({ page }) => {
+test("Ref By from registration (screen only), O/E findings, plan, note and follow-up date print like a real pad", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
-  await registerPatient(page, { name: `E2E Referral ${uniq()}`, age: "26", sex: "Male", mobile: mobile() });
+  await registerPatient(page, { name: `E2E Referral ${uniq()}`, age: "26", sex: "Male", mobile: mobile(), refBy: "Dr. Imran" });
   await expect(page.getByTestId("med-search")).toBeVisible();
 
-  await page.getByTestId("ref-by").fill("Dr. Imran");
+  // Named on the registration form, it pre-fills the first prescription.
+  await expect(page.getByTestId("ref-by")).toHaveValue("Dr. Imran");
   await page.getByTestId("oe-add").click();
   await page.getByTestId("oe-label").fill("Pulse");
   await page.getByTestId("oe-value").fill("Normal");

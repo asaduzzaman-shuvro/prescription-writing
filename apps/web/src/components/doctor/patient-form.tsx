@@ -22,6 +22,7 @@ interface FormState {
   allergies: string;
   pregnancyStatus: "" | PregnancyStatus;
   guardianName: string;
+  referredBy: string;
   nid: string;
   brn: string;
   healthId: string;
@@ -33,7 +34,7 @@ interface FormState {
 
 const EMPTY: FormState = {
   name: "", ageYears: "", ageMonths: "", ageDays: "", dob: "", useDob: false, sex: "", mobile: "", address: "", allergies: "",
-  pregnancyStatus: "", guardianName: "", nid: "", brn: "", healthId: "", notes: "", consent: false, birthWeightKg: "", gestationalAgeWeeks: "",
+  pregnancyStatus: "", guardianName: "", referredBy: "", nid: "", brn: "", healthId: "", notes: "", consent: false, birthWeightKg: "", gestationalAgeWeeks: "",
 };
 
 export function PatientEdit({
@@ -59,6 +60,11 @@ export function PatientEdit({
   const [saving, setSaving] = useState(false);
   const { data } = useQuery<Record<string, string | number | null>>("SELECT * FROM patient WHERE id = ?", [patientId ?? "__new__"]);
   const existing = data[0];
+  const { data: referrers } = useQuery<{ r: string }>(
+    `SELECT referred_by AS r FROM patient WHERE referred_by IS NOT NULL
+     UNION SELECT json_extract(doc, '$.referredBy') FROM prescription WHERE json_extract(doc, '$.referredBy') IS NOT NULL
+     ORDER BY r LIMIT 200`,
+  );
 
   useEffect(() => {
     if (!existing) return;
@@ -76,6 +82,7 @@ export function PatientEdit({
       allergies: parseJson<string[]>(existing.allergies as string, []).join(", "),
       pregnancyStatus: (existing.pregnancy_status as FormState["pregnancyStatus"]) ?? "",
       guardianName: String(existing.guardian_name ?? ""),
+      referredBy: String(existing.referred_by ?? ""),
       nid: String(existing.nid ?? ""),
       brn: String(existing.brn ?? ""),
       healthId: String(existing.health_id ?? ""),
@@ -109,6 +116,7 @@ export function PatientEdit({
       allergies: f.allergies.split(",").map((x) => x.trim()).filter(Boolean),
       pregnancyStatus: f.sex === "female" || f.sex === "" ? (f.pregnancyStatus || null) : null,
       guardianName: f.guardianName,
+      referredBy: f.referredBy,
       nid: f.nid,
       brn: f.brn,
       healthId: f.healthId,
@@ -203,6 +211,11 @@ export function PatientEdit({
         </>
       )}
       <div className="md:col-span-3"><label className="label" htmlFor="guardian">Guardian name</label><input id="guardian" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} /></div>
+      <div className="md:col-span-3">
+        <label className="label" htmlFor="ref-by">Ref By — Referring doctor</label>
+        <input id="ref-by" className="input" list="patient-referrers" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Referring doctor's name (blank: self)" data-testid="patient-ref-by" />
+        <datalist id="patient-referrers">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
+      </div>
       <details className="md:col-span-6">
         <summary className="cursor-pointer text-sm text-slate-600">National IDs & notes (optional)</summary>
         <div className="mt-1.5 grid gap-2 md:grid-cols-3">
