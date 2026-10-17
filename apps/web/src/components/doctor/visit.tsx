@@ -419,6 +419,8 @@ function RxEditor({
   /** Selected Apply-template value; `__none__` = clear template fields. */
   const [templateId, setTemplateId] = useState("");
   const loadedFor = useRef<string | null>(null);
+  /** Ref By shows only when the prescription opened with one; it stays put if cleared while editing. */
+  const [showRefBy, setShowRefBy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const readOnly = rx?.status === "final";
 
@@ -427,10 +429,9 @@ function RxEditor({
     if (rx && loadedFor.current !== rx.id) {
       loadedFor.current = rx.id;
       setTemplateId("");
-      setDoc({
-        ...emptyDoc(),
-        ...parseJson<PrescriptionDoc>(rx.doc, emptyDoc()),
-      });
+      const loaded = { ...emptyDoc(), ...parseJson<PrescriptionDoc>(rx.doc, emptyDoc()) };
+      setShowRefBy(!!loaded.referredBy?.trim());
+      setDoc(loaded);
     }
   }, [rx]);
 
@@ -816,6 +817,7 @@ function RxEditor({
           }
         >
           <div className="space-y-2.5" data-testid="rx-clinical-pane">
+          {showRefBy && (
           <label className="block text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Ref By — Referring doctor
@@ -825,7 +827,7 @@ function RxEditor({
               list="rx-referrers"
               disabled={readOnly}
               value={doc.referredBy ?? ""}
-              placeholder="Dr. Imran"
+              placeholder="Referring doctor's name (blank: self)"
               onChange={(e) =>
                 update((d) => ({
                   ...d,
@@ -840,6 +842,7 @@ function RxEditor({
               ))}
             </datalist>
           </label>
+          )}
           <ChipList title="C/C — Chief complaints" values={doc.chiefComplaints} onChange={(v) => update((d) => ({ ...d, chiefComplaints: v }))}
             query={libQuery("complaint", "name", "name", "name_bn")} params={spec} placeholder="Fever × 3 days" testId="cc-input" multiline voice />
           <section>
