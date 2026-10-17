@@ -14,13 +14,13 @@ function localDate(iso: string): string {
 }
 
 interface ChamberDbRow {
-  name: string; address: string; phone: string | null; hours: string | null; schedule: string | null;
+  name: string; address: string; room: string | null; phone: string | null; hours: string | null; schedule: string | null;
   serial_phone: string | null; footer_text: string | null; logo_data_url: string | null; print_settings: string | null;
 }
 
 function chamberHeader(c: ChamberDbRow | null): ChamberHeader {
   return {
-    name: c?.name ?? "", address: c?.address ?? "", phone: c?.phone ?? undefined, hours: c?.hours ?? undefined,
+    name: c?.name ?? "", address: c?.address ?? "", room: c?.room ?? undefined, phone: c?.phone ?? undefined, hours: c?.hours ?? undefined,
     schedule: parseJson<ChamberSlot[]>(c?.schedule, []), serialPhone: c?.serial_phone ?? undefined,
     footerText: c?.footer_text ?? undefined, logoDataUrl: c?.logo_data_url ?? undefined,
   };
