@@ -439,7 +439,7 @@ ul + .diagrams { margin-top: 1.5mm; }
 .diagram.neck .svg svg { width: 30mm; }
 .qr { margin-top: auto; padding-top: 2mm; break-inside: avoid; }
 .qr svg { width: 18mm; height: 18mm; }
-.sign { text-align: center; min-width: 45mm; width: fit-content; margin: 8mm 0 0 auto; break-inside: avoid; }
+.sign { text-align: center; min-width: 45mm; width: fit-content; margin: calc(15mm + 40px) 0 0 auto; break-inside: avoid; }
 .sign img { max-height: 14mm; max-width: 45mm; }
 .sign .line { border-top: 0.75pt solid #000; padding-top: 1mm; }
 footer { border-top: 1.5pt solid #000; padding-top: 2mm; font-size: 0.9em; break-inside: avoid; }
