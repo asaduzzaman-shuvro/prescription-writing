@@ -63,6 +63,10 @@ describe("flattenFindings", () => {
     expect(pinna({ right: "Swelling" })).toEqual({ label: "Pinna / mastoid", value: "R Swelling" });
     expect(pinna({ right: ["Normal"], left: ["Normal"] })).toBeUndefined();
   });
+  it("prints the grouped tuning fork tests as their own lines", () => {
+    const ear = flattenFindings(ENT_TEMPLATE, { ear_rinne: { right: "−ve", left: "+ve" }, ear_weber: "Lateralised to right", ear_abc: { right: "Reduced" } }).groups[0]!.lines;
+    expect(ear).toEqual([{ label: "Rinne", value: "R −ve, L +ve" }, { label: "Weber", value: "Lateralised to right" }, { label: "ABC", value: "R Reduced" }]);
+  });
   it("prints the perforation and its size as one line", () => {
     const ear = flattenFindings(ENT_TEMPLATE, { ear_perf_type: { right: "Central (small)" } }).groups[0]!.lines;
     expect(ear).toContainEqual({ label: "Perforation", value: "R Central (small)" });

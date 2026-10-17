@@ -28,6 +28,14 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await page.mouse.move(right.x + right.width * 0.45, right.y + right.height * 0.42, { steps: 10 });
   await page.mouse.up();
   await exam.getByLabel("Discharge").nth(0).selectOption("Mucopurulent");
+  // Rinne, Weber and ABC sit under a collapsed Tuning Fork Test heading.
+  const tft = exam.getByTestId("exam-group").filter({ hasText: "Tuning Fork Test (TFT)" });
+  await expect(tft.getByRole("button")).toHaveAttribute("aria-expanded", "false");
+  await expect(exam.getByLabel("Rinne")).toHaveCount(0);
+  await tft.getByRole("button").click();
+  await expect(exam.getByLabel("Rinne")).toHaveCount(2);
+  await expect(exam.getByLabel("Weber")).toBeVisible();
+  await expect(exam.getByLabel("ABC")).toHaveCount(2);
 
   // Audiology section
   await exam.getByRole("button", { name: /Audiology/ }).click();
