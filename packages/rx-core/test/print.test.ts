@@ -106,7 +106,7 @@ describe("renderPrescriptionHtml", () => {
     expect(render()).toContain("বিএমডিসি রেজি. নং: এ-১২৩৪৫");
   });
 
-  it("prints Ref By, O/E findings, Plan, Note and the note under the medicines", () => {
+  it("prints O/E findings, Plan, Note and the note under the medicines, but never Ref By", () => {
     const html = render({
       referredBy: "Dr. Imran",
       oeFindings: [{ label: "Pulse", value: "Normal" }, { label: "Skin condition", value: "color change" }, { label: "", value: "ignored" }],
@@ -114,7 +114,9 @@ describe("renderPrescriptionHtml", () => {
       notes: ["Birth wt 1.7 kg"],
       rxNote: "Dear Dr. Saad,\nThank you for the referral.",
     });
-    expect(html).toContain("<b>Ref By:</b> Dr. Imran");
+    // Ref By is for the screen only.
+    expect(html).not.toContain("Ref By");
+    expect(html).not.toContain("Dr. Imran");
     expect(html).toContain(`<span>Pulse: Normal</span>, <span>Skin condition: color change</span>`);
     expect(html).not.toContain("ignored");
     expect(html).toContain("<h3>Plan</h3><ul><li>Refd to Paediatric ophthalmology Dept., BSMMU — Dr. Tarek Reza Ali (01766683417)</li></ul>");
