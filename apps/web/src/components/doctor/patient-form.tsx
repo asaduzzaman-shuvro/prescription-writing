@@ -172,7 +172,8 @@ export function PatientEdit({
       <div className="md:col-span-2">
         <label className="label">Sex</label>
         <div className="flex gap-1">
-          {(["male", "female", "other"] as const).map((x) => (
+          {/* Only Male / Female; "Other" stays visible for an existing patient already recorded that way. */}
+          {(f.sex === "other" ? (["male", "female", "other"] as const) : (["male", "female"] as const)).map((x) => (
             <button type="button" key={x} onClick={() => set("sex", x)} className={`btn flex-1 border ${f.sex === x ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-300 bg-white"}`}>{x[0]!.toUpperCase() + x.slice(1)}</button>
           ))}
         </div>
