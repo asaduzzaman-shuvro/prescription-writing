@@ -319,6 +319,8 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     sec("dx", list(doc.diagnoses)),
     sec("plan", list(doc.plan ?? [])),
     sec("notes", list([...birthNotes(patient), ...(doc.notes ?? [])])),
+    // Pinned to the bottom of the column, so nothing sits under the body to cut the divider short.
+    s.showQr && input.qrSvg ? `<div class="qr">${sanitizeSvg(input.qrSvg)}</div>` : "",
   ].join("");
 
   const items = doc.items
@@ -337,12 +339,16 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     .join("");
 
   const fu = followUpText(doc, input.date, s);
+  const sig = safeImageDataUrl(input.signatureDataUrl);
   const right = [
     `<div class="rx-symbol">℞</div>`,
     items ? `<ol class="rx">${items}</ol>` : "",
     doc.rxNote?.trim() ? `<div class="rx-note pre">${esc(doc.rxNote.trim())}</div>` : "",
     sec("advice", list(doc.advice)),
     fu ? sec("followUp", `<p>${esc(fu)}</p>`) : "",
+    // The signature closes the prescription, right after its last line.
+    `<div class="sign">${sig ? `<img src="${esc(sig)}" alt="">` : ""}<div class="line">Signature</div></div>`,
+    input.footerNote ? `<div class="footnote">${esc(input.footerNote)}</div>` : "",
   ].join("");
 
   const footerText = chamber.footerText?.trim();
@@ -351,13 +357,6 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     pad || (!footerChamber && !footerText)
       ? ""
       : `<footer>${footerChamber}${footerText ? `<div class="policy">${esc(footerText)}</div>` : ""}</footer>`;
-
-  const sig = safeImageDataUrl(input.signatureDataUrl);
-  const signature = `<div class="sign">${
-    sig ? `<img src="${esc(sig)}" alt="">` : ""
-  }<div class="line">Signature</div></div>`;
-
-  const qr = s.showQr && input.qrSvg ? `<div class="qr">${sanitizeSvg(input.qrSvg)}</div>` : "";
 
   const m = pageMargins(s);
   const contentHeightMm = heightMm - m.top - m.bottom;
@@ -385,7 +384,7 @@ header .bn-right { text-align: right; }
 header .bmdc, header .bmdc-bn { font-weight: 600; }
 .patient { display: flex; flex-wrap: wrap; gap: 1mm 6mm; padding: 2mm 0; border-bottom: 0.75pt solid #000; }
 .body { flex: 1; display: grid; grid-template-columns: ${s.leftColumnPct}% 1fr; }
-.left { border-right: 0.75pt solid #000; padding: 2mm 3mm 2mm 0; }
+.left { border-right: 0.75pt solid #000; padding: 2mm 3mm 2mm 0; display: flex; flex-direction: column; }
 .right { padding: 2mm 0 2mm 4mm; }
 section { margin-bottom: 2.5mm; break-inside: avoid; }
 h3 { font-size: 0.95em; margin: 0 0 1mm; text-decoration: underline; }
@@ -410,9 +409,9 @@ ul + .diagrams { margin-top: 1.5mm; }
 .diagram.legend { vertical-align: top; text-align: left; }
 .diagram.legend .svg svg { width: 32mm; }
 .diagram.neck .svg svg { width: 30mm; }
-.bottom { display: flex; justify-content: space-between; align-items: flex-end; padding-top: 2mm; break-inside: avoid; }
+.qr { margin-top: auto; padding-top: 2mm; break-inside: avoid; }
 .qr svg { width: 18mm; height: 18mm; }
-.sign { text-align: center; min-width: 45mm; margin-left: auto; }
+.sign { text-align: center; min-width: 45mm; width: fit-content; margin: 8mm 0 0 auto; break-inside: avoid; }
 .sign img { max-height: 14mm; max-width: 45mm; }
 .sign .line { border-top: 0.75pt solid #000; padding-top: 1mm; }
 footer { border-top: 1.5pt solid #000; padding-top: 2mm; font-size: 0.9em; break-inside: avoid; }
@@ -422,7 +421,7 @@ header .logo img { max-height: 18mm; max-width: 30mm; }
 .chambers { display: grid; grid-template-columns: repeat(auto-fit, minmax(50mm, 1fr)); gap: 2mm 4mm; padding: 1.5mm 0; border-bottom: 0.75pt solid #000; font-size: 0.85em; }
 .barcode { margin-bottom: 2mm; text-align: center; font-size: 0.8em; letter-spacing: 0.5pt; }
 .barcode svg { display: block; margin: 0 auto 0.5mm; }
-.footnote { font-size: 0.75em; text-align: center; color: #333; }
+.footnote { font-size: 0.75em; text-align: center; color: #333; margin-top: 2mm; }
 @media screen {
   body { background: #e5e7eb; }
   .sheet { width: ${widthMm}mm; min-height: ${heightMm}mm; margin: 8mm auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
@@ -438,8 +437,6 @@ header .logo img { max-height: 18mm; max-width: 30mm; }
     <div class="left">${left}</div>
     <div class="right">${right}</div>
   </div>
-  <div class="bottom">${qr}${signature}</div>
-  ${input.footerNote ? `<div class="footnote">${esc(input.footerNote)}</div>` : ""}
   ${footer}
 </div>
 </div>

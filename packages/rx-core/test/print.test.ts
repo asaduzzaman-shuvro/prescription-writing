@@ -256,3 +256,29 @@ describe("page margins", () => {
     expect(html).toContain(".sheet { padding: 55mm 10mm 30mm 10mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; }");
   });
 });
+
+describe("signature and QR placement", () => {
+  const html = renderPrescriptionHtml({
+    doc: SAMPLE_DOC,
+    patient: SAMPLE_PATIENT,
+    doctor: SAMPLE_DOCTOR,
+    chamber: SAMPLE_CHAMBER,
+    date: "2026-06-11",
+    settings: DEFAULT_PRINT_SETTINGS,
+    fonts: { bengali: "", latin: "" },
+    qrSvg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`,
+  });
+  const left = html.slice(html.indexOf(`<div class="left">`), html.indexOf(`<div class="right">`));
+  const right = html.slice(html.indexOf(`<div class="right">`));
+
+  it("signs right after the last line of the prescription", () => {
+    expect(right).toContain(`class="sign"`);
+    expect(right).toContain("পুনরায় সাক্ষাৎ");
+    expect(right.indexOf(`class="sign"`)).toBeGreaterThan(right.indexOf("পুনরায় সাক্ষাৎ"));
+  });
+
+  it("puts the QR at the end of the left column, with no row under the body", () => {
+    expect(left).toContain(`class="qr"`);
+    expect(html).not.toContain(`class="bottom"`);
+  });
+});
