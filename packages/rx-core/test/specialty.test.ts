@@ -51,6 +51,13 @@ describe("flattenFindings", () => {
     expect(out.groups[3]!.lines[0]!.value).toBe("R 47.5 dB (Moderate, A-B gap 30 dB)");
     expect(out.diagrams.map((d) => d.title)).toEqual(["Right TM", "Left TM", "Audiogram (O right, X left)"]);
   });
+  it("prints several Pinna / mastoid findings, without Normal, and still reads an old single answer", () => {
+    const pinna = (v: unknown) => flattenFindings(ENT_TEMPLATE, { ear_pinna: v }).groups[0]?.lines.find((l) => l.label === "Pinna / mastoid");
+    expect(pinna({ right: ["Tender mastoid", "Swelling"], left: ["Normal"] })).toEqual({ label: "Pinna / mastoid", value: "R Tender mastoid, Swelling" });
+    expect(pinna({ right: ["Swelling", "Post-aural scar"], left: ["Swelling", "Post-aural scar"] })).toEqual({ label: "Pinna / mastoid", value: "B/L Swelling, Post-aural scar" });
+    expect(pinna({ right: "Swelling" })).toEqual({ label: "Pinna / mastoid", value: "R Swelling" });
+    expect(pinna({ right: ["Normal"], left: ["Normal"] })).toBeUndefined();
+  });
   it("mirrors the left eardrum", () => {
     expect(eardrumSvg(undefined, "left")).toContain("scale(-1,1)");
     expect(eardrumSvg({ perforation: ["ai"], retraction: [] }, "right")).toContain('fill="#111"');
