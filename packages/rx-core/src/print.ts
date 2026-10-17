@@ -301,7 +301,6 @@ export function renderPrescriptionHtml(input: RenderInput): string {
       <span><b>Date:</b> ${esc(formatDateDmy(input.date, "en", "/"))}</span>
       ${doc.visitNo ? `<span class="visit-no"><b>Visit No:</b> ${doc.visitNo}</span>` : ""}
       ${patient.patientCode ? `<span><b>ID:</b> ${esc(patient.patientCode)}</span>` : ""}
-      ${doc.referredBy?.trim() ? `<span><b>Ref By:</b> ${esc(doc.referredBy)}</span>` : ""}
     </div>`;
 
   // Older prescriptions have no `kind`; their drums are titled "Right TM" / "Left TM".
