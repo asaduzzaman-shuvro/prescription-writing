@@ -17,6 +17,7 @@ import {
   flattenFindings,
   hearingGrade,
   normalizeEardrum,
+  perforationBlocked,
   ptaAverage,
   resetTmMap,
   syncSketchMaps,
@@ -725,7 +726,8 @@ export function SpecialtyExam({
                                   side
                                 ]
                               }
-                              disabled={readOnly}
+                              // No perforation on an ear whose TM is intact.
+                              disabled={readOnly || (f.id === TM_LINK.perfType && perforationBlocked(findings, side))}
                               onChange={(v) =>
                                 update(f.id, {
                                   ...(findings[f.id] as object),

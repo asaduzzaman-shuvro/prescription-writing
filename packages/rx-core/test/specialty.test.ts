@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { airBoneGap, applyTmPreset, audiogramSvg, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, ptaAverage, resetTmMap, sanitizeSvg, syncTmMap, TM_LOOKS, tmPreset, validateTemplateSchema } from "../src";
+import { airBoneGap, applyTmPreset, audiogramSvg, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, perforationBlocked, ptaAverage, resetTmMap, sanitizeSvg, syncTmMap, TM_LOOKS, tmPreset, validateTemplateSchema } from "../src";
 
 describe("ENT template", () => {
   it("is a valid schema", () => {
@@ -129,6 +129,7 @@ describe("TM map symbols and drawing", () => {
 describe("TM answer draws on the TM map", () => {
   it("maps every TM option, and perforation type/size", () => {
     expect(tmPreset("Intact")).toEqual({ look: "intact" });
+    expect(tmPreset("Intact (Normal)")).toEqual({ look: "intact" });
     expect(tmPreset("Retracted")).toEqual({ retraction: ["as", "ai", "ps", "pi"] });
     expect(tmPreset("Bulging")).toEqual({ bulging: true });
     expect(tmPreset("Congested")).toEqual({ look: "congested" });
@@ -175,6 +176,12 @@ describe("TM answer draws on the TM map", () => {
     expect(left.ear_tm).toEqual({ right: "Intact", left: "Perforated" });
     expect((left.ear_tm_map as { left: { perforation: string[] } }).left.perforation).toEqual(["as", "ai", "ps", "pi"]);
     expect((left.ear_tm_map as { right?: unknown }).right).toBeUndefined();
+    // An intact TM blocks and clears that ear's Perforation, and only that ear's.
+    const intact = syncTmMap(ENT_TEMPLATE, left, { ...left, ear_tm: { right: "Intact (Normal)", left: "Perforated" }, ear_perf_type: { right: "Central (small)", left: "Central (subtotal)" } });
+    expect(intact.ear_perf_type).toEqual({ right: undefined, left: "Central (subtotal)" });
+    expect(perforationBlocked(intact, "right")).toBe(true);
+    expect(perforationBlocked(intact, "left")).toBe(false);
+    expect(perforationBlocked({ ear_tm: { left: "Intact" } }, "left")).toBe(true);
     // Reset empties both maps and the Perforation answers; TM answers and other fields stay.
     const full = { ear_tm: { right: "Perforated" }, ear_perf_type: { right: "Central (small)" }, ear_perf_size: { left: "Large" }, ear_tm_map: left.ear_tm_map, ear_weber: "Central" };
     expect(resetTmMap(full)).toEqual({ ear_tm: { right: "Perforated" }, ear_tm_map: {}, ear_weber: "Central" });

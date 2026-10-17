@@ -37,7 +37,7 @@ export const SAMPLE_DOC: PrescriptionDoc = {
       title: "Ear",
       lines: [
         { label: "R TM", value: "Central perforation, medium, mucopurulent discharge" },
-        { label: "L TM", value: "Intact" },
+        { label: "L TM", value: "Intact (Normal)" },
         { label: "Rinne", value: "R −ve, L +ve" },
       ],
     },
