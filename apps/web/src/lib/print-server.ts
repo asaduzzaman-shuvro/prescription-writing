@@ -129,7 +129,7 @@ export async function prescriptionPdf(
     qrSvg: verifyUrl ? await QRCode.toString(verifyUrl, { type: "svg", margin: 0 }) : undefined,
     signatureDataUrl: doctor.signatureDataUrl ?? undefined,
     fonts: fonts(),
-    footerNote: verifyUrl ? `Verify: ${verifyUrl.replace(/^https?:\/\//, "")}` : "DRAFT — not valid",
+    footerNote: verifyUrl ? undefined : "DRAFT — not valid",
   });
   return {
     pdf: await htmlToPdf(html),

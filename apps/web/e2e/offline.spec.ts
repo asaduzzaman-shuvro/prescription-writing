@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addMedicine, login, mobile, registerPatient, uniq, waitSynced } from "./helpers";
+import { addMedicine, login, mobile, registerPatient, uniq, verifyToken, waitSynced } from "./helpers";
 
 test("works fully offline and syncs when the connection returns", async ({ page, context }) => {
   await login(page, "doctor@rx.local", "doctor123");
@@ -21,8 +21,7 @@ test("works fully offline and syncs when the connection returns", async ({ page,
   await page.getByTestId("finalize").click();
   await expect(page.frameLocator("[data-testid=print-frame]").locator(".rx-item")).toHaveCount(1);
   await expect(page.getByTestId("sync-status")).toContainText("unsynced");
-  const footnote = await page.frameLocator("[data-testid=print-frame]").locator(".footnote").innerText();
-  const token = footnote.split("/v/")[1]!.trim();
+  const token = await verifyToken(page);
 
   await context.setOffline(false);
   await expect(page.getByTestId("sync-status")).toHaveText("Synced", { timeout: 90_000 });
