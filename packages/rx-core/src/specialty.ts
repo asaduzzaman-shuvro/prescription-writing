@@ -259,7 +259,7 @@ export function eardrumOverlaySvg(value: unknown): string {
 // TM answer → TM map (the TM dropdown draws a starting picture the doctor can still edit)
 // ---------------------------------------------------------------------------
 
-/** ENT template fields that drive the TM map. */
+/** ENT template fields that drive the TM map. `perfSize` is legacy: the size is now part of the Perforation answer, e.g. "Central (small)". */
 export const TM_LINK = { tm: "ear_tm", perfType: "ear_perf_type", perfSize: "ear_perf_size", map: "ear_tm_map" } as const;
 
 /** What one TM answer draws on that ear's map. */
@@ -290,7 +290,8 @@ export function tmPreset(tm: string | undefined, perfType?: string, perfSize?: s
       return { look: "hidden" };
     case "Perforated":
       switch (perfType) {
-        case "Subtotal":
+        case "Central (subtotal)":
+        case "Subtotal": // before it was listed as a central perforation
           return { perforation: PARS_TENSA };
         case "Total":
           return { perforation: [...EARDRUM_ZONES] };
@@ -299,8 +300,8 @@ export function tmPreset(tm: string | undefined, perfType?: string, perfSize?: s
         case "Marginal":
           return { perforation: ["ps"] };
         default: {
-          // Central, or type not chosen yet.
-          const size = perfSize?.toLowerCase();
+          // Central ("Central (small)", or older "Central" plus a separate size), or type not chosen yet.
+          const size = /^Central \((small|medium|large)\)$/.exec(perfType ?? "")?.[1] ?? perfSize?.toLowerCase();
           return { disc: (PERF_DISC_SIZES as readonly string[]).includes(size ?? "") ? (size as PerfDiscSize) : "medium" };
         }
       }
