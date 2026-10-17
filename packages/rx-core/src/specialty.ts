@@ -333,6 +333,8 @@ export function applyTmPreset(ear: unknown, prev: TmPreset, next: TmPreset): Ear
 
 /**
  * Redraw the TM map for each ear whose TM / perforation answers changed between `prev` and `next`.
+ * Choosing a perforation for an ear whose TM isn't answered yet sets that TM to "Perforated", so the choice draws.
+ * A TM answer the doctor already gave (e.g. "Retracted") is never overwritten.
  * A no-op for templates without these fields (eyes, vascular) or without a TM map.
  */
 export function syncTmMap(schema: SpecialtyTemplateSchema, prev: Findings, next: Findings): Findings {
@@ -341,6 +343,14 @@ export function syncTmMap(schema: SpecialtyTemplateSchema, prev: Findings, next:
     const v = (f[id] as LateralValue<unknown> | undefined)?.[side];
     return typeof v === "string" ? v : undefined;
   };
+  const tmField = schema.sections.flatMap((s) => s.fields).find((f) => f.id === TM_LINK.tm);
+  if (tmField?.options?.includes("Perforated")) {
+    for (const side of ["right", "left"] as const) {
+      const perf = answer(next, TM_LINK.perfType, side);
+      if (perf && perf !== answer(prev, TM_LINK.perfType, side) && !answer(next, TM_LINK.tm, side))
+        next = { ...next, [TM_LINK.tm]: { ...(next[TM_LINK.tm] as object), [side]: "Perforated" } };
+    }
+  }
   const preset = (f: Findings, side: Side2) => tmPreset(answer(f, TM_LINK.tm, side), answer(f, TM_LINK.perfType, side), answer(f, TM_LINK.perfSize, side));
   let map = next[TM_LINK.map] as LateralValue<EardrumValue> | undefined;
   let changed = false;

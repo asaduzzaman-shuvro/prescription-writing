@@ -170,6 +170,11 @@ describe("TM answer draws on the TM map", () => {
     // Same picture: the doctor's edits are left alone.
     const edited = { ...prev, ear_tm: { right: "Retracted" }, ear_tm_map: { right: { perforation: [], retraction: ["ai"] } } };
     expect(syncTmMap(ENT_TEMPLATE, edited, { ...edited, ear_perf_type: { right: "Central (large)" } })).toEqual({ ...edited, ear_perf_type: { right: "Central (large)" } });
+    // Picking a perforation for an ear with no TM answer sets it to Perforated (only that ear), so it draws.
+    const left = syncTmMap(ENT_TEMPLATE, { ear_tm: { right: "Intact" } }, { ear_tm: { right: "Intact" }, ear_perf_type: { left: "Central (subtotal)" } });
+    expect(left.ear_tm).toEqual({ right: "Intact", left: "Perforated" });
+    expect((left.ear_tm_map as { left: { perforation: string[] } }).left.perforation).toEqual(["as", "ai", "ps", "pi"]);
+    expect((left.ear_tm_map as { right?: unknown }).right).toBeUndefined();
     // Templates without a TM map are untouched.
     const eye = { sections: [{ id: "x", title: "X", fields: [{ id: "ear_tm", label: "TM", type: "select" as const, lateral: true, options: ["Intact"] }] }] };
     const f = { ear_tm: { right: "Intact" } };
