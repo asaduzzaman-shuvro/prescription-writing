@@ -147,6 +147,8 @@ export const chamber = pgTable(
     doctorUserId: uuid().references(() => appUser.id),
     name: text().notNull(),
     address: text().notNull(),
+    /** Room number inside the hospital/diagnostic centre, printed between the name and the address. */
+    room: text(),
     phone: text(),
     hours: text(),
     /** @rx/core ChamberSlot[]: visiting days/times, operation days etc. */
