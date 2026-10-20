@@ -35,11 +35,14 @@ export const SKETCH_LINK = {
 const empty = (): SketchPreset => ({ zones: {}, marks: [] });
 
 const one = (f: Findings, id: string) => (typeof f[id] === "string" ? (f[id] as string) : undefined);
+/** Every answer of a multi-select field, or an old single answer saved before it took several. */
+const list = (v: unknown) => (typeof v === "string" ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 const many = (f: Findings, id: string) => (Array.isArray(f[id]) ? (f[id] as unknown[]).filter((x): x is string => typeof x === "string") : []);
 const side = (f: Findings, id: string, s: "right" | "left") => {
   const v = (f[id] as LateralValue<unknown> | undefined)?.[s];
   return typeof v === "string" ? v : undefined;
 };
+const sideList = (f: Findings, id: string, s: "right" | "left") => list((f[id] as LateralValue<unknown> | undefined)?.[s]);
 
 /** Symbol positions, in each picture's own coordinates (patient's right on the viewer's left). */
 const AT = {
@@ -60,47 +63,38 @@ const AT = {
 } as const;
 const mark = (kind: string, [x, y]: readonly [number, number]): PlacedMark => ({ kind, x, y });
 
-/** Every picture's preset for these answers. Later rules win a zone (e.g. "Congested" over a grade's "Swollen"). */
+/**
+ * Every picture's preset for these answers. Later rules win a zone (e.g. "Congested" over a grade's "Swollen"); within a
+ * multi-select field, the answer later in its option list wins (turbinate "Congested" over "Hypertrophied").
+ */
 export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
   const nose = empty(), oro = empty(), lar = empty(), neck = empty();
   const L = SKETCH_LINK;
 
-  switch (one(f, L.septum)) {
-    case "DNS to right":
-      nose.marks.push(mark("dev_r", AT.deviation));
-      break;
-    case "DNS to left":
-      nose.marks.push(mark("dev_l", AT.deviation));
-      break;
-    case "S-shaped DNS":
-      nose.marks.push(mark("dev_r", AT.sShape.right), mark("dev_l", AT.sShape.left));
-      break;
-    case "Spur right":
-      nose.marks.push(mark("spur_r", AT.spur));
-      break;
-    case "Spur left":
-      nose.marks.push(mark("spur_l", AT.spur));
-      break;
-    case "Perforation":
-      nose.marks.push(mark("perforation", AT.septalHole));
-      break;
-    case "Haematoma":
-      nose.marks.push(mark("haematoma", AT.haematoma));
-      break;
-  }
-  const mucosa = one(f, L.mucosa);
-  if (mucosa === "Congested" || mucosa === "Pale") nose.zones.r_cavity = nose.zones.l_cavity = mucosa === "Congested" ? "congested" : "pale";
-  if (mucosa === "Crusting") nose.marks.push(mark("crust", AT.crust.right), mark("crust", AT.crust.left));
+  // Septum findings in option order, so the picture doesn't depend on tick order.
+  const septum = list(f[L.septum]);
+  const SEPTUM: [string, PlacedMark[]][] = [
+    ["DNS to right", [mark("dev_r", AT.deviation)]],
+    ["DNS to left", [mark("dev_l", AT.deviation)]],
+    ["S-shaped DNS", [mark("dev_r", AT.sShape.right), mark("dev_l", AT.sShape.left)]],
+    ["Spur right", [mark("spur_r", AT.spur)]],
+    ["Spur left", [mark("spur_l", AT.spur)]],
+    ["Perforation", [mark("perforation", AT.septalHole)]],
+    ["Haematoma", [mark("haematoma", AT.haematoma)]],
+  ];
+  for (const [answer, marks] of SEPTUM) if (septum.includes(answer)) nose.marks.push(...marks);
+  const mucosa = list(f[L.mucosa]);
+  for (const [answer, st] of [["Pale", "pale"], ["Congested", "congested"]] as const) if (mucosa.includes(answer)) nose.zones.r_cavity = nose.zones.l_cavity = st;
+  if (mucosa.includes("Crusting")) nose.marks.push(mark("crust", AT.crust.right), mark("crust", AT.crust.left));
   for (const s of ["right", "left"] as const) {
-    const it = side(f, L.turbinate, s);
-    const st = it === "Hypertrophied" ? "hypertrophied" : it === "Pale & boggy" ? "pale" : it === "Congested" ? "congested" : undefined;
-    if (st) nose.zones[s === "right" ? "r_it" : "l_it"] = st;
+    const it = sideList(f, L.turbinate, s);
+    for (const [answer, st] of [["Hypertrophied", "hypertrophied"], ["Pale & boggy", "pale"], ["Congested", "congested"]] as const)
+      if (it.includes(answer)) nose.zones[s === "right" ? "r_it" : "l_it"] = st;
     const polyp = side(f, L.polyp, s);
     // Grade 1–3: one polyp per grade, down from the middle meatus; antrochoanal: meatus to the floor.
     const n = polyp === "Antrochoanal" ? 0 : Number(/grade (\d)/.exec(polyp ?? "")?.[1] ?? 0);
     for (const at of polyp === "Antrochoanal" ? [AT.polyp[s][0], AT.polyp[s][2]] : AT.polyp[s].slice(0, n)) nose.marks.push(mark("polyp", at));
-    const discharge = side(f, L.discharge, s);
-    if (discharge && discharge !== "None") nose.marks.push(mark("discharge", AT.discharge[s]));
+    if (sideList(f, L.discharge, s).some((d) => d !== "None")) nose.marks.push(mark("discharge", AT.discharge[s]));
   }
   for (const sinus of many(f, L.sinusTender)) {
     const k = ({ Maxillary: "maxillary", Frontal: "frontal", Ethmoid: "ethmoid" } as Record<string, string>)[sinus];
