@@ -386,12 +386,17 @@ export function syncTmMap(schema: SpecialtyTemplateSchema, prev: Findings, next:
   return changed ? { ...next, [TM_LINK.map]: map } : next;
 }
 
-/** Findings keys the TM map Reset clears: both maps and the perforation answers that drew them (TM answers stay). */
-export const TM_RESET_KEYS = [TM_LINK.map, TM_LINK.perfType, TM_LINK.perfSize] as const;
+/** Findings keys the TM map Reset changes: both maps and the TM / perforation answers that drew them. */
+export const TM_RESET_KEYS = [TM_LINK.tm, TM_LINK.map, TM_LINK.perfType, TM_LINK.perfSize] as const;
 
-/** The TM map Reset button: empty both maps and set Perforation back to unanswered on both ears. */
+/**
+ * The TM map Reset button: both TMs back to "Intact (Normal)", each map redrawn as that answer draws it (light reflex
+ * only, everything else cleared), and Perforation back to unanswered on both ears.
+ */
 export function resetTmMap(findings: Findings): Findings {
-  const next: Findings = { ...findings, [TM_LINK.map]: {} };
+  const normal = TM_INTACT[0]!;
+  const drum = applyTmPreset(undefined, {}, tmPreset(normal));
+  const next: Findings = { ...findings, [TM_LINK.tm]: { right: normal, left: normal }, [TM_LINK.map]: { right: drum, left: drum } };
   delete next[TM_LINK.perfType];
   delete next[TM_LINK.perfSize];
   return next;

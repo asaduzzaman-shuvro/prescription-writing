@@ -205,9 +205,15 @@ describe("TM answer draws on the TM map", () => {
     expect(perforationBlocked(intact, "right")).toBe(true);
     expect(perforationBlocked(intact, "left")).toBe(false);
     expect(perforationBlocked({ ear_tm: { left: "Intact" } }, "left")).toBe(true);
-    // Reset empties both maps and the Perforation answers; TM answers and other fields stay.
+    // Reset sets both TMs to Intact (Normal), redraws both maps as that, and clears Perforation; other fields stay.
     const full = { ear_tm: { right: "Perforated" }, ear_perf_type: { right: "Central (small)" }, ear_perf_size: { left: "Large" }, ear_tm_map: left.ear_tm_map, ear_weber: "Central" };
-    expect(resetTmMap(full)).toEqual({ ear_tm: { right: "Perforated" }, ear_tm_map: {}, ear_weber: "Central" });
+    const normalDrum = { perforation: [], retraction: [], marks: [], strokes: [], bulging: false, look: "intact" };
+    expect(resetTmMap(full)).toEqual({ ear_tm: { right: "Intact (Normal)", left: "Intact (Normal)" }, ear_tm_map: { right: normalDrum, left: normalDrum }, ear_weber: "Central" });
+    // The next TM answer swaps out the normal picture as usual.
+    const reset = resetTmMap(full);
+    const bulging = syncTmMap(ENT_TEMPLATE, reset, { ...reset, ear_tm: { right: "Bulging", left: "Intact (Normal)" } });
+    expect((bulging.ear_tm_map as { right: { look?: string; bulging: boolean } }).right).toMatchObject({ bulging: true });
+    expect((bulging.ear_tm_map as { right: { look?: string } }).right.look).toBeUndefined();
     // Templates without a TM map are untouched.
     const eye = { sections: [{ id: "x", title: "X", fields: [{ id: "ear_tm", label: "TM", type: "select" as const, lateral: true, options: ["Intact"] }] }] };
     const f = { ear_tm: { right: "Intact" } };
