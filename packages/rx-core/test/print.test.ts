@@ -207,7 +207,8 @@ describe("TM map always printed", () => {
     const html = render({ diagrams: [...tm, key, { title: "Audiogram (O right, X left)", svg: "<svg></svg>", kind: "audiogram" }] });
     const row = /<div class="ear-row">([\s\S]*?)<\/div><figure/.exec(html)?.[1] ?? "";
     expect(row.match(/<figcaption>[^<]*<\/figcaption>/g)).toEqual(["<figcaption>Right TM</figcaption>", "<figcaption>Left TM</figcaption>", "<figcaption>Key</figcaption>"]);
-    expect(row).toContain(`<figure class="diagram legend" style="width:18.9mm">`); // "Perforation": 61 units wide
+    expect(row).toContain(`<figure class="diagram legend" style="width:18.9mm"><figcaption>Key</figcaption><div class="svg">`); // heading above the rows; "Perforation": 61 units wide
+    expect(row).toContain(`</svg></div><figcaption>Left TM</figcaption>`); // pictures keep their caption below
     expect(html).toContain(`</div><figure class="diagram">`); // what follows prints after the row, not in it
     // Older prescriptions (no kind) get the row too; a doctored key width is clamped.
     const old = [...tm.map(({ title, svg }) => ({ title, svg })), { ...key, svg: `<svg viewBox="0 0 99999 10"></svg>` }];

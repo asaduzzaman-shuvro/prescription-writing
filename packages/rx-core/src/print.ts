@@ -314,8 +314,12 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const allDiagrams = [...blankTm, ...(doc.diagrams ?? []), ...blankSketches];
   const isTm = (d: (typeof allDiagrams)[number] | undefined) => !!d && (d.kind === "tm" || /^(Right|Left) TM$/.test(d.title));
   // Diagrams come from the client-writable prescription doc: sanitise before embedding.
-  const figure = (d: (typeof allDiagrams)[number], style = "") =>
-    `<figure class="diagram${d.kind === "tm-legend" || d.kind === "legend" ? " legend" : ""}${isTm(d) ? " tm" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"${style}><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`;
+  // A picture's caption goes under it; a key's heading ("Key") goes above its rows.
+  const figure = (d: (typeof allDiagrams)[number], style = "") => {
+    const legend = d.kind === "tm-legend" || d.kind === "legend";
+    const svg = `<div class="svg">${sanitizeSvg(d.svg)}</div>`, caption = `<figcaption>${esc(d.title)}</figcaption>`;
+    return `<figure class="diagram${legend ? " legend" : ""}${isTm(d) ? " tm" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"${style}>${legend ? caption + svg : svg + caption}</figure>`;
+  };
   const figures = (ds: typeof allDiagrams) => {
     const out: string[] = [];
     for (let i = 0; i < ds.length; i++) {
@@ -452,6 +456,7 @@ ul + .diagrams { margin-top: 1.5mm; }
 .diagram { display: inline-block; margin: 0 2mm 2mm 0; text-align: center; font-size: 0.8em; }
 .diagram .svg svg { width: 28mm; height: auto; }
 .diagram.legend { vertical-align: top; text-align: left; }
+.diagram.legend figcaption { margin-bottom: 0.5mm; }
 .diagram.legend .svg svg { width: 32mm; }
 .ear-row { display: flex; align-items: flex-start; gap: 2mm; margin-bottom: 2mm; }
 .ear-row .diagram { margin: 0; }
