@@ -76,6 +76,27 @@ describe("flattenFindings", () => {
     expect(fistula("Positive")).toEqual({ label: "Fistula test", value: "Positive" });
     expect(fistula({ right: "Negative", left: "Negative" })).toBeUndefined();
   });
+  it("prints several nose findings per field, without Normal, None or Central, and still reads old single answers", () => {
+    const nose = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "nose")?.lines ?? [];
+    expect(nose({
+      nose_external: ["Deviated", "Swelling"],
+      nose_septum: ["DNS to left", "Spur left"],
+      nose_turbinate: { right: ["Hypertrophied", "Congested"], left: ["Normal"] },
+      nose_mucosa: ["Pale", "Crusting"],
+      nose_discharge: { right: ["Mucoid", "Blood stained"], left: ["Mucoid", "Blood stained"] },
+    })).toEqual([
+      { label: "External nose", value: "Deviated, Swelling" },
+      { label: "Septum", value: "DNS to left, Spur left" },
+      { label: "Inferior turbinate", value: "R Hypertrophied, Congested" },
+      { label: "Mucosa", value: "Pale, Crusting" },
+      { label: "Nasal discharge", value: "B/L Mucoid, Blood stained" },
+    ]);
+    expect(nose({ nose_septum: ["Central"], nose_external: ["Normal"], nose_mucosa: ["Normal"], nose_discharge: { right: ["None"] } })).toEqual([]);
+    expect(nose({ nose_septum: "DNS to right", nose_discharge: { left: "Watery" } })).toEqual([
+      { label: "Septum", value: "DNS to right" },
+      { label: "Nasal discharge", value: "L Watery" },
+    ]);
+  });
   it("prints the grouped tuning fork tests as their own lines", () => {
     const ear = flattenFindings(ENT_TEMPLATE, { ear_rinne: { right: "−ve", left: "+ve" }, ear_weber: "Lateralised to right", ear_abc: { right: "Reduced" } }).groups[0]!.lines;
     expect(ear).toEqual([{ label: "Rinne", value: "R −ve, L +ve" }, { label: "Weber", value: "Lateralised to right" }, { label: "ABC", value: "R Reduced" }]);
