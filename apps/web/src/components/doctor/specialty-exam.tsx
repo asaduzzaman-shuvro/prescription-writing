@@ -12,7 +12,9 @@ import {
   EARDRUM_MARK_LABEL,
   EARDRUM_MARKS,
   EARDRUM_ZONES,
+  eardrumLegendSvg,
   eardrumOverlaySvg,
+  eardrumUsed,
   eardrumZonePath,
   flattenFindings,
   hearingGrade,
@@ -284,6 +286,7 @@ function EardrumField({
 
   const btn = (on: boolean) =>
     `rounded px-2 py-0.5 ${on ? "bg-slate-800 text-white" : "bg-slate-100"}`;
+  const used = [...eardrumUsed(ear("right")), ...eardrumUsed(ear("left"))];
   return (
     <div>
       {!disabled && (
@@ -454,6 +457,13 @@ function EardrumField({
             </div>
           );
         })}
+        {/* As printed: the key right after the left drum. */}
+        {used.length > 0 && (
+          <div className="self-start text-xs" data-testid="eardrum-key">
+            <p className="font-medium text-slate-700">Key</p>
+            <div className="w-24 @min-[36rem]:w-28" dangerouslySetInnerHTML={{ __html: eardrumLegendSvg(used) }} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -312,11 +312,24 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     .filter((id) => isSketchId(id) && !(doc.diagrams ?? []).some((d) => d.kind === "sketch" && d.ref === id))
     .map((id) => ({ title: SKETCHES[id].title, svg: sketchSvg(id), kind: "sketch" as const, ref: id, section: SKETCHES[id].section }));
   const allDiagrams = [...blankTm, ...(doc.diagrams ?? []), ...blankSketches];
-  const figures = (ds: typeof allDiagrams) =>
-    ds
-      // Diagrams come from the client-writable prescription doc: sanitise before embedding.
-      .map((d) => `<figure class="diagram${d.kind === "tm-legend" || d.kind === "legend" ? " legend" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`)
-      .join("");
+  const isTm = (d: (typeof allDiagrams)[number] | undefined) => !!d && (d.kind === "tm" || /^(Right|Left) TM$/.test(d.title));
+  // Diagrams come from the client-writable prescription doc: sanitise before embedding.
+  const figure = (d: (typeof allDiagrams)[number], style = "") =>
+    `<figure class="diagram${d.kind === "tm-legend" || d.kind === "legend" ? " legend" : ""}${isTm(d) ? " tm" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"${style}><div class="svg">${sanitizeSvg(d.svg)}</div><figcaption>${esc(d.title)}</figcaption></figure>`;
+  const figures = (ds: typeof allDiagrams) => {
+    const out: string[] = [];
+    for (let i = 0; i < ds.length; i++) {
+      const d = ds[i]!, key = ds[i + 2];
+      // Both drums and their key on one row: the drums shrink so the key fits beside the left one, its text kept at
+      // one size (width from its viewBox, clamped since the svg is client-writable).
+      if (isTm(d) && isTm(ds[i + 1]) && key?.kind === "tm-legend") {
+        const w = Math.min(120, Math.max(20, Number(/viewBox="0 0 ([\d.]+)/.exec(key.svg)?.[1]) || 86));
+        out.push(`<div class="ear-row">${figure(d)}${figure(ds[i + 1]!)}${figure(key, ` style="width:${(w * 0.31).toFixed(1)}mm"`)}</div>`);
+        i += 2;
+      } else out.push(figure(d));
+    }
+    return out.join("");
+  };
 
   // Each picture prints under its own exam section; the rest (older prescriptions, or a blank
   // "always print" picture whose section has no findings) print together after all findings.
@@ -440,6 +453,11 @@ ul + .diagrams { margin-top: 1.5mm; }
 .diagram .svg svg { width: 28mm; height: auto; }
 .diagram.legend { vertical-align: top; text-align: left; }
 .diagram.legend .svg svg { width: 32mm; }
+.ear-row { display: flex; align-items: flex-start; gap: 2mm; margin-bottom: 2mm; }
+.ear-row .diagram { margin: 0; }
+.ear-row .diagram.tm { flex: 0 1 20mm; min-width: 14mm; }
+.ear-row .diagram.tm .svg svg, .ear-row .diagram.legend .svg svg { width: 100%; }
+.ear-row .diagram.legend { flex: 0 0 auto; }
 .diagram.neck .svg svg { width: 30mm; }
 .qr { margin-top: auto; padding-top: 2mm; break-inside: avoid; }
 .qr svg { width: 18mm; height: 18mm; }

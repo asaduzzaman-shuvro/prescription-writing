@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDuration,
   DEFAULT_PRINT_SETTINGS,
+  eardrumLegendSvg,
   eardrumSvg,
   ENT_TEMPLATE,
   flattenFindings,
@@ -198,6 +199,22 @@ describe("TM map always printed", () => {
     expect(drums(render({ diagrams: [] }, {}, { ...always, mode: "pad" }))).toHaveLength(2);
     const html = render({ diagrams: [{ title: "Key", svg: "<svg></svg>", kind: "tm-legend" }] });
     expect(html).toContain(`<figure class="diagram legend">`);
+  });
+
+  it("puts the key on the drums' row, right after the left drum", () => {
+    const tm = [{ title: "Right TM", svg: eardrumSvg(undefined, "right"), kind: "tm" as const }, { title: "Left TM", svg: eardrumSvg(undefined, "left"), kind: "tm" as const }];
+    const key = { title: "Key", svg: eardrumLegendSvg(["perforation", "bulging"]), kind: "tm-legend" as const };
+    const html = render({ diagrams: [...tm, key, { title: "Audiogram (O right, X left)", svg: "<svg></svg>", kind: "audiogram" }] });
+    const row = /<div class="ear-row">([\s\S]*?)<\/div><figure/.exec(html)?.[1] ?? "";
+    expect(row.match(/<figcaption>[^<]*<\/figcaption>/g)).toEqual(["<figcaption>Right TM</figcaption>", "<figcaption>Left TM</figcaption>", "<figcaption>Key</figcaption>"]);
+    expect(row).toContain(`<figure class="diagram legend" style="width:18.9mm">`); // "Perforation": 61 units wide
+    expect(html).toContain(`</div><figure class="diagram">`); // what follows prints after the row, not in it
+    // Older prescriptions (no kind) get the row too; a doctored key width is clamped.
+    const old = [...tm.map(({ title, svg }) => ({ title, svg })), { ...key, svg: `<svg viewBox="0 0 99999 10"></svg>` }];
+    expect(render({ diagrams: old })).toContain(`<div class="ear-row">`);
+    expect(render({ diagrams: old })).toContain(`style="width:37.2mm"`);
+    // Without a key the drums print as before.
+    expect(render({ diagrams: tm })).not.toContain(`<div class="ear-row">`);
   });
 });
 
