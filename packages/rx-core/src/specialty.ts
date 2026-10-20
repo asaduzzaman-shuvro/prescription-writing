@@ -624,7 +624,7 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, saved: Findings
         const r = eardrumText(lv.right), l = eardrumText(lv.left);
         // The appearance alone (e.g. "Dull") has no words here, since the TM line already says it, but still prints the drums.
         if (r || l || normalizeEardrum(lv.right).look || normalizeEardrum(lv.left).look) {
-          if (r || l) lines.push({ label: f.label, value: [r && `R: ${r}`, l && `L: ${l}`].filter(Boolean).join(" · ") });
+          if (r || l) lines.push({ label: f.label, value: [r && `R: ${r}`, l && `L: ${l}`].filter(Boolean).join(" · "), abovePictures: true });
           diagrams.push({ title: "Right TM", svg: eardrumSvg(lv.right, "right"), kind: "tm" }, { title: "Left TM", svg: eardrumSvg(lv.left, "left"), kind: "tm" });
           // A key for whatever is drawn; an appearance alone needs none (the TM line names it).
           const used = [...eardrumUsed(normalizeEardrum(lv.right)), ...eardrumUsed(normalizeEardrum(lv.left))];

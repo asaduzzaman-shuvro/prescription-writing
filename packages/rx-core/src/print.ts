@@ -6,7 +6,7 @@ import { bmi, formatDuration, formatInstructionParts, type Lang } from "./dose";
 import { safeImageDataUrl, sanitizeSvg } from "./sanitize";
 import { isSketchId, SKETCHES, sketchSvg, type SketchId } from "./sketches";
 import { eardrumSvg } from "./specialty";
-import type { ChamberHeader, DoctorHeader, PatientInfo, PrescriptionDoc, RxItem } from "./types";
+import type { ChamberHeader, DoctorHeader, ExamFindingLine, PatientInfo, PrescriptionDoc, RxItem } from "./types";
 
 export type PaperSize = "A4" | "A5" | "Letter" | { widthMm: number; heightMm: number };
 
@@ -341,8 +341,13 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const placed = (d: (typeof allDiagrams)[number]) => typeof d.section === "string" && groups.some((g) => g.id === d.section);
   const specialty = groups
     .map((g) => {
-      const lines = g.lines.length ? `<ul>${g.lines.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
-      const pics = g.id ? figures(allDiagrams.filter((d) => d.section === g.id)) : "";
+      const own = g.id ? allDiagrams.filter((d) => d.section === g.id) : [];
+      const pics = figures(own);
+      // A picture's own words (the TM map's) print last, right above the pictures. Exams saved before the flag
+      // existed have their "TM map" line moved the same way when the section prints the drums.
+      const above = (l: ExamFindingLine) => l.abovePictures || (l.label === "TM map" && own.some(isTm));
+      const ordered = pics ? [...g.lines.filter((l) => !above(l)), ...g.lines.filter(above)] : g.lines;
+      const lines = ordered.length ? `<ul>${ordered.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
       return section(g.title, lines + (pics ? `<div class="diagrams">${pics}</div>` : ""));
     })
     .join("");
