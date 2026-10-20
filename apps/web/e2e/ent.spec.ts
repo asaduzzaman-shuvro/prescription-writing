@@ -90,7 +90,7 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/ent-print.png`, fullPage: true });
 });
 
-test("TM answer draws on the TM map; Reset clears both maps after confirming", async ({ page }) => {
+test("TM answer draws on the TM map; Reset sets both TMs back to normal after confirming", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
   await registerPatient(page, { name: `ENT TM ${uniq()}`, age: "35", sex: "Male", mobile: mobile() });
@@ -116,7 +116,9 @@ test("TM answer draws on the TM map; Reset clears both maps after confirming", a
   await reset.click();
   await expect(right.locator('[data-zone="ai"]')).toHaveAttribute("fill", "#f8fafc");
   await expect(left.locator('circle[fill="#bbb"]')).toHaveCount(0);
-  await expect(tm.nth(0)).toHaveValue("Retracted"); // TM answers stay
+  await expect(tm.nth(0)).toHaveValue("Intact (Normal)"); // both TMs back to normal
+  await expect(tm.nth(1)).toHaveValue("Intact (Normal)");
+  await expect(page.getByRole("button", { name: /^Clear (right|left)$/ })).toHaveCount(0);
   await expect(exam.getByLabel("Perforation", { exact: true }).nth(0)).toHaveValue(""); // Perforation goes back to —
 });
 

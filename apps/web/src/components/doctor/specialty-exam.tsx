@@ -171,7 +171,7 @@ function EardrumField({
 }: {
   value: LateralValue<EardrumValue> | undefined;
   onChange: (v: LateralValue<EardrumValue>) => void;
-  /** Reset both maps and the answers linked to them; returns how to undo it. Without it, Reset clears the maps only. */
+  /** Reset both maps and the answers linked to them (TM back to normal); returns how to undo it. Without it, Reset clears the maps only. */
   onReset?: () => () => void;
   disabled: boolean;
 }) {
@@ -262,15 +262,12 @@ function EardrumField({
     setDraft(null);
   }
 
-  function clear(side: Side2) {
-    if (window.confirm(`Clear everything marked on the ${side} eardrum?`))
-      setEar(side, { perforation: [], retraction: [] });
-  }
-
   function reset() {
     if (
       !window.confirm(
-        "Reset both TM maps? Everything drawn on the right and left eardrums will be cleared.",
+        onReset
+          ? "Reset both ears? TM goes back to Intact (Normal) and everything drawn on the right and left eardrums is cleared."
+          : "Reset both TM maps? Everything drawn on the right and left eardrums will be cleared.",
       )
     )
       return;
@@ -445,15 +442,6 @@ function EardrumField({
                   {side === "right" ? "Right" : "Left"}
                 </text>
               </svg>
-              {!disabled && (
-                <button
-                  type="button"
-                  className="btn-ghost px-1 text-xs text-slate-500"
-                  onClick={() => clear(side)}
-                >
-                  Clear {side}
-                </button>
-              )}
             </div>
           );
         })}
@@ -635,7 +623,7 @@ export function SpecialtyExam({
     );
   }
 
-  /** TM map Reset: clears both maps and the Perforation answers; the returned undo puts just those back. */
+  /** TM map Reset: TM back to Intact (Normal), both maps redrawn as that, Perforation cleared; the returned undo puts just those back. */
   function resetTm(): () => void {
     const before = Object.fromEntries(TM_RESET_KEYS.map((k) => [k, findings![k]]));
     commit(resetTmMap(findings!));
