@@ -50,6 +50,30 @@ test("doctor writes, finalises and verifies a bilingual prescription", async ({ 
   await expect(page.getByText("MOXACIL")).toBeVisible();
 });
 
+test("a prescription longer than a page prints page numbers, with the footer at the bottom of the last page", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  await registerPatient(page, { name: `Long Rx ${uniq()}`, age: "40", sex: "Female", mobile: mobile() });
+  await addMedicine(page, "napa extend", "1+0+1 af 5d");
+  // A long letter under the medicines takes it past one page.
+  await page.getByTestId("rx-note").fill(Array.from({ length: 90 }, (_, i) => `Line ${i + 1} of a long referral letter.`).join("\n"));
+  await page.waitForTimeout(800);
+  await page.getByTestId("finalize").click();
+  const frame = page.frameLocator("[data-testid=print-frame]");
+  await expect(frame.locator(".rx-item")).toHaveCount(1);
+  // The preview measures it and re-renders numbered: two page heights, so the footer sits at the bottom of page 2.
+  const css = () => frame.locator("style").evaluate((el) => el.textContent ?? "");
+  await expect.poll(css, { timeout: 15_000 }).toContain('content: "Page " counter(page) " of " counter(pages)');
+  const pageBox = await frame.locator(".page").evaluate((el) => getComputedStyle(el).minHeight);
+  expect(parseFloat(pageBox)).toBeGreaterThan(2 * 900); // two A4 content heights (each about 1046px)
+
+  // The server PDF does the same: more than one page.
+  await expect(page.getByTestId("sync-status")).toHaveText("Synced", { timeout: 60_000 });
+  const rxId = new URL(page.url()).hash.split("/")[2]!;
+  const pdf = (await (await page.request.get(`/api/print/${rxId}/pdf`)).body()).toString("latin1");
+  expect(pdf.match(/\/Type\s*\/Page(?![s\w])/g)?.length).toBeGreaterThan(1);
+});
+
 test("back from print opens the prescription ready to edit, as the next version", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);

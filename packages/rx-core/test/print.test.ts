@@ -10,7 +10,9 @@ import {
   formatDateDmy,
   formatInstructionParts,
   historyLines,
+  pageContentHeightMm,
   printAge,
+  printPagesFor,
   renderPrescriptionHtml,
   SAMPLE_CHAMBER,
   SAMPLE_DOC,
@@ -20,7 +22,7 @@ import {
   type PatientInfo,
 } from "../src";
 
-const render = (doc: Partial<PrescriptionDoc> = {}, patient: Partial<PatientInfo> = {}, settings = DEFAULT_PRINT_SETTINGS) =>
+const render = (doc: Partial<PrescriptionDoc> = {}, patient: Partial<PatientInfo> = {}, settings = DEFAULT_PRINT_SETTINGS, pages?: number) =>
   renderPrescriptionHtml({
     doc: { ...SAMPLE_DOC, ...doc },
     patient: { ...SAMPLE_PATIENT, ...patient },
@@ -29,6 +31,7 @@ const render = (doc: Partial<PrescriptionDoc> = {}, patient: Partial<PatientInfo
     date: "2026-06-11",
     settings,
     fonts: { bengali: "", latin: "" },
+    pages,
   });
 
 describe("dates", () => {
@@ -216,6 +219,34 @@ describe("TM map always printed", () => {
     expect(render({ diagrams: old })).toContain(`style="width:37.2mm"`);
     // Without a key the drums print as before.
     expect(render({ diagrams: tm })).not.toContain(`<div class="ear-row">`);
+  });
+});
+
+describe("prescriptions longer than a page", () => {
+  it("measures pages from the content height, with the page-number strip on numbered pages", () => {
+    const s = DEFAULT_PRINT_SETTINGS; // A4, 10 mm margins
+    expect(pageContentHeightMm(s, false)).toBe(277);
+    expect(pageContentHeightMm(s, true)).toBe(277); // a 10 mm bottom margin already fits the 7 mm number strip
+    expect(pageContentHeightMm({ ...s, marginBottomMm: 2 }, true)).toBe(280);
+    expect(printPagesFor(200, s)).toBe(1);
+    expect(printPagesFor(277.3, s)).toBe(1); // rounding slack
+    expect(printPagesFor(300, s)).toBe(2);
+    expect(printPagesFor(600, s)).toBe(3);
+    expect(printPagesFor(Number.NaN, s)).toBe(1);
+  });
+
+  it("numbers pages and stretches the page box to all of them only at 2+ pages", () => {
+    const one = render({});
+    expect(one).not.toContain("counter(pages)");
+    expect(one).toContain(".page { min-height: 277mm;");
+    const three = render({}, {}, DEFAULT_PRINT_SETTINGS, 3);
+    expect(three).toContain('@bottom-right { content: "Page " counter(page) " of " counter(pages);');
+    expect(three).toContain("margin: 0 0 7mm 0;");
+    expect(three).toContain(".page { min-height: 831mm;"); // 3 × 277: the footer ends at the bottom of page 3
+    expect(three).toContain(".sheet { padding: 10mm 10mm 3mm 10mm;"); // 10 mm bottom margin = 7 mm strip + 3 mm
+    // A doctored page count can't blow the page up.
+    expect(render({}, {}, DEFAULT_PRINT_SETTINGS, 1e9)).toContain(".page { min-height: 13850mm;");
+    expect(render({}, {}, DEFAULT_PRINT_SETTINGS, -2)).not.toContain("counter(pages)");
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { paperDimensions, prescriptionFileName } from "@rx/core";
+import { paperDimensions, prescriptionFileName, printPagesFor } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useSession } from "@/lib/doctor/context";
@@ -19,11 +19,14 @@ function PreviewFrame({
   html,
   widthMm,
   heightMm,
+  onContentHeight,
 }: {
   frame: RefObject<HTMLIFrameElement | null>;
   html: string;
   widthMm: number;
   heightMm: number;
+  /** The prescription's own height in mm, once laid out with its fonts (the preview runs no scripts, so we measure). */
+  onContentHeight: (mm: number) => void;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -47,6 +50,18 @@ function PreviewFrame({
   const width = widthMm * MM * scale;
   const height = heightMm * MM * scale;
 
+  /** Height of the page box without its one-page (or N-page) minimum, so a shorter prescription measures shorter again. */
+  async function measure() {
+    const doc = frame.current?.contentDocument;
+    const page = doc?.querySelector<HTMLElement>(".page");
+    if (!doc || !page) return;
+    await doc.fonts.ready;
+    page.style.minHeight = "0";
+    const h = page.getBoundingClientRect().height;
+    page.style.minHeight = "";
+    onContentHeight(h / MM);
+  }
+
   return (
     <div ref={wrap} className="overflow-auto rounded bg-slate-200 p-2">
       <div className="mx-auto" style={{ width, height }}>
@@ -56,6 +71,7 @@ function PreviewFrame({
           srcDoc={html}
           // No scripts in the preview; same-origin so we can await fonts and call print().
           sandbox="allow-same-origin allow-modals"
+          onLoad={() => void measure()}
           className="block origin-top-left bg-white shadow"
           style={{ width: `${widthMm}mm`, height: `${heightMm}mm`, border: 0, transform: `scale(${scale})` }}
           data-testid="print-frame"
@@ -69,6 +85,8 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
   const db = usePowerSync();
   const session = useSession();
   const [bundle, setBundle] = useState<PrintBundle | null>(null);
+  /** Pages the prescription runs to, measured in the preview; 2+ re-renders it numbered with the footer on the last. */
+  const [pages, setPages] = useState(1);
   const frame = useRef<HTMLIFrameElement>(null);
   // Re-render when the prescription, chamber settings or profile change (e.g. patient code arrives after sync).
   const { data: watch } = useQuery<{ k: string }>(
@@ -95,8 +113,8 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
   );
 
   useEffect(() => {
-    buildPrintHtml(db, prescriptionId, { publicBaseUrl: session.publicBaseUrl }).then(setBundle);
-  }, [db, prescriptionId, session.publicBaseUrl, watch[0]?.k]);
+    buildPrintHtml(db, prescriptionId, { publicBaseUrl: session.publicBaseUrl, pages }).then(setBundle);
+  }, [db, prescriptionId, session.publicBaseUrl, watch[0]?.k, pages]);
 
   /** After printing a finalised prescription, offer to go back to Today for the next patient. */
   async function askDone() {
@@ -201,7 +219,13 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
         </span>
         <Link to="/settings" className="ml-auto text-xs text-brand-700 underline">Print settings & pad calibration</Link>
       </div>
-      <PreviewFrame frame={frame} html={bundle.html} widthMm={frameMm.w} heightMm={frameMm.h} />
+      <PreviewFrame
+        frame={frame}
+        html={bundle.html}
+        widthMm={frameMm.w}
+        heightMm={frameMm.h}
+        onContentHeight={(mm) => setPages(printPagesFor(mm, bundle.settings))}
+      />
     </div>
   );
 }

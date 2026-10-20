@@ -110,7 +110,8 @@ export async function prescriptionPdf(
   const base = process.env.PUBLIC_BASE_URL ?? "http://localhost:3000";
   const verifyUrl = rx.verifyToken ? `${base}/v/${rx.verifyToken}` : null;
   const date = rx.finalizedAt ? rx.finalizedAt.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }) : (enc?.visitDate ?? rx.createdAt.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }));
-  const html = renderPrescriptionHtml({
+  const qrSvg = verifyUrl ? await QRCode.toString(verifyUrl, { type: "svg", margin: 0 }) : undefined;
+  const render = (pages?: number) => renderPrescriptionHtml({
     doc,
     patient: {
       name: patient.name, sex: (patient.sex as Sex) ?? undefined, mobile: patient.mobile ?? undefined, patientCode: patient.code ?? undefined,
@@ -126,15 +127,24 @@ export async function prescriptionPdf(
     chambers: [...chambers.filter((c) => c.id === chamber?.id), ...chambers.filter((c) => c.id !== chamber?.id)].map(header),
     date,
     settings,
-    qrSvg: verifyUrl ? await QRCode.toString(verifyUrl, { type: "svg", margin: 0 }) : undefined,
+    qrSvg,
     signatureDataUrl: doctor.signatureDataUrl ?? undefined,
     fonts: fonts(),
     footerNote: verifyUrl ? undefined : "DRAFT — not valid",
+    pages,
   });
+  // Print once to learn the page count; 2+ pages print again, numbered, with the footer at the bottom of the last.
+  const first = await htmlToPdf(render());
+  const count = pdfPageCount(first);
   return {
-    pdf: await htmlToPdf(html),
+    pdf: count > 1 ? await htmlToPdf(render(count)) : first,
     filename: prescriptionFileName({ name: patient.name, mobile: patient.mobile, id: patient.code, date }),
   };
+}
+
+/** Pages in a Chromium-made PDF: its page objects ("/Type /Page", not the "/Pages" tree). */
+function pdfPageCount(pdf: Buffer): number {
+  return pdf.toString("latin1").match(/\/Type\s*\/Page(?![s\w])/g)?.length ?? 1;
 }
 
 async function htmlToPdf(html: string): Promise<Buffer> {
