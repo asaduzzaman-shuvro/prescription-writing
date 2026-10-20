@@ -160,13 +160,25 @@ test("Nose & PNS answers draw on the nose picture; Reset clears it after confirm
   const exam = page.getByTestId("specialty-exam");
   await exam.getByRole("button", { name: /Nose/ }).click();
   const nose = page.getByTestId("sketch-nose"), summary = page.getByTestId("sketch-summary-nose");
+  // A field's chips, by its label (the same option can appear in other fields); right-ear chips come first.
+  const field = (label: string) => exam.locator("span.text-slate-600", { hasText: new RegExp(`^${label}$`) }).locator("xpath=..");
+  const chip = (label: string, option: string) => field(label).getByRole("button", { name: option, exact: true });
 
-  await exam.getByLabel("Inferior turbinate", { exact: true }).nth(0).selectOption("Hypertrophied");
+  await chip("Inferior turbinate", "Hypertrophied").nth(0).click();
   await expect(nose.locator('[data-zone="r_it"]')).toHaveAttribute("fill", "#bbb");
-  await exam.getByLabel("Septum", { exact: true }).selectOption("DNS to left");
+  await chip("Septum", "DNS to left").click();
   await exam.getByRole("button", { name: "Maxillary", exact: true }).click();
   await expect(summary).toHaveText("R maxillary sinus tender, L maxillary sinus tender, R inferior turbinate hypertrophied; septum deviated to left");
-  await exam.getByLabel("Septum", { exact: true }).selectOption("Spur right");
+  // Several septum findings draw together; unticking one takes only its symbol away.
+  await chip("Septum", "Spur right").click();
+  await expect(summary).toHaveText("R maxillary sinus tender, L maxillary sinus tender, R inferior turbinate hypertrophied; septum deviated to left, spur to right");
+  await chip("Septum", "DNS to left").click();
+  await expect(summary).toHaveText("R maxillary sinus tender, L maxillary sinus tender, R inferior turbinate hypertrophied; spur to right");
+  // Central is the normal septum: it clears the other choices.
+  await chip("Septum", "Central").click();
+  await expect(summary).toHaveText("R maxillary sinus tender, L maxillary sinus tender, R inferior turbinate hypertrophied");
+  await chip("Septum", "Spur right").click();
+  await expect(chip("Septum", "Central")).not.toHaveClass(/bg-brand-50/);
   await expect(summary).toHaveText("R maxillary sinus tender, L maxillary sinus tender, R inferior turbinate hypertrophied; spur to right");
 
   const reset = page.getByTestId("sketch-tools-nose").getByRole("button", { name: "Reset", exact: true });
@@ -179,7 +191,7 @@ test("Nose & PNS answers draw on the nose picture; Reset clears it after confirm
   await expect(nose.locator('[data-zone="r_it"]')).toHaveAttribute("fill", "#fff");
 
   // It prints like the throat pictures: picture plus key.
-  await exam.getByLabel("Inferior turbinate", { exact: true }).nth(1).selectOption("Pale & boggy");
+  await chip("Inferior turbinate", "Pale & boggy").nth(1).click();
   await addMedicine(page, "candistin", "3 drop tds re 7d");
   await page.waitForTimeout(800); // exam autosave debounce
   await page.getByTestId("finalize").click();
