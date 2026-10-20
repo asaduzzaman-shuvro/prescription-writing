@@ -23,6 +23,7 @@ export const SKETCH_LINK = {
   turbinate: "nose_turbinate",
   mucosa: "nose_mucosa",
   discharge: "nose_discharge",
+  cavity: "nose_cavity",
   polyp: "nose_polyp",
   sinusTender: "nose_sinus_tender",
   tonsilGrade: "thr_tonsil_grade",
@@ -54,6 +55,9 @@ const AT = {
   haematoma: [50, 56],
   polyp: { right: [[42, 62], [45, 72], [45, 88]], left: [[61.5, 62], [58.5, 72], [58.5, 88]] },
   discharge: { right: [41, 90], left: [59, 90] },
+  // Nasal cavity findings, high in the narrow upper cavity where nothing else is drawn: foreign body above, mass below.
+  fb: { right: [46.2, 26], left: [53.8, 26] },
+  mass: { right: [46.2, 38], left: [53.8, 38] },
   crust: { right: [42, 74], left: [58, 74] }, // on the inferior turbinates
   tonsil: { right: { pus: [24, 52], membrane: [24, 62] }, left: { pus: [76, 52], membrane: [76, 62] } },
   ppwBulge: [50, 56],
@@ -90,10 +94,14 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
     const it = sideList(f, L.turbinate, s);
     for (const [answer, st] of [["Hypertrophied", "hypertrophied"], ["Pale & boggy", "pale"], ["Congested", "congested"]] as const)
       if (it.includes(answer)) nose.zones[s === "right" ? "r_it" : "l_it"] = st;
-    const polyp = side(f, L.polyp, s);
-    // Grade 1–3: one polyp per grade, down from the middle meatus; antrochoanal: meatus to the floor.
-    const n = polyp === "Antrochoanal" ? 0 : Number(/grade (\d)/.exec(polyp ?? "")?.[1] ?? 0);
+    const polyp = side(f, L.polyp, s), cavity = sideList(f, L.cavity, s);
+    // Grade 1–3: one polyp per grade, down from the middle meatus; antrochoanal: meatus to the floor. A polyp ticked
+    // in Nasal cavity but not graded yet draws one.
+    const graded = polyp === "Antrochoanal" ? 0 : Number(/grade (\d)/i.exec(polyp ?? "")?.[1] ?? 0);
+    const n = graded || (polyp !== "Antrochoanal" && cavity.includes("Polyp") ? 1 : 0);
     for (const at of polyp === "Antrochoanal" ? [AT.polyp[s][0], AT.polyp[s][2]] : AT.polyp[s].slice(0, n)) nose.marks.push(mark("polyp", at));
+    if (cavity.includes("Nasal mass")) nose.marks.push(mark("mass", AT.mass[s]));
+    if (cavity.includes("Foreign body")) nose.marks.push(mark("fb", AT.fb[s]));
     if (sideList(f, L.discharge, s).some((d) => d !== "None")) nose.marks.push(mark("discharge", AT.discharge[s]));
   }
   for (const sinus of many(f, L.sinusTender)) {
