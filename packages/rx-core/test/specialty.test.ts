@@ -97,6 +97,12 @@ describe("flattenFindings", () => {
       { label: "Nasal discharge", value: "L Watery" },
     ]);
   });
+  it("lists Cottle's test right after Sinus tenderness, on screen and in print", () => {
+    const ids = ENT_TEMPLATE.sections.find((x) => x.id === "nose")!.fields.map((f) => f.id);
+    expect(ids.indexOf("nose_cottle")).toBe(ids.indexOf("nose_sinus_tender") + 1);
+    const lines = flattenFindings(ENT_TEMPLATE, { nose_cottle: { right: "Positive" }, nose_sinus_tender: ["Maxillary"] }).groups[0]!.lines;
+    expect(lines.map((l) => l.label)).toEqual(["Sinus tenderness", "Cottle's test"]);
+  });
   it("prints the grouped tuning fork tests as their own lines", () => {
     const ear = flattenFindings(ENT_TEMPLATE, { ear_rinne: { right: "−ve", left: "+ve" }, ear_weber: "Lateralised to right", ear_abc: { right: "Reduced" } }).groups[0]!.lines;
     expect(ear).toEqual([{ label: "Rinne", value: "R −ve, L +ve" }, { label: "Weber", value: "Lateralised to right" }, { label: "ABC", value: "R Reduced" }]);
