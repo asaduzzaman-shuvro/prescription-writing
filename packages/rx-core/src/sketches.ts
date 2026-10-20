@@ -14,7 +14,7 @@ export type SketchId = (typeof SKETCH_IDS)[number];
 
 type Shape =
   | "ulcer" | "patch" | "growth" | "pus" | "bulge" | "nodule" | "polyp" | "cyst" | "leukoplakia" | "node" | "mass" | "scar" | "sinus"
-  | "bowR" | "bowL" | "spurR" | "spurL" | "hole";
+  | "bowR" | "bowL" | "spurR" | "spurL" | "hole" | "diamond";
 
 export interface SketchDef {
   id: SketchId;
@@ -216,6 +216,8 @@ const NOSE: SketchDef = {
   ],
   marks: [
     { kind: "polyp", label: "Polyp", shape: "polyp" },
+    { kind: "mass", label: "Nasal mass", shape: "growth" },
+    { kind: "fb", label: "Foreign body", shape: "diamond" },
     { kind: "discharge", label: "Discharge", shape: "pus" },
     { kind: "crust", label: "Crusting", shape: "leukoplakia" },
     { kind: "dev_r", label: "Septum deviated to right", shape: "bowR" },
@@ -280,6 +282,8 @@ function shapeSvg(shape: Shape, x: number, y: number, compact = false): string {
     }
     case "hole":
       return `<ellipse cx="${x}" cy="${y}" rx="1.6" ry="3" fill="#111"/>`;
+    case "diamond":
+      return `<path d="M${x},${r1(y - 2.6)} L${r1(x + 2.2)},${y} L${x},${r1(y + 2.6)} L${r1(x - 2.2)},${y} Z" fill="#111"/>`;
     case "sinus":
       return c(0, 0, 2.2, "#fff", 0.9) + `<circle cx="${x}" cy="${y}" r="0.7" fill="#111"/>`;
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { airBoneGap, applyTmPreset, audiogramSvg, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, perforationBlocked, ptaAverage, resetTmMap, sanitizeSvg, syncTmMap, TM_LOOKS, tmPreset, validateTemplateSchema } from "../src";
+import { airBoneGap, applyTmPreset, audiogramSvg, pruneSubFields, subFieldShown, withSubFieldParents, EARDRUM_LIMITS, EARDRUM_MARKS, eardrumSvg, ENT_TEMPLATE, normalizeEardrum, flattenFindings, hearingGrade, perforationBlocked, ptaAverage, resetTmMap, sanitizeSvg, syncTmMap, TM_LOOKS, tmPreset, validateTemplateSchema } from "../src";
 
 describe("ENT template", () => {
   it("is a valid schema", () => {
@@ -265,6 +265,9 @@ describe("TM answer draws on the TM map", () => {
 });
 
 describe("sub-options shown under one option of another field (Polyp grades under Nasal cavity)", () => {
+  const cavity = ENT_TEMPLATE.sections.find((x) => x.id === "nose")!.fields.find((f) => f.id === "nose_polyp")!;
+  const noseLines = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "nose")?.lines ?? [];
+
   it("validates the parent: an earlier select field in the section, a real option, the same right/left-ness", () => {
     const tpl = (fields: object[]) => ({ sections: [{ id: "s", title: "S", fields }] });
     const parent = { id: "p", label: "P", type: "multiselect", lateral: true, options: ["A", "B"] };
@@ -274,4 +277,43 @@ describe("sub-options shown under one option of another field (Polyp grades unde
     expect(validateTemplateSchema(tpl([parent, { id: "c", label: "C", type: "select", options: ["x"], parent: { field: "p", option: "A" } }]))).toEqual(["field c: must be right/left exactly when its parent p is"]);
   });
 
+  it("shows a sub-option only on the side whose parent answer includes its option", () => {
+    const f = { nose_cavity: { right: ["Polyp", "Foreign body"], left: ["Nasal mass"] } };
+    expect(subFieldShown(f, cavity, "right")).toBe(true);
+    expect(subFieldShown(f, cavity, "left")).toBe(false);
+    expect(subFieldShown({}, cavity, "right")).toBe(false);
+  });
+
+  it("prints the grade in brackets after Polyp, per side, merging identical sides", () => {
+    expect(noseLines({ nose_cavity: { right: ["Polyp", "Foreign body"], left: ["Nasal mass"] }, nose_polyp: { right: "Present (grade 2)" } }))
+      .toEqual([{ label: "Nasal cavity", value: "R Polyp (Present (grade 2)), Foreign body, L Nasal mass" }]);
+    expect(noseLines({ nose_cavity: { right: ["Polyp"], left: ["Polyp"] }, nose_polyp: { right: "Antrochoanal", left: "Antrochoanal" } }))
+      .toEqual([{ label: "Nasal cavity", value: "B/L Polyp (Antrochoanal)" }]);
+    // Polyp ticked but not graded yet; a grade left behind on a side without Polyp isn't printed.
+    expect(noseLines({ nose_cavity: { right: ["Polyp"], left: ["Foreign body"] }, nose_polyp: { left: "Present (grade 3)" } }))
+      .toEqual([{ label: "Nasal cavity", value: "R Polyp, L Foreign body" }]);
+  });
+
+  it("prints the doctor's Nasal mass and Foreign body descriptions after them, and drops each with its option", () => {
+    const f = { nose_cavity: { right: ["Nasal mass", "Polyp"], left: ["Foreign body"] }, nose_mass: { right: "Pedunculated, bleeds on touch", left: "left over" }, nose_polyp: { right: "Present (grade 1)" }, nose_fb: { left: "Button battery" } };
+    expect(noseLines(f)).toEqual([{ label: "Nasal cavity", value: "R Nasal mass (Pedunculated, bleeds on touch), Polyp (Present (grade 1)), L Foreign body (Button battery)" }]); // in tick order
+    expect(pruneSubFields(ENT_TEMPLATE, f).nose_mass).toEqual({ right: "Pedunculated, bleeds on touch", left: undefined });
+    expect(pruneSubFields(ENT_TEMPLATE, { ...f, nose_cavity: { right: ["Polyp"] } }).nose_fb).toEqual({ left: undefined });
+  });
+
+  it("drops a grade when Polyp is unticked on that side, and only there", () => {
+    const f = { nose_cavity: { right: ["Foreign body"], left: ["Polyp"] }, nose_polyp: { right: "Present (grade 1)", left: "Present (grade 2)" } };
+    expect(pruneSubFields(ENT_TEMPLATE, f)).toEqual({ ...f, nose_polyp: { right: undefined, left: "Present (grade 2)" } });
+    const kept = { nose_cavity: { right: ["Polyp"] }, nose_polyp: { right: "Present (grade 1)" } };
+    expect(pruneSubFields(ENT_TEMPLATE, kept)).toBe(kept);
+  });
+
+  it("shows an old Polyp answer, saved before Nasal cavity existed, under a ticked Polyp", () => {
+    const old = { nose_polyp: { right: "Present (grade 2)", left: "Absent" } };
+    expect(withSubFieldParents(ENT_TEMPLATE, old)).toEqual({ ...old, nose_cavity: { right: ["Polyp"] } });
+    expect(noseLines(old)).toEqual([{ label: "Nasal cavity", value: "R Polyp (Present (grade 2))" }]); // old "Absent" prints nothing
+    // A side the doctor has already answered in Nasal cavity is left as it is.
+    const answered = { nose_cavity: { right: ["Nasal mass"] }, nose_polyp: { right: "Present (grade 1)" } };
+    expect(withSubFieldParents(ENT_TEMPLATE, answered)).toBe(answered);
+  });
 });

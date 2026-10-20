@@ -181,6 +181,28 @@ test("Nose & PNS answers draw on the nose picture; Reset clears it after confirm
   await expect(chip("Septum", "Central")).not.toHaveClass(/bg-brand-50/);
   await expect(summary).toHaveText("R maxillary sinus tender, L maxillary sinus tender, R inferior turbinate hypertrophied; spur to right");
 
+  // Nasal cavity: ticking Polyp shows its grades, on that side only; unticking it hides them again.
+  const grade = exam.getByLabel("Polyp", { exact: true });
+  await expect(grade).toHaveCount(0);
+  await chip("Nasal cavity", "Polyp").nth(0).click();
+  await expect(grade).toHaveCount(1);
+  await grade.selectOption("Present (grade 2)");
+  await expect(summary).toContainText("polyp, spur to right");
+  await chip("Nasal cavity", "Polyp").nth(0).click();
+  await expect(grade).toHaveCount(0);
+  await expect(summary).not.toContainText("polyp");
+  await chip("Nasal cavity", "Foreign body").nth(1).click();
+  await expect(summary).toContainText("foreign body");
+  // Nasal mass and Foreign body ask for the doctor's own description, on that side.
+  const fb = field("Foreign body").getByRole("textbox");
+  await expect(fb).toHaveCount(1);
+  await fb.fill("Bead");
+  const mass = field("Nasal mass").getByRole("textbox");
+  await expect(mass).toHaveCount(0);
+  await chip("Nasal cavity", "Nasal mass").nth(1).click();
+  await expect(mass).toHaveCount(1);
+  await mass.fill("Pedunculated, bleeds on touch");
+
   const reset = page.getByTestId("sketch-tools-nose").getByRole("button", { name: "Reset", exact: true });
   page.once("dialog", (d) => void d.dismiss());
   await reset.click();
@@ -197,6 +219,7 @@ test("Nose & PNS answers draw on the nose picture; Reset clears it after confirm
   await page.getByTestId("finalize").click();
   const frame = page.frameLocator("[data-testid=print-frame]");
   await expect(frame.getByText("L inferior turbinate pale / boggy")).toBeVisible();
+  await expect(frame.locator("li", { hasText: "Nasal cavity:" })).toHaveText("Nasal cavity: L Foreign body (Bead), Nasal mass (Pedunculated, bleeds on touch)"); // in tick order
   await expect(frame.locator("section", { has: frame.locator("h3", { hasText: /^Nose & PNS$/ }) }).locator("figure.diagram", { hasText: "Nose & sinuses" })).toHaveCount(1);
   await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Pale / boggy" })).toHaveCount(1);
 });

@@ -107,6 +107,13 @@ describe("nose & PNS answers draw on the nose picture", () => {
     expect(normal.nose).toEqual({ zones: {}, marks: [] });
   });
 
+  it("draws Nasal cavity findings on that side: polyps (one until graded), a mass and a foreign body", () => {
+    const p = sketchPresets({ nose_cavity: { right: ["Polyp", "Nasal mass"], left: ["Polyp", "Foreign body"] }, nose_polyp: { left: "Present (grade 2)" } }).nose;
+    expect(p.marks.map((m) => [m.kind, m.x < 50 ? "R" : "L"])).toEqual([["polyp", "R"], ["mass", "R"], ["polyp", "L"], ["polyp", "L"], ["fb", "L"]]);
+    expect(sketchPresets({ nose_cavity: { right: ["Polyp"] }, nose_polyp: { right: "Antrochoanal" } }).nose.marks).toHaveLength(2);
+    expect(sketchPresets({ nose_polyp: { right: "Present (Grade 3)" } }).nose.marks).toHaveLength(3); // either capitalisation
+  });
+
   it("writes the nose picture into the ENT template's nose map", () => {
     const next = syncSketchMaps(ENT_TEMPLATE, {}, { nose_turbinate: { right: "Congested" } });
     expect(next.nose_map).toEqual({ zones: { r_it: "congested" }, marks: [], strokes: [] });
