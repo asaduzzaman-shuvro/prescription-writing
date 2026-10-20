@@ -92,6 +92,21 @@ describe("nose & PNS answers draw on the nose picture", () => {
     expect(p.nose).toEqual({ zones: {}, marks: [] });
   });
 
+  it("draws every answer of the multi-select fields, the later option winning a zone", () => {
+    const p = sketchPresets({
+      nose_septum: ["Spur left", "DNS to left", "Perforation"], // ticked out of order: drawn in option order
+      nose_turbinate: { right: ["Congested", "Hypertrophied"], left: ["Pale & boggy"] },
+      nose_mucosa: ["Congested", "Pale", "Crusting"],
+      nose_discharge: { right: ["Mucoid", "Blood stained"], left: ["None"] },
+    }).nose;
+    expect(p.marks.map((m) => m.kind)).toEqual(["dev_l", "spur_l", "perforation", "crust", "crust", "discharge"]);
+    expect(p.zones).toEqual({ r_cavity: "congested", l_cavity: "congested", r_it: "congested", l_it: "pale" });
+    expect(p.marks.filter((m) => m.kind === "discharge")).toHaveLength(1); // one symbol for several kinds
+    // Only normal answers, or nothing ticked, draw nothing.
+    const normal = sketchPresets({ nose_external: ["Normal"], nose_septum: ["Central"], nose_turbinate: { right: ["Normal"], left: [] }, nose_mucosa: ["Normal"], nose_discharge: { right: ["None"] } });
+    expect(normal.nose).toEqual({ zones: {}, marks: [] });
+  });
+
   it("writes the nose picture into the ENT template's nose map", () => {
     const next = syncSketchMaps(ENT_TEMPLATE, {}, { nose_turbinate: { right: "Congested" } });
     expect(next.nose_map).toEqual({ zones: { r_it: "congested" }, marks: [], strokes: [] });
