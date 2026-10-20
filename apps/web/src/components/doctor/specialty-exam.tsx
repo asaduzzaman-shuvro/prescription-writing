@@ -20,9 +20,11 @@ import {
   hearingGrade,
   normalizeEardrum,
   perforationBlocked,
+  pruneSubFields,
   ptaAverage,
   resetTmMap,
   syncSketchMaps,
+  subFieldShown,
   syncTmMap,
   TM_LINK,
   TM_RESET_KEYS,
@@ -40,6 +42,7 @@ import {
   type SpecialtyTemplateSchema,
   type TemplateField,
   type TemplateSection,
+  withSubFieldParents,
 } from "@rx/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SketchField } from "./sketch-field";
@@ -606,19 +609,21 @@ export function SpecialtyExam({
   );
 
   useEffect(() => {
-    if (findings === null && encs[0])
-      setFindings(parseJson<Findings>(encs[0].exam_findings, {}));
-  }, [encs, findings]);
+    // An answer saved before its field became a sub-option (an old Polyp grade) shows under its parent option.
+    if (findings === null && encs[0] && schema)
+      setFindings(withSubFieldParents(schema, parseJson<Findings>(encs[0].exam_findings, {})));
+  }, [encs, findings, tpl?.schema]);
 
   if (!schema || findings === null) return null;
 
   function update(id: string, v: unknown) {
     // A TM / perforation answer redraws that ear's TM map; a nose, throat or neck answer redraws its picture.
+    // Unticking an option drops its sub-option answers first (e.g. the Polyp grade), so they neither print nor draw.
     commit(
       syncSketchMaps(
         schema!,
         findings!,
-        syncTmMap(schema!, findings!, { ...findings, [id]: v }),
+        syncTmMap(schema!, findings!, pruneSubFields(schema!, { ...findings, [id]: v })),
       ),
     );
   }
@@ -682,6 +687,10 @@ export function SpecialtyExam({
     return out;
   }
 
+  /** A sub-option's row shows only where its option is chosen (on either side, for right/left fields). */
+  const rowShown = (f: TemplateField) =>
+    !f.parent || (f.lateral ? subFieldShown(findings, f, "right") || subFieldShown(findings, f, "left") : subFieldShown(findings, f));
+
   const filled = (sid: string) =>
     schema.sections
       .find((s) => s.id === sid)!
@@ -715,12 +724,13 @@ export function SpecialtyExam({
           </button>
           {(open[s.id] ?? si === 0) && (
             <div className="space-y-2 border-t border-slate-100 p-2">
-              {sectionFields(s, (f) => (
+              {sectionFields(s, (f) => !rowShown(f) ? null : (
                 <div
                   key={f.id}
                   className="grid items-start gap-1 @min-[36rem]:grid-cols-[7.5rem_1fr]"
                 >
-                  <span className="pt-1.5 text-xs text-slate-600">
+                  {/* A sub-option (e.g. Polyp grade) sits indented under the option it belongs to. */}
+                  <span className={`pt-1.5 text-xs text-slate-600${f.parent ? " pl-2 before:mr-1 before:content-['↳']" : ""}`}>
                     {f.label}
                   </span>
                   {f.type === "eardrum" ? (
@@ -745,7 +755,7 @@ export function SpecialtyExam({
                     />
                   ) : f.lateral ? (
                     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-1">
-                      {(["right", "left"] as const).map((side) => (
+                      {(["right", "left"] as const).map((side) => f.parent && !subFieldShown(findings, f, side) ? <div key={side} /> : (
                         <div key={side} className="flex min-w-0 items-start gap-1">
                           <span
                             className={`pt-1.5 text-xs font-semibold ${side === "right" ? "text-red-700" : "text-blue-700"}`}
@@ -774,7 +784,7 @@ export function SpecialtyExam({
                           </div>
                         </div>
                       ))}
-                      {!readOnly && (
+                      {!readOnly && !f.parent && (
                         <button
                           type="button"
                           title="Copy right to left"

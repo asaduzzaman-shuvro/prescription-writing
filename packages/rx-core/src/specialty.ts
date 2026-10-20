@@ -23,6 +23,12 @@ export interface TemplateField {
   sketch?: SketchId;
   /** Sub-heading inside the section; consecutive fields with the same group fold under it, collapsed until opened. */
   group?: string;
+  /**
+   * Sub-options of one option of an earlier field in the section (e.g. Polyp grades under Nasal cavity "Polyp"): shown,
+   * kept and printed only where that field's answer includes `option` (per side for right/left fields), printed in
+   * brackets after it.
+   */
+  parent?: { field: string; option: string };
 }
 
 export interface TemplateSection {
@@ -120,6 +126,14 @@ export function validateTemplateSchema(raw: unknown): string[] {
       if (f.type === "sketch" && !isSketchId(f.sketch)) errors.push(`field ${f.id}: "sketch" must be one of ${SKETCH_IDS.join(", ")}`);
       if ((f.type === "select" || f.type === "multiselect") && (!Array.isArray(f.options) || !f.options.length))
         errors.push(`field ${f.id}: options required for ${f.type}`);
+    });
+    s.fields.forEach((f, i) => {
+      if (f.parent === undefined) return;
+      const p = s.fields.slice(0, i).find((x) => x.id === f.parent!.field);
+      if (!p) return errors.push(`field ${f.id}: parent "${f.parent.field}" must be an earlier field in section ${s.id}`);
+      if ((p.type !== "select" && p.type !== "multiselect") || !p.options?.includes(f.parent.option))
+        errors.push(`field ${f.id}: parent option "${f.parent.option}" must be one of ${p.id}'s options`);
+      if (!!p.lateral !== !!f.lateral) errors.push(`field ${f.id}: must be right/left exactly when its parent ${p.id} is`);
     });
     s.fields.forEach((f, i) => {
       if (f.group === undefined) return;
@@ -479,12 +493,13 @@ export function audiogramSvg(value: AudiogramValue | undefined): string {
 // Flatten for print
 // ---------------------------------------------------------------------------
 
-function text(v: unknown, f: TemplateField): string {
+/** `sub` adds an option's sub-option answer, e.g. "Polyp" → "Polyp (Present (grade 2))". */
+function text(v: unknown, f: TemplateField, sub: (option: string) => string = (o) => o): string {
   if (v === undefined || v === null || v === "") return "";
-  if (Array.isArray(v)) return v.filter((x) => x !== f.normal).join(", ");
+  if (Array.isArray(v)) return v.filter((x) => x !== f.normal).map((x) => sub(String(x))).join(", ");
   const s = String(v);
   if (f.normal && s === f.normal) return "";
-  return f.unit ? `${s} ${f.unit}` : s;
+  return f.unit ? `${s} ${f.unit}` : sub(s);
 }
 
 const ZONE_LABEL: Record<EardrumZone, string> = { attic: "attic", as: "AS", ai: "AI", ps: "PS", pi: "PI" };
@@ -500,6 +515,57 @@ function eardrumText(value: EardrumValue | undefined): string {
   if (v.bulging) parts.push("bulging");
   if (v.strokes.length) parts.push("drawing");
   return parts.join("; ");
+}
+
+// ---------------------------------------------------------------------------
+// Sub-options (a field shown under one option of another, e.g. Polyp grades under Nasal cavity "Polyp")
+// ---------------------------------------------------------------------------
+
+/** Every answer of a select / multi-select value (a single answer too, saved before the field took several). */
+const answersOf = (v: unknown): string[] => (typeof v === "string" ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+const sideOf = (v: unknown, at?: Side2) => (at ? (v as LateralValue<unknown> | undefined)?.[at] : v);
+
+/** Whether a sub-field applies: its parent's answer (on this side, for right/left fields) includes its option. */
+export function subFieldShown(findings: Findings, f: TemplateField, at?: Side2): boolean {
+  return !f.parent || answersOf(sideOf(findings[f.parent.field], at)).includes(f.parent.option);
+}
+
+const fieldSides = (f: TemplateField): (Side2 | undefined)[] => (f.lateral ? ["right", "left"] : [undefined]);
+
+/**
+ * Answers saved before a sub-field had its parent (e.g. a Polyp grade from before Nasal cavity existed): where the
+ * parent is unanswered, tick its option, so the old answer still shows and prints in its new place.
+ */
+export function withSubFieldParents(schema: SpecialtyTemplateSchema, findings: Findings): Findings {
+  let out = findings;
+  for (const f of schema.sections.flatMap((s) => s.fields)) {
+    if (!f.parent) continue;
+    const p = schema.sections.flatMap((s) => s.fields).find((x) => x.id === f.parent!.field);
+    if (!p) continue;
+    for (const at of fieldSides(f)) {
+      const own = sideOf(out[f.id], at);
+      if (typeof own !== "string" || !f.options?.includes(own) || sideOf(out[p.id], at) !== undefined) continue;
+      const tick = p.type === "multiselect" ? [f.parent.option] : f.parent.option;
+      out = { ...out, [p.id]: at ? { ...(out[p.id] as object), [at]: tick } : tick };
+    }
+  }
+  return out;
+}
+
+/** Drop sub-field answers whose parent option is no longer chosen (on that side), so they neither print nor draw. */
+export function pruneSubFields(schema: SpecialtyTemplateSchema, findings: Findings): Findings {
+  let out = findings;
+  for (const f of schema.sections.flatMap((s) => s.fields)) {
+    if (!f.parent || out[f.id] === undefined) continue;
+    for (const at of fieldSides(f)) {
+      if (sideOf(out[f.id], at) === undefined || subFieldShown(out, f, at)) continue;
+      if (!at) {
+        out = { ...out };
+        delete out[f.id];
+      } else out = { ...out, [f.id]: { ...(out[f.id] as object), [at]: undefined } };
+    }
+  }
+  return out;
 }
 
 function audiogramText(v: AudiogramValue | undefined): string {
@@ -531,7 +597,8 @@ export interface FlattenedExam {
   diagrams: Diagram[];
 }
 
-export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findings): FlattenedExam {
+export function flattenFindings(schema: SpecialtyTemplateSchema, saved: Findings): FlattenedExam {
+  const findings = withSubFieldParents(schema, saved);
   const groups: FlattenedExam["groups"] = [];
   const diagrams: FlattenedExam["diagrams"] = [];
   const side = schema.lateralLabels ?? DEFAULT_LATERAL;
@@ -541,6 +608,17 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
     for (const f of section.fields) {
       const v = findings[f.id];
       if (v === undefined) continue;
+      // Sub-options print inside their parent's line.
+      if (f.parent) continue;
+      const kids = section.fields.filter((k) => k.parent?.field === f.id);
+      const sub = (at?: Side2) => (option: string) => {
+        const t = kids
+          .filter((k) => k.parent!.option === option && subFieldShown(findings, k, at))
+          .map((k) => text(at ? (findings[k.id] as LateralValue<unknown> | undefined)?.[at] : findings[k.id], k))
+          .filter(Boolean)
+          .join(", ");
+        return t ? `${option} (${t})` : option;
+      };
       if (f.type === "eardrum") {
         const lv = v as LateralValue<EardrumValue>;
         const r = eardrumText(lv.right), l = eardrumText(lv.left);
@@ -575,12 +653,12 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
       // A plain answer saved before the field became right/left still prints, without a side.
       if (f.lateral && v !== null && typeof v === "object" && !Array.isArray(v)) {
         const lv = v as LateralValue<unknown>;
-        const r = text(lv.right, f), l = text(lv.left, f);
+        const r = text(lv.right, f, sub("right")), l = text(lv.left, f, sub("left"));
         if (r && r === l) lines.push({ label: f.label, value: `${side.both} ${r}` });
         else if (r || l) lines.push({ label: f.label, value: [r && `${side.right} ${r}`, l && `${side.left} ${l}`].filter(Boolean).join(", ") });
         continue;
       }
-      const t = text(v, f);
+      const t = text(v, f, sub());
       if (t) lines.push({ label: f.label, value: t });
     }
     // Pictures print under their own section, so a section with pictures but no lines still gets a heading.
