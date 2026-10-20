@@ -98,6 +98,8 @@ export interface Vitals {
 export interface ExamFindingLine {
   label: string;
   value: string;
+  /** Printed last in its section, right above the section's pictures (the TM map's words above the drums). */
+  abovePictures?: boolean;
 }
 
 export interface PrescriptionDoc {

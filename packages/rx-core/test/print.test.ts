@@ -235,6 +235,23 @@ describe("exam pictures print under their own section", () => {
     return i;
   };
 
+  it("prints the TM map's words last in the Ear findings, right above the drums", () => {
+    const ear = flattenFindings(ENT_TEMPLATE, {
+      ear_tm: { right: "Retracted" },
+      ear_tm_map: { right: { perforation: [], retraction: ["as", "ai", "ps", "pi"] }, left: { perforation: [], retraction: [], disc: "medium" } },
+      ear_discharge: { right: ["Mucoid"] },
+    });
+    const html = render({ specialtyFindings: ear.groups, diagrams: ear.diagrams });
+    const words = "<li><b>TM map:</b> R: retraction AS+AI+PS+PI · L: central perforation (medium)</li></ul>";
+    expect(at(html, "<b>Discharge:</b>")).toBeLessThan(at(html, words)); // after the answers below it in the template
+    expect(html).toContain(`${words}<div class="diagrams"><div class="ear-row">`); // straight above the drums
+    // Exams saved before the marker existed: their "TM map" line moves too, but only when the drums print with it.
+    const old = ear.groups.map((g) => ({ ...g, lines: g.lines.map(({ label, value }) => ({ label, value })) }));
+    expect(render({ specialtyFindings: old, diagrams: ear.diagrams })).toContain(`${words}<div class="diagrams"><div class="ear-row">`);
+    const noDrums = render({ specialtyFindings: old, diagrams: [] });
+    expect(at(noDrums, "<b>TM map:</b>")).toBeLessThan(at(noDrums, "<b>Discharge:</b>"));
+  });
+
   it("tags every group and picture with its template section", () => {
     expect(exam.groups.map((g) => g.id)).toEqual(["ear", "nose", "throat", "audiology"]);
     expect(exam.diagrams.map((d) => [d.title, d.section])).toEqual([

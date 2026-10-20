@@ -49,7 +49,7 @@ describe("flattenFindings", () => {
     expect(out.groups.map((g) => g.title)).toEqual(["Ear", "Nose & PNS", "Throat & neck", "Audiology"]);
     const ear = out.groups[0]!.lines;
     expect(ear).toContainEqual({ label: "TM", value: "R Perforated, L Intact" });
-    expect(ear).toContainEqual({ label: "TM map", value: "R: perforation AI+PI" });
+    expect(ear).toContainEqual({ label: "TM map", value: "R: perforation AI+PI", abovePictures: true });
     expect(ear).toContainEqual({ label: "Discharge", value: "R Mucopurulent" });
     expect(ear.find((l) => l.label === "Pinna / mastoid")).toBeUndefined();
     expect(out.groups[2]!.lines).toContainEqual({ label: "Tonsil (Brodsky)", value: "B/L Grade 3" });
@@ -158,7 +158,7 @@ describe("TM map symbols and drawing", () => {
         left: { perforation: [], retraction: [], bulging: true, marks: [{ kind: "fluid", x: 50, y: 70 }] },
       },
     });
-    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "R: perforation AI; grommet; drawing · L: fluid level; bulging" });
+    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "R: perforation AI; grommet; drawing · L: fluid level; bulging", abovePictures: true });
     expect(out.diagrams.map((d) => d.kind)).toEqual(["tm", "tm", "tm-legend"]);
     const key = out.diagrams[2]!.svg;
     for (const label of ["Perforation", "Grommet", "Fluid level", "Bulging"]) expect(key).toContain(`>${label}</text>`);
@@ -171,7 +171,7 @@ describe("TM map symbols and drawing", () => {
 
   it("prints drums for a drawing alone", () => {
     const out = flattenFindings(ENT_TEMPLATE, { ear_tm_map: { left: { perforation: [], retraction: [], strokes: ["10,10 20,20"] } } });
-    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "L: drawing" });
+    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "L: drawing", abovePictures: true });
     expect(out.diagrams).toHaveLength(2);
   });
 });
@@ -262,7 +262,7 @@ describe("TM answer draws on the TM map", () => {
 
   it("prints the central perforation in words, and prints drums for an appearance alone", () => {
     const out = flattenFindings(ENT_TEMPLATE, { ear_tm: { right: "Perforated", left: "Dull" }, ear_tm_map: { right: { perforation: [], retraction: [], disc: "medium" }, left: { perforation: [], retraction: [], look: "dull" } } });
-    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "R: central perforation (medium)" });
+    expect(out.groups[0]!.lines).toContainEqual({ label: "TM map", value: "R: central perforation (medium)", abovePictures: true });
     expect(out.diagrams.map((d) => d.kind)).toEqual(["tm", "tm", "tm-legend"]);
     const lookOnly = flattenFindings(ENT_TEMPLATE, { ear_tm_map: { left: { perforation: [], retraction: [], look: "hidden" } } });
     expect(lookOnly.groups).toEqual([{ id: "ear", title: "Ear", lines: [] }]); // a heading for the drums
