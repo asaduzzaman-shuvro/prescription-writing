@@ -3,6 +3,7 @@ import { code39Svg } from "./barcode";
 import { formatSlot } from "./chamber";
 import { followUpDate, formatDateDmy } from "./dates";
 import { bmi, formatDuration, formatInstructionParts, type Lang } from "./dose";
+import { r1 } from "./drawing";
 import { safeImageDataUrl, sanitizeSvg } from "./sanitize";
 import { isSketchId, SKETCHES, sketchSvg, type SketchId } from "./sketches";
 import { eardrumSvg } from "./specialty";
@@ -107,6 +108,26 @@ export interface RenderInput {
   fonts: { bengali: string; latin: string };
   /** Printed at the bottom (e.g. verification URL text). */
   footerNote?: string;
+  /**
+   * Pages the prescription takes, measured from a first render (`printPagesFor` in the browser, the PDF's page count
+   * on the server). 2+ numbers the pages and pins the footer to the bottom of the last one.
+   */
+  pages?: number;
+}
+
+/** Bottom page margin the "Page 1 of 2" number prints in, when there are 2+ pages. */
+const PAGE_NO_MM = 7;
+
+/** Height of the content area on each page, in mm: the paper less the margins (and the page-number strip if numbered). */
+export function pageContentHeightMm(s: PrintSettings, numbered: boolean): number {
+  const m = pageMargins(s);
+  return paperDimensions(s.paper).heightMm - m.top - (numbered ? Math.max(m.bottom, PAGE_NO_MM) : m.bottom);
+}
+
+/** How many pages a prescription takes, from the height (mm) its page box lays out at with no minimum height. */
+export function printPagesFor(contentHeightMm: number, s: PrintSettings): number {
+  if (!(contentHeightMm > pageContentHeightMm(s, false) + 0.5)) return 1;
+  return Math.min(50, Math.ceil((contentHeightMm - 0.5) / pageContentHeightMm(s, true)));
 }
 
 /** Saved PDF name: name, mobile, patient id and visit date, so one patient's prescriptions stay distinct. */
@@ -415,7 +436,16 @@ export function renderPrescriptionHtml(input: RenderInput): string {
         }${footerText ? `<div class="policy">${esc(footerText)}</div>` : ""}</footer>`;
 
   const m = pageMargins(s);
-  const contentHeightMm = heightMm - m.top - m.bottom;
+  // 2+ pages: "Page 1 of 2" in a strip at the bottom of every page, and the page box as tall as all the pages, so the
+  // footer lands at the bottom of the last one. The strip comes out of the bottom margin (at least PAGE_NO_MM).
+  const pages = Math.min(50, Math.max(1, Math.floor(Number(input.pages) || 1)));
+  const numbered = pages > 1;
+  const pageBoxMm = r1(pages * pageContentHeightMm(s, numbered));
+  const pageRule = numbered
+    ? `@page { size: ${widthMm}mm ${heightMm}mm; margin: 0 0 ${PAGE_NO_MM}mm 0;
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-family: "RxLatin", sans-serif; font-size: 8pt; padding-right: ${m.right}mm; } }`
+    : `@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }`;
+  const sheetBottomMm = numbered ? r1(Math.max(0, m.bottom - PAGE_NO_MM)) : m.bottom;
 
   return `<!doctype html>
 <html lang="bn">
@@ -428,12 +458,12 @@ export function renderPrescriptionHtml(input: RenderInput): string {
 /* A zero page margin leaves the browser no room for its own header/footer (date, title, URL, page number).
    The sheet's padding carries the margins instead: the pad's pre-printed header/footer space and the printer
    offset. It is cloned onto every page, so it repeats when a long prescription flows onto page 2. */
-@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
+${pageRule}
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: #fff; color: #000; }
-.sheet { padding: ${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.sheet { padding: ${m.top}mm ${m.right}mm ${sheetBottomMm}mm ${m.left}mm; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 body { font-family: "RxLatin", "RxBengali", sans-serif; font-size: ${s.fontSizePt}pt; line-height: 1.35; }
-.page { min-height: ${contentHeightMm}mm; display: flex; flex-direction: column; }
+.page { min-height: ${pageBoxMm}mm; display: flex; flex-direction: column; }
 header { display: flex; justify-content: space-between; border-bottom: 1.5pt solid #000; padding-bottom: 2mm; }
 header .dname { font-size: 1.35em; font-weight: 700; }
 header .bn-right { text-align: right; }
