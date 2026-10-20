@@ -263,3 +263,15 @@ describe("TM answer draws on the TM map", () => {
     expect(lookOnly.diagrams).toHaveLength(2); // and no key: the TM line names the appearance
   });
 });
+
+describe("sub-options shown under one option of another field (Polyp grades under Nasal cavity)", () => {
+  it("validates the parent: an earlier select field in the section, a real option, the same right/left-ness", () => {
+    const tpl = (fields: object[]) => ({ sections: [{ id: "s", title: "S", fields }] });
+    const parent = { id: "p", label: "P", type: "multiselect", lateral: true, options: ["A", "B"] };
+    expect(validateTemplateSchema(tpl([parent, { id: "c", label: "C", type: "select", lateral: true, options: ["x"], parent: { field: "p", option: "A" } }]))).toEqual([]);
+    expect(validateTemplateSchema(tpl([{ id: "c", label: "C", type: "select", lateral: true, options: ["x"], parent: { field: "p", option: "A" } }, parent]))).toEqual(['field c: parent "p" must be an earlier field in section s']);
+    expect(validateTemplateSchema(tpl([parent, { id: "c", label: "C", type: "select", lateral: true, options: ["x"], parent: { field: "p", option: "Z" } }]))).toEqual(['field c: parent option "Z" must be one of p\'s options']);
+    expect(validateTemplateSchema(tpl([parent, { id: "c", label: "C", type: "select", options: ["x"], parent: { field: "p", option: "A" } }]))).toEqual(["field c: must be right/left exactly when its parent p is"]);
+  });
+
+});
