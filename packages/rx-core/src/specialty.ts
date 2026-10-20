@@ -425,10 +425,13 @@ export function eardrumLegendSvg(keys: EardrumLegendKey[]): string {
     else sym = eardrumMarkSvg(k, 6.5, cy);
     return `${sym}<text x="17" y="${cy + 2.5}" font-size="7" font-family="sans-serif">${LEGEND_LABEL[k]}</text>`;
   });
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 86 ${used.length * row + 1}"><defs>${EARDRUM_DEFS}</defs>${rows.join("")}</svg>`;
+  // As wide as the longest label (about 3.9 units a character), so the key beside the drums takes no more room than it needs.
+  const width = Math.ceil(17 + Math.max(0, ...used.map((k) => LEGEND_LABEL[k].length)) * 3.9) + 1;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${used.length * row + 1}"><defs>${EARDRUM_DEFS}</defs>${rows.join("")}</svg>`;
 }
 
-function eardrumUsed(v: NormalizedEardrum): EardrumLegendKey[] {
+/** What one ear's key lists: fills and symbols, not the appearance (the TM line names that). */
+export function eardrumUsed(v: NormalizedEardrum): EardrumLegendKey[] {
   return [
     ...(v.perforation.length || v.disc ? (["perforation"] as const) : []),
     ...(v.retraction.length ? (["retraction"] as const) : []),
@@ -540,9 +543,9 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, findings: Findi
         if (r || l || normalizeEardrum(lv.right).look || normalizeEardrum(lv.left).look) {
           if (r || l) lines.push({ label: f.label, value: [r && `R: ${r}`, l && `L: ${l}`].filter(Boolean).join(" · ") });
           diagrams.push({ title: "Right TM", svg: eardrumSvg(lv.right, "right"), kind: "tm" }, { title: "Left TM", svg: eardrumSvg(lv.left, "left"), kind: "tm" });
-          // A key only when the new symbols are used, so plain perforation/retraction prints as before.
+          // A key for whatever is drawn; an appearance alone needs none (the TM line names it).
           const used = [...eardrumUsed(normalizeEardrum(lv.right)), ...eardrumUsed(normalizeEardrum(lv.left))];
-          if (used.some((k) => k !== "perforation" && k !== "retraction")) diagrams.push({ title: "Key", svg: eardrumLegendSvg(used), kind: "tm-legend" });
+          if (used.length) diagrams.push({ title: "Key", svg: eardrumLegendSvg(used), kind: "tm-legend" });
         }
         continue;
       }

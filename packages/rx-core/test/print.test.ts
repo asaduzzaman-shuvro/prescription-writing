@@ -220,7 +220,7 @@ describe("exam pictures print under their own section", () => {
   it("tags every group and picture with its template section", () => {
     expect(exam.groups.map((g) => g.id)).toEqual(["ear", "nose", "throat", "audiology"]);
     expect(exam.diagrams.map((d) => [d.title, d.section])).toEqual([
-      ["Right TM", "ear"], ["Left TM", "ear"], ["Nose & sinuses", "nose"], ["Key", "nose"], ["Oropharynx", "throat"], ["Key", "throat"], ["Audiogram (O right, X left)", "audiology"],
+      ["Right TM", "ear"], ["Left TM", "ear"], ["Key", "ear"], ["Nose & sinuses", "nose"], ["Key", "nose"], ["Oropharynx", "throat"], ["Key", "throat"], ["Audiogram (O right, X left)", "audiology"],
     ]);
   });
 
