@@ -1,6 +1,7 @@
 "use client";
 
 import { usePowerSync } from "@powersync/react";
+import { Pill, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listMedicines, medicineCount, searchMedicineCount, searchMedicines, type MedicineHit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
@@ -56,44 +57,57 @@ export function MedicinesScreen() {
   const from = hits.length ? safePage * PAGE + 1 : 0;
   const to = safePage * PAGE + hits.length;
 
+  const statusLine =
+    catalogue == null
+      ? "Loading offline catalogue…"
+      : catalogue === 0
+        ? "Catalogue still downloading to this device"
+        : searching
+          ? `${matched.toLocaleString("en-IN")} matches`
+          : "Browse brand or generic — works offline";
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">Medicine database</h1>
-          <p className="text-sm text-slate-500">
-            {catalogue == null
-              ? "Loading the offline catalogue…"
-              : catalogue === 0
-                ? "The catalogue is still downloading to this device."
-                : "Search by brand or generic. The list stays on this device."}
-          </p>
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 ring-1 ring-brand-100" aria-hidden>
+            <Pill className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-base font-semibold text-slate-900">Medicines</h1>
+            <p className="text-xs text-slate-500">{statusLine}</p>
+          </div>
         </div>
         {catalogue != null && catalogue > 0 && (
-          <p className="rounded-md bg-brand-50 px-2.5 py-1 text-sm font-medium tabular-nums text-brand-700">
-            {catalogue.toLocaleString("en-IN")} medicines
+          <p className="rounded-md border border-brand-100 bg-brand-50/80 px-2 py-1 text-xs font-semibold tabular-nums text-brand-800">
+            {catalogue.toLocaleString("en-IN")} in catalogue
           </p>
         )}
-      </div>
-      <div className="card overflow-hidden">
-        <div className="border-b border-slate-100 bg-slate-50/70 px-3 py-2">
-          <input
-            className="input bg-white"
-            placeholder="Search brand or generic…"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setPage(0);
-            }}
-            data-testid="meds-browse-search"
-            autoFocus
-          />
+      </header>
+
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-2.5 py-1.5">
+          <div className="relative max-w-md">
+            <Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden />
+            <input
+              className="input h-8 w-full pl-7 text-sm"
+              placeholder="Search brand or generic (min 2 letters)…"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setPage(0);
+              }}
+              data-testid="meds-browse-search"
+              autoFocus
+            />
+          </div>
         </div>
+
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
               <tr>
-                <th className="w-14">#</th>
+                <th className="w-12">#</th>
                 <th>Brand</th>
                 <th>Generic</th>
                 <th>Form</th>
@@ -103,11 +117,13 @@ export function MedicinesScreen() {
             </thead>
             <tbody>
               {hits.map((m, i) => (
-                <tr key={m.id} className="hover:bg-brand-50/40">
-                  <td className="tabular-nums text-slate-400">{safePage * PAGE + i + 1}</td>
+                <tr key={m.id} className="hover:bg-slate-50/80">
+                  <td className="tabular-nums text-xs text-slate-400">{safePage * PAGE + i + 1}</td>
                   <td className="font-medium text-slate-900">
                     {m.brand_name}
-                    {m.is_favorite ? <span className="ml-1.5 text-[10px] font-semibold tracking-wide text-brand-600 uppercase">Saved</span> : null}
+                    {m.is_favorite ? (
+                      <span className="ml-1.5 rounded bg-brand-50 px-1 py-0.5 text-[10px] font-semibold text-brand-700 ring-1 ring-brand-100">Saved</span>
+                    ) : null}
                   </td>
                   <td className="text-slate-600">{m.generic_text || "—"}</td>
                   <td>
@@ -118,20 +134,20 @@ export function MedicinesScreen() {
                     )}
                   </td>
                   <td className="whitespace-nowrap tabular-nums text-slate-700">{m.strength_text || "—"}</td>
-                  <td className="text-slate-500">{m.company_name ?? "—"}</td>
+                  <td className="max-w-[10rem] truncate text-slate-500">{m.company_name ?? "—"}</td>
                 </tr>
               ))}
               {catalogue === null && !hits.length &&
-                Array.from({ length: 8 }, (_, i) => (
+                Array.from({ length: 6 }, (_, i) => (
                   <tr key={i}>
-                    <td colSpan={6} className="py-2.5">
-                      <span className="block h-3 w-full max-w-md animate-pulse rounded bg-slate-200" />
+                    <td colSpan={6} className="py-2">
+                      <span className="block h-3 w-full max-w-lg animate-pulse rounded bg-slate-200" />
                     </td>
                   </tr>
                 ))}
               {!hits.length && catalogue !== null && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                  <td colSpan={6} className="py-8 text-center text-sm text-slate-500">
                     {searching ? "No medicine matches that search." : catalogue === 0 ? "No medicines downloaded yet." : "No medicines on this page."}
                   </td>
                 </tr>
@@ -139,15 +155,16 @@ export function MedicinesScreen() {
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
-          <p className="mr-auto text-xs text-slate-500 tabular-nums">
+
+        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 border-t border-slate-100 px-2.5 py-1.5">
+          <p className="mr-auto text-xs tabular-nums text-slate-500">
             {hits.length ? `${from}–${to} of ${total.toLocaleString("en-IN")}` : "0 results"}
-            <span className="text-slate-400"> · {PAGE} per page</span>
+            <span className="text-slate-400"> · {PAGE}/page</span>
           </p>
           {total > PAGE && (
-            <nav className="flex items-center gap-1" aria-label="Pages">
+            <nav className="flex flex-wrap items-center gap-0.5" aria-label="Pages">
               <button type="button" className="btn-secondary h-7 px-2 text-xs" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} aria-label="Previous page">
-                Previous
+                Prev
               </button>
               {pageWindow(safePage, pages).map((item, i) =>
                 item === "gap" ? (
@@ -156,7 +173,11 @@ export function MedicinesScreen() {
                   <button
                     key={item}
                     type="button"
-                    className={`h-7 min-w-7 rounded-md border px-1.5 text-xs tabular-nums ${item === safePage ? "border-brand-600 bg-brand-600 font-medium text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}
+                    className={`h-7 min-w-7 rounded-md border px-1.5 text-xs tabular-nums ${
+                      item === safePage
+                        ? "border-brand-600 bg-brand-600 font-medium text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
                     aria-current={item === safePage ? "page" : undefined}
                     onClick={() => setPage(item)}
                   >
@@ -164,13 +185,19 @@ export function MedicinesScreen() {
                   </button>
                 ),
               )}
-              <button type="button" className="btn-secondary h-7 px-2 text-xs" disabled={safePage + 1 >= pages} onClick={() => setPage(safePage + 1)} aria-label="Next page">
+              <button
+                type="button"
+                className="btn-secondary h-7 px-2 text-xs"
+                disabled={safePage + 1 >= pages}
+                onClick={() => setPage(safePage + 1)}
+                aria-label="Next page"
+              >
                 Next
               </button>
             </nav>
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }

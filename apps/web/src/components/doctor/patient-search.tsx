@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@powersync/react";
+import { Search } from "lucide-react";
 import { useState } from "react";
 import { Link } from "@/lib/doctor/router";
 import { ageLabel, normaliseMobile } from "@/lib/doctor/util";
@@ -35,22 +36,39 @@ export function PatientSearch({ onPick, actionLabel }: { onPick: (p: PatientHit)
   const [q, setQ] = useState("");
   const { data } = usePatientSearch(q, 8);
   return (
-    <div className="card p-2">
-      <input className="input" placeholder="Search patient by mobile, name or ID…" value={q} onChange={(e) => setQ(e.target.value)} data-testid="patient-search" />
+    <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
+      <div className="relative">
+        <Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden />
+        <input
+          className="input h-8 w-full pl-7 text-sm"
+          placeholder="Search by mobile, name or ID…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          data-testid="patient-search"
+        />
+      </div>
       {q.trim().length >= 2 && (
-        <ul className="mt-1.5 divide-y divide-slate-100">
+        <ul className="mt-2 divide-y divide-slate-100 rounded-md border border-slate-100">
           {data.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-1.5 py-1 text-sm">
-              <Link to={`/patients/${p.id}`} className="hover:underline">
-                <b>{p.name}</b> <span className="text-slate-500">{ageLabel(p.dob)} {p.sex?.[0]?.toUpperCase()} · {p.mobile} · {p.code}</span>
-                {p.last_visit && <span className="ml-2 text-xs text-slate-400">last visit {p.last_visit}</span>}
-              </Link>
-              <button className="btn-secondary text-xs" onClick={() => onPick(p)}>{actionLabel}</button>
+            <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 text-sm">
+              <div className="min-w-0">
+                <Link to={`/patients/${p.id}`} className="font-medium text-brand-700 hover:underline">
+                  {p.name}
+                </Link>
+                <p className="text-xs text-slate-500">
+                  {ageLabel(p.dob)}
+                  {p.sex ? ` · ${p.sex[0]!.toUpperCase()}` : ""}
+                  {p.mobile ? ` · ${p.mobile}` : ""}
+                  {p.code ? ` · ${p.code}` : ""}
+                  {p.last_visit ? <span className="text-slate-400"> · last {p.last_visit}</span> : null}
+                </p>
+              </div>
+              <button type="button" className="btn-primary h-7 shrink-0 px-2 text-xs" onClick={() => onPick(p)}>
+                {actionLabel}
+              </button>
             </li>
           ))}
-          {!data.length && (
-            <li className="py-2 text-sm text-slate-500">No match. <Link to="/patients/new" className="text-brand-700 underline">Register new patient</Link></li>
-          )}
+          {!data.length && <li className="px-2 py-3 text-center text-sm text-slate-500">No match.</li>}
         </ul>
       )}
     </div>

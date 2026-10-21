@@ -3,7 +3,15 @@
 import { usePowerSync, useQuery } from "@powersync/react";
 import { ArrowLeft, CalendarPlus, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { checkInAppointment, createPatient, startVisit, updatePatient, type PatientInput, type PregnancyStatus } from "@/lib/doctor/data";
+import {
+  checkInAppointment,
+  createPatient,
+  startVisit,
+  updatePatient,
+  type PatientInput,
+  type PregnancyStatus,
+  type VisitType,
+} from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
@@ -31,12 +39,37 @@ interface FormState {
   consent: boolean;
   birthWeightKg: string;
   gestationalAgeWeeks: string;
+  /** Visit type when saving and starting a visit (new registration only). */
+  visitNote: VisitType;
 }
+
+const VISIT_NOTE_OPTIONS: { value: VisitType; label: string }[] = [
+  { value: "new", label: "New" },
+  { value: "followup", label: "Follow-up" },
+  { value: "report", label: "Report showing" },
+];
 
 const EMPTY: FormState = {
   name: "", ageYears: "", ageMonths: "", ageDays: "", dob: "", useDob: false, sex: "", mobile: "", address: "", allergies: "",
   pregnancyStatus: "", guardianName: "", referredBy: "", nid: "", brn: "", healthId: "", notes: "", consent: false, birthWeightKg: "", gestationalAgeWeeks: "",
+  visitNote: "new",
 };
+
+function VisitNoteSelect({ value, onChange, id }: { value: VisitType; onChange: (v: VisitType) => void; id?: string }) {
+  return (
+    <select
+      id={id}
+      className="input"
+      value={value}
+      onChange={(e) => onChange(e.target.value as VisitType)}
+      data-testid="patient-visit-note"
+    >
+      {VISIT_NOTE_OPTIONS.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  );
+}
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -137,6 +170,7 @@ export function PatientEdit({
       consent: !!existing.consent_at,
       birthWeightKg: existing.birth_weight_kg == null ? "" : String(existing.birth_weight_kg),
       gestationalAgeWeeks: existing.gestational_age_weeks == null ? "" : String(existing.gestational_age_weeks),
+      visitNote: "new",
     });
   }, [existing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -193,6 +227,7 @@ export function PatientEdit({
           userId: session.userId,
           asDoctor: session.tenantRole === "doctor",
           specialtyCode: doctors.find((d) => d.id === session.userId)?.specialty_code ?? doctors[0]?.specialty_code ?? "general",
+          visitType: f.visitNote,
         });
         onClose?.();
         navigate(`/visit/${enc}`);
@@ -204,7 +239,7 @@ export function PatientEdit({
         if (doctorId) {
           const enc = await startVisit(db, {
             tenantId: session.tenantId, userId: session.userId, patientId: id, doctorUserId: doctorId, chamberId: chamber?.id ?? null,
-            specialtyCode: doctors.find((d) => d.id === doctorId)?.specialty_code ?? "general", asDoctor: isDoctor,
+            specialtyCode: doctors.find((d) => d.id === doctorId)?.specialty_code ?? "general", asDoctor: isDoctor, visitType: f.visitNote,
           });
           onClose?.();
           navigate(`/visit/${enc}`);
@@ -269,6 +304,10 @@ export function PatientEdit({
         <label className="label" htmlFor="ref-by-m">Ref By — Referring doctor</label>
         <input id="ref-by-m" className="input" list="patient-referrers" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Referring doctor's name (blank: self)" data-testid="patient-ref-by" />
         <datalist id="patient-referrers">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
+      </div>
+      <div className="md:col-span-3">
+        <label className="label" htmlFor="visit-note-m">Note</label>
+        <VisitNoteSelect id="visit-note-m" value={f.visitNote} onChange={(v) => set("visitNote", v)} />
       </div>
       <details className="md:col-span-6">
         <summary className="cursor-pointer text-sm font-medium text-slate-700">National IDs & notes (optional)</summary>
@@ -356,6 +395,12 @@ export function PatientEdit({
             <input id="ref-by" className="input" list="patient-referrers-page" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Blank: self" data-testid="patient-ref-by" />
             <datalist id="patient-referrers-page">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
           </div>
+          {!patientId && (
+            <div className={cell3}>
+              <label className="label" htmlFor="visit-note">Note</label>
+              <VisitNoteSelect id="visit-note" value={f.visitNote} onChange={(v) => set("visitNote", v)} />
+            </div>
+          )}
           {(f.sex === "female" || f.sex === "") && (
             <div className={cell3}>
               <label className="label" htmlFor="preg">Pregnancy / lactation</label>
