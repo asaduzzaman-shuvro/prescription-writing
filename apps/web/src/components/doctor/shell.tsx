@@ -18,6 +18,7 @@ import {
   Pill,
   Search,
   Settings,
+  Sparkles,
   UserCheck,
   Users,
   UsersRound,
@@ -334,6 +335,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
 
   const home: NavItem[] = [
     { to: "/", label: "Dashboard", match: route.length === 0, icon: <LayoutDashboard className="h-4 w-4 shrink-0" /> },
+    { to: "/sakura-web", label: "Sakura Web", match: route[0] === "sakura-web", icon: <Sparkles className="h-4 w-4 shrink-0" /> },
     { to: "/patients/new", label: "New prescription", match: route[0] === "patients" && route[1] === "new", icon: <ClipboardPlus className="h-4 w-4 shrink-0" /> },
     { to: "/patients", label: "Patients", match: route[0] === "patients" && route[1] !== "new", icon: <Users className="h-4 w-4 shrink-0" /> },
     { to: "/bookings", label: "Bookings", match: route[0] === "bookings", icon: <CalendarDays className="h-4 w-4 shrink-0" /> },
