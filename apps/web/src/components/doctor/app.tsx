@@ -2,8 +2,10 @@
 
 import dynamic from "next/dynamic";
 import { useStatus } from "@powersync/react";
+import { useEffect } from "react";
 import { DetailPageLoading, FormPageLoading, ListPageLoading, PrescriptionLoading } from "@/components/loading-states";
-import { useHashRoute } from "@/lib/doctor/router";
+import { useSession } from "@/lib/doctor/context";
+import { navigate, useHashRoute } from "@/lib/doctor/router";
 import { useCustomSync } from "@/lib/powersync/custom-sync";
 import { CLINIC_SYNC_PRIORITY, clinicDataReady, downloadPercent } from "@/lib/powersync/sync-ready";
 
@@ -31,8 +33,14 @@ const SakuraDashboard = dynamic(() => import("./sakura-dashboard").then((m) => m
 
 export function DoctorApp() {
   const r = useHashRoute();
+  const session = useSession();
   const status = useStatus();
   const custom = useCustomSync();
+
+  useEffect(() => {
+    if (r[0] === "sakura-web" && !session.sakuraWebEnabled) navigate("/");
+  }, [r, session.sakuraWebEnabled]);
+
   // Open once patients/visits are in (priority 1); ~22k medicines keep downloading at priority 3.
   if (!clinicDataReady(status) && !custom.clinicReady) {
     const clinicPct = status.downloadProgress?.untilPriority(CLINIC_SYNC_PRIORITY).downloadedFraction;
@@ -57,7 +65,7 @@ export function DoctorApp() {
     case undefined:
       return <Today />;
     case "sakura-web":
-      return <SakuraDashboard />;
+      return session.sakuraWebEnabled ? <SakuraDashboard /> : null;
     case "patients":
       if (r[1] === "new") return <PatientEdit />;
       if (r[1] && r[2] === "edit") return <PatientEdit patientId={r[1]} />;

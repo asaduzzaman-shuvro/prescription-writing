@@ -1,10 +1,18 @@
+import "server-only";
+
+import { s } from "@rx/db";
+import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { cookies } from "next/headers";
+import { ownerDb } from "@/lib/db";
+import { getSession } from "@/lib/session";
 
 export const SAKURA_TOKEN_COOKIE = "sakura_access_token";
 export const SAKURA_REFRESH_COOKIE = "sakura_refresh_token";
 
-/** In-memory token from env auto-login (shared across requests in this Node process). */
-let cachedEnvToken: { token: string; expiresAt: number } | null = null;
+type Creds = { phone: string; password: string; userId: string };
+
+/** In-memory JWT cache keyed by doctor userId. */
+const tokenCache = new Map<string, { token: string; expiresAt: number; phone: string }>();
 
 /** Sakura Nest API base, including `/api` suffix. */
 export function sakuraApiBase(): string {
@@ -12,6 +20,7 @@ export function sakuraApiBase(): string {
   return raw;
 }
 
+/** @deprecated Prefer admin-managed doctor credentials via getSakuraDoctorCredentials. */
 export function sakuraEnvCredentials(): { phone: string; password: string } | null {
   const phone = (process.env.SAKURA_PHONE || "").trim();
   const password = process.env.SAKURA_PASSWORD || "";
@@ -24,18 +33,58 @@ export async function getSakuraCookieToken(): Promise<string | null> {
   return jar.get(SAKURA_TOKEN_COOKIE)?.value ?? null;
 }
 
-/** Login to Sakura with env credentials and cache the JWT (~10h). */
-export async function loginSakuraWithEnv(): Promise<string> {
-  const creds = sakuraEnvCredentials();
-  if (!creds) {
-    throw new Error(
-      "SAKURA_PHONE and SAKURA_PASSWORD are not set. Add them to apps/web/.env.local so RxPad can open Sakura Web without a second login.",
-    );
+/**
+ * Sakura phone/password for the logged-in clinic user:
+ * own doctor profile first, otherwise any doctor in the same chamber with credentials set.
+ */
+export async function getSakuraDoctorCredentials(): Promise<Creds | null> {
+  const session = await getSession();
+  if (!session?.tenantId) return null;
+
+  const [own] = await ownerDb
+    .select({
+      userId: s.doctorProfile.userId,
+      phone: s.doctorProfile.sakuraPhone,
+      password: s.doctorProfile.sakuraPassword,
+    })
+    .from(s.doctorProfile)
+    .where(eq(s.doctorProfile.userId, session.userId))
+    .limit(1);
+
+  if (own?.phone?.trim() && own.password) {
+    return { userId: own.userId, phone: own.phone.trim(), password: own.password };
   }
 
+  const [any] = await ownerDb
+    .select({
+      userId: s.doctorProfile.userId,
+      phone: s.doctorProfile.sakuraPhone,
+      password: s.doctorProfile.sakuraPassword,
+    })
+    .from(s.doctorProfile)
+    .where(
+      and(
+        eq(s.doctorProfile.tenantId, session.tenantId),
+        isNotNull(s.doctorProfile.sakuraPhone),
+        isNotNull(s.doctorProfile.sakuraPassword),
+        ne(s.doctorProfile.sakuraPhone, ""),
+        ne(s.doctorProfile.sakuraPassword, ""),
+      ),
+    )
+    .limit(1);
+
+  if (any?.phone?.trim() && any.password) {
+    return { userId: any.userId, phone: any.phone.trim(), password: any.password };
+  }
+
+  return null;
+}
+
+async function loginSakuraWithCreds(creds: Creds): Promise<string> {
   const now = Date.now();
-  if (cachedEnvToken && cachedEnvToken.expiresAt > now + 60_000) {
-    return cachedEnvToken.token;
+  const cached = tokenCache.get(creds.userId);
+  if (cached && cached.phone === creds.phone && cached.expiresAt > now + 60_000) {
+    return cached.token;
   }
 
   let upstream: Response;
@@ -59,32 +108,52 @@ export async function loginSakuraWithEnv(): Promise<string> {
 
   if (!upstream.ok || !data.token) {
     throw new Error(
-      data.message || data.error || `Sakura auto-login failed (${upstream.status}). Check SAKURA_PHONE / SAKURA_PASSWORD.`,
+      data.message ||
+        data.error ||
+        `Sakura auto-login failed (${upstream.status}). Check this doctor's Sakura Web phone/password in Admin → Doctors.`,
     );
   }
 
-  cachedEnvToken = {
+  tokenCache.set(creds.userId, {
     token: data.token,
-    // JWT often lasts hours; refresh hourly unless we get a 401 later.
+    phone: creds.phone,
     expiresAt: now + 60 * 60 * 1000,
-  };
+  });
   return data.token;
 }
 
-export function clearSakuraEnvTokenCache() {
-  cachedEnvToken = null;
+/** Login using admin-configured credentials for the current doctor/chamber. */
+export async function loginSakuraWithDoctor(): Promise<string> {
+  const creds = await getSakuraDoctorCredentials();
+  if (!creds) {
+    throw new Error(
+      "Sakura Web credentials are not set for this doctor. Ask a platform admin to add them under Doctors & chambers → Sakura Web.",
+    );
+  }
+  return loginSakuraWithCreds(creds);
+}
+
+/** @deprecated use loginSakuraWithDoctor */
+export async function loginSakuraWithEnv(): Promise<string> {
+  return loginSakuraWithDoctor();
+}
+
+export function clearSakuraEnvTokenCache(userId?: string) {
+  if (userId) tokenCache.delete(userId);
+  else tokenCache.clear();
 }
 
 /**
  * Token for proxying Sakura APIs.
- * Prefer httpOnly cookie (manual connect); otherwise auto-login with env credentials.
+ * Prefer httpOnly cookie (manual connect); otherwise auto-login with admin-managed doctor credentials.
  */
 export async function resolveSakuraAccessToken(): Promise<string | null> {
   const cookieToken = await getSakuraCookieToken();
   if (cookieToken) return cookieToken;
-  if (!sakuraEnvCredentials()) return null;
+  const creds = await getSakuraDoctorCredentials();
+  if (!creds) return null;
   try {
-    return await loginSakuraWithEnv();
+    return await loginSakuraWithCreds(creds);
   } catch {
     return null;
   }

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { invalidateTenantBrief } from "@/lib/tenant-access";
 import { ownerDb } from "@/lib/db";
+import { clearSakuraEnvTokenCache } from "@/lib/sakura/server";
 import { requireAdmin } from "@/lib/session";
 
 const list = (v: FormDataEntryValue | null) => String(v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -216,4 +217,77 @@ export async function addSmsCredits(form: FormData) {
   await ownerDb.update(s.tenant).set({ smsCredits: sql`greatest(0, ${s.tenant.smsCredits} + ${credits})`, updatedAt: new Date() }).where(eq(s.tenant.id, tenantId));
   await audit({ actorUserId: session.userId, tenantId, action: "billing.sms_credits", entity: "tenant", entityId: tenantId, after: { credits } });
   revalidatePath(`/admin/doctors/${tenantId}`);
+}
+
+const SakuraCreds = z.object({
+  userId: z.string().uuid(),
+  phone: z.string().trim().min(8, "Sakura phone is required"),
+  password: z.string().min(1, "Sakura password is required"),
+});
+
+/** Save or replace this doctor's Sakura Web phone + password (admin-managed). */
+export async function saveSakuraCredentials(_prev: unknown, form: FormData) {
+  const session = await requireAdmin({ superOnly: true });
+  const parsed = SakuraCreds.safeParse({
+    userId: form.get("userId"),
+    phone: form.get("phone"),
+    password: form.get("password"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const { userId, phone, password } = parsed.data;
+  const [before] = await ownerDb
+    .select({
+      tenantId: s.doctorProfile.tenantId,
+      sakuraPhone: s.doctorProfile.sakuraPhone,
+    })
+    .from(s.doctorProfile)
+    .where(eq(s.doctorProfile.userId, userId));
+  if (!before) return { error: "Doctor not found" };
+  await ownerDb
+    .update(s.doctorProfile)
+    .set({ sakuraPhone: phone, sakuraPassword: password, updatedAt: new Date() })
+    .where(eq(s.doctorProfile.userId, userId));
+  clearSakuraEnvTokenCache(userId);
+  await audit({
+    actorUserId: session.userId,
+    tenantId: before.tenantId,
+    action: before.sakuraPhone ? "doctor.sakura.update" : "doctor.sakura.add",
+    entity: "doctor_profile",
+    entityId: userId,
+    after: { sakuraPhone: phone, sakuraPassword: "[set]" },
+  });
+  revalidatePath("/admin/doctors");
+  revalidatePath(`/admin/doctors/${before.tenantId}`);
+  return { ok: true };
+}
+
+/** Clear Sakura Web credentials for this doctor. */
+export async function deleteSakuraCredentials(_prev: unknown, form: FormData) {
+  const session = await requireAdmin({ superOnly: true });
+  const userId = String(form.get("userId") ?? "");
+  if (!z.string().uuid().safeParse(userId).success) return { error: "Invalid doctor" };
+  const [before] = await ownerDb
+    .select({
+      tenantId: s.doctorProfile.tenantId,
+      sakuraPhone: s.doctorProfile.sakuraPhone,
+    })
+    .from(s.doctorProfile)
+    .where(eq(s.doctorProfile.userId, userId));
+  if (!before) return { error: "Doctor not found" };
+  await ownerDb
+    .update(s.doctorProfile)
+    .set({ sakuraPhone: null, sakuraPassword: null, updatedAt: new Date() })
+    .where(eq(s.doctorProfile.userId, userId));
+  clearSakuraEnvTokenCache(userId);
+  await audit({
+    actorUserId: session.userId,
+    tenantId: before.tenantId,
+    action: "doctor.sakura.delete",
+    entity: "doctor_profile",
+    entityId: userId,
+    before: { sakuraPhone: before.sakuraPhone },
+  });
+  revalidatePath("/admin/doctors");
+  revalidatePath(`/admin/doctors/${before.tenantId}`);
+  return { ok: true };
 }

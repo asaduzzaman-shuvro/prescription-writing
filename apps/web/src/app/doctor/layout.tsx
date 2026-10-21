@@ -1,4 +1,5 @@
 import { logout } from "@/app/login/actions";
+import { getSakuraDoctorCredentials } from "@/lib/sakura/server";
 import { requireClinic } from "@/lib/session";
 import { tenantBrief } from "@/lib/tenant-access";
 import { DoctorRoot } from "./root";
@@ -23,6 +24,7 @@ export default async function DoctorLayout({ children }: { children: React.React
   if (t.status === "suspended") {
     return <main className="p-8 text-center text-slate-600">This chamber is suspended. Please contact RxPad support.</main>;
   }
+  const sakuraCreds = await getSakuraDoctorCredentials();
   return (
     <DoctorRoot
       session={{
@@ -33,6 +35,7 @@ export default async function DoctorLayout({ children }: { children: React.React
         tenantRole: session.tenantRole!,
         publicBaseUrl: process.env.PUBLIC_BASE_URL ?? "http://localhost:3000",
         planExpiresAt: t?.planExpiresAt ?? null,
+        sakuraWebEnabled: Boolean(sakuraCreds),
       }}
     >
       {children}
