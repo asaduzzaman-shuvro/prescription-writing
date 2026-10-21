@@ -562,7 +562,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <PlanBanner />
-        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-x-hidden overflow-y-auto p-1.5 sm:p-2 lg:h-0 lg:p-2 xl:[&:has([data-visit-fill])]:overflow-hidden">
+        <main className="flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto p-2 sm:p-3 lg:h-0 lg:px-4 lg:py-3 xl:[&:has([data-visit-fill])]:overflow-hidden">
           <div className="flex flex-col lg:min-h-0 lg:flex-1 xl:[&:has([data-visit-fill])]:overflow-hidden">
             {children}
           </div>
