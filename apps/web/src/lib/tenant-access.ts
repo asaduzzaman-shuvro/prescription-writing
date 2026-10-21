@@ -20,6 +20,13 @@ export interface TenantBrief {
   name: string;
 }
 
+/** Only `active` chambers may sign in, switch clinic, or sync. */
+export function tenantAccessMessage(status: string): string | null {
+  if (status === "active") return null;
+  if (status === "pending") return "This chamber is pending approval. Contact support.";
+  return "This chamber is inactive. Contact support.";
+}
+
 const BRIEF_TTL_MS = 15_000;
 const briefs = new Map<string, TenantBrief & { at: number }>();
 
@@ -49,7 +56,8 @@ export async function tenantBrief(tenantId: string): Promise<TenantBrief | null>
 export async function assertTenantWritable(tenantId: string): Promise<void> {
   const t = await tenantBrief(tenantId);
   if (!t) throw new TenantAccessError("Chamber not found", 403);
-  if (t.status === "suspended") throw new TenantAccessError("This chamber is suspended. Contact support.", 403);
+  const blocked = tenantAccessMessage(t.status);
+  if (blocked) throw new TenantAccessError(blocked, 403);
   if (t.planExpiresAt) {
     const end = new Date(`${t.planExpiresAt}T23:59:59`);
     if (end.getTime() < Date.now()) {

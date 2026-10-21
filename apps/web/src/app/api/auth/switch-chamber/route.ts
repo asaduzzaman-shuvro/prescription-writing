@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { ownerDb } from "@/lib/db";
+import { tenantAccessMessage } from "@/lib/tenant-access";
 import { createSession, getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -23,7 +24,8 @@ export async function POST(req: Request) {
     .innerJoin(s.tenant, eq(s.tenant.id, s.membership.tenantId))
     .where(and(eq(s.membership.userId, session.userId), eq(s.membership.tenantId, parsed.data.tenantId)));
   if (!m) return NextResponse.json({ error: "not a member of that chamber" }, { status: 403 });
-  if (m.status === "suspended") return NextResponse.json({ error: "chamber suspended" }, { status: 403 });
+  const blocked = tenantAccessMessage(m.status);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
   await createSession({
     userId: session.userId,
@@ -59,7 +61,7 @@ export async function GET() {
   return NextResponse.json({
     currentTenantId: session.tenantId,
     chambers: rows
-      .filter((r) => r.status !== "suspended")
+      .filter((r) => r.status === "active")
       .map((r) => ({ tenantId: r.tenantId, name: r.name, role: r.role, current: r.tenantId === session.tenantId })),
   });
 }
