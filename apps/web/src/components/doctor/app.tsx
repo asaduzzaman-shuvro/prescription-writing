@@ -27,6 +27,7 @@ const LabSettingsScreen = dynamic(() => import("./lab-settings").then((m) => m.L
 const MedicinesScreen = dynamic(() => import("./medicines").then((m) => m.MedicinesScreen), { loading: list });
 const SettingsScreen = dynamic(() => import("./settings").then((m) => m.SettingsScreen), { loading: form });
 const TemplatesScreen = dynamic(() => import("./templates").then((m) => m.TemplatesScreen), { loading: list });
+const SakuraDashboard = dynamic(() => import("./sakura-dashboard").then((m) => m.SakuraDashboard), { loading: list });
 
 export function DoctorApp() {
   const r = useHashRoute();
@@ -55,6 +56,8 @@ export function DoctorApp() {
   switch (r[0]) {
     case undefined:
       return <Today />;
+    case "sakura-web":
+      return <SakuraDashboard />;
     case "patients":
       if (r[1] === "new") return <PatientEdit />;
       if (r[1] && r[2] === "edit") return <PatientEdit patientId={r[1]} />;

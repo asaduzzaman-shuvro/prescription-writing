@@ -46,6 +46,7 @@ import {
   type Sex,
   type Vitals,
 } from "@rx/core";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChipList } from "./chips";
 import { KeyValueList } from "./kv-list";
@@ -56,6 +57,28 @@ import { RxItemRow } from "./rx-item";
 import { SpecialtyExam } from "./specialty-exam";
 import { VisitPaneProvider, VisitSection } from "./visit-section";
 import { VisitSidePanel, type VisitRxActions } from "./visit-side-panel";
+
+function goVisitBack() {
+  if (typeof window !== "undefined" && window.history.length > 1) {
+    window.history.back();
+    return;
+  }
+  navigate("/sakura-web");
+}
+
+function VisitBackButton({ className = "" }: { className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={goVisitBack}
+      data-testid="visit-back"
+      className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800 ${className}`}
+    >
+      <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      Back
+    </button>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Vitals (assistant or doctor)
@@ -693,6 +716,7 @@ function RxEditor({
         className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-white p-1 xl:flex-nowrap"
         data-testid="rx-toolbar"
       >
+        <VisitBackButton />
         <nav
           className="hidden shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5 xl:flex"
           aria-label="Visit sections"
@@ -1548,52 +1572,58 @@ export function VisitScreen({
               patientId={p.id}
               sex={(p.sex as Sex | null) ?? null}
               leading={
-                <nav
-                  className="hidden shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5 xl:flex"
-                  aria-label="Visit sections"
-                  data-testid="visit-tabs"
-                >
-                  <Link
-                    to={`/visit/${encounterId}${rxQuery}`}
-                    className="rounded-md px-2.5 py-1 text-xs whitespace-nowrap text-slate-600 hover:bg-white/60 hover:text-slate-900"
-                    data-testid="visit-tab-rx"
+                <div className="hidden shrink-0 items-center gap-1.5 xl:flex">
+                  <VisitBackButton />
+                  <nav
+                    className="flex shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5"
+                    aria-label="Visit sections"
+                    data-testid="visit-tabs"
                   >
-                    Prescription
-                  </Link>
-                  <Link
-                    to={`/visit/${encounterId}/reports`}
-                    className="rounded-md bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap text-brand-700 shadow-sm"
-                    data-testid="visit-tab-reports"
-                  >
-                    Reports
-                  </Link>
-                </nav>
+                    <Link
+                      to={`/visit/${encounterId}${rxQuery}`}
+                      className="rounded-md px-2.5 py-1 text-xs whitespace-nowrap text-slate-600 hover:bg-white/60 hover:text-slate-900"
+                      data-testid="visit-tab-rx"
+                    >
+                      Prescription
+                    </Link>
+                    <Link
+                      to={`/visit/${encounterId}/reports`}
+                      className="rounded-md bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap text-brand-700 shadow-sm"
+                      data-testid="visit-tab-reports"
+                    >
+                      Reports
+                    </Link>
+                  </nav>
+                </div>
               }
             />
           </div>
         ) : (
           <>
             <div className={`card shrink-0 flex-col gap-2 p-2 lg:flex-row lg:items-start lg:gap-3 ${isDoctor ? "hidden" : "flex"}`}>
-              <nav
-                className="hidden w-full shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5 xl:flex xl:w-auto"
-                aria-label="Visit sections"
-                data-testid="visit-tabs"
-              >
-                <Link
-                  to={`/visit/${encounterId}${rxQuery}`}
-                  className={`${tabClass(true)} flex-1 text-center lg:flex-none`}
-                  data-testid="visit-tab-rx"
+              <div className="hidden w-full shrink-0 items-center gap-1.5 xl:flex xl:w-auto">
+                <VisitBackButton />
+                <nav
+                  className="flex w-full shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5 xl:w-auto"
+                  aria-label="Visit sections"
+                  data-testid="visit-tabs"
                 >
-                  Prescription
-                </Link>
-                <Link
-                  to={`/visit/${encounterId}/reports`}
-                  className={`${tabClass(false)} flex-1 text-center lg:flex-none`}
-                  data-testid="visit-tab-reports"
-                >
-                  Reports
-                </Link>
-              </nav>
+                  <Link
+                    to={`/visit/${encounterId}${rxQuery}`}
+                    className={`${tabClass(true)} flex-1 text-center lg:flex-none`}
+                    data-testid="visit-tab-rx"
+                  >
+                    Prescription
+                  </Link>
+                  <Link
+                    to={`/visit/${encounterId}/reports`}
+                    className={`${tabClass(false)} flex-1 text-center lg:flex-none`}
+                    data-testid="visit-tab-reports"
+                  >
+                    Reports
+                  </Link>
+                </nav>
+              </div>
               {/* Assistants: vitals here. Doctors: §1 inside RxEditor (accordion on phone/tablet). */}
               {!isDoctor && (
                 <div className="hidden min-w-0 w-full border-slate-100 xl:block xl:border-l xl:border-t-0 xl:pt-0 xl:pl-3">

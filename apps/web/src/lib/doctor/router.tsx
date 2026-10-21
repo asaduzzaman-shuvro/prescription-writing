@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type AnchorHTMLAttributes, type React
  * Minimal hash router for the doctor app. Everything lives on the single /doctor page so the
  * service worker can serve it offline; navigation never asks the server for anything.
  *   #/                 today
+ *   #/sakura-web       Sakura queue dashboard (live Sakura Nest APIs)
  *   #/patients         patient list
  *   #/patients/new
  *   #/patients/<id>
