@@ -8,6 +8,7 @@ import { audit } from "@/lib/audit";
 import { ownerDb } from "@/lib/db";
 import { checkLoginRateLimit, clearLoginFailures, clientIpFromHeaders, recordLoginFailure } from "@/lib/login-rate-limit";
 import { issueLoginTicket, readLoginTicket } from "@/lib/login-ticket";
+import { tenantAccessMessage } from "@/lib/tenant-access";
 import { createSession, destroySession, type Session } from "@/lib/session";
 import { verifyTotp } from "@/lib/totp";
 
@@ -33,7 +34,8 @@ async function finishLogin(user: typeof s.appUser.$inferSelect, tenantId: string
   if (!user.platformRole && !tenantId) return { error: "Your account is not linked to a chamber yet" } satisfies LoginState;
   if (!user.platformRole) {
     const [t] = await ownerDb.select({ status: s.tenant.status }).from(s.tenant).where(eq(s.tenant.id, tenantId!));
-    if (t?.status === "suspended") return { error: "This chamber is suspended. Contact support." } satisfies LoginState;
+    const blocked = tenantAccessMessage(t?.status ?? "");
+    if (blocked) return { error: blocked } satisfies LoginState;
   }
   await createSession({
     userId: user.id,
@@ -56,7 +58,7 @@ async function afterPasswordOk(user: typeof s.appUser.$inferSelect): Promise<Log
 }
 
 async function continueAfterMfa(user: typeof s.appUser.$inferSelect): Promise<LoginState> {
-  const ms = (await membershipsFor(user.id)).filter((m) => m.status !== "suspended");
+  const ms = (await membershipsFor(user.id)).filter((m) => m.status === "active");
   if (user.platformRole && ms.length === 0) return finishLogin(user, null, null);
   if (!ms.length) return { error: "Your account is not linked to a chamber yet" };
   if (ms.length === 1) {
@@ -102,7 +104,8 @@ export async function login(_prev: LoginState | undefined, form: FormData): Prom
       .innerJoin(s.tenant, eq(s.tenant.id, s.membership.tenantId))
       .where(and(eq(s.membership.userId, userId), eq(s.membership.tenantId, tenantId)));
     if (!m) return { error: "You are not a member of that chamber" };
-    if (m.status === "suspended") return { error: "This chamber is suspended. Contact support." };
+    const blocked = tenantAccessMessage(m.status);
+    if (blocked) return { error: blocked };
     return finishLogin(user, tenantId, m.role);
   }
 

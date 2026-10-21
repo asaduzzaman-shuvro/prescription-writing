@@ -1,22 +1,54 @@
 import { s } from "@rx/db";
-import { asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import Link from "next/link";
 import { PageHeader, Pager } from "@/components/ui";
 import { ownerDb } from "@/lib/db";
 import { connection } from "next/server";
+import { DoctorsList, type DoctorListRow } from "./doctors-list";
 
 export const metadata = { title: "Doctors & chambers" };
 const SIZE = 50;
+
+const STATUS_FILTERS = [
+  { key: "", label: "All" },
+  { key: "unverified", label: "BMDC unverified" },
+  { key: "active", label: "Active" },
+  { key: "pending", label: "Pending" },
+  { key: "suspended", label: "Inactive" },
+] as const;
+
+function filterHref(filter: string, page?: number) {
+  const q = new URLSearchParams();
+  if (filter) q.set("filter", filter);
+  if (page && page > 1) q.set("page", String(page));
+  const s = q.toString();
+  return s ? `/admin/doctors?${s}` : "/admin/doctors";
+}
 
 export default async function DoctorsPage({ searchParams }: { searchParams: Promise<{ filter?: string; page?: string }> }) {
   await connection();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
-  const unverified = sp.filter === "unverified";
+  const filter = sp.filter ?? "";
+  const unverified = filter === "unverified";
+  const statusFilter = filter === "active" || filter === "pending" || filter === "suspended" ? filter : null;
+
+  const whereParts: SQL[] = [];
+  if (unverified) whereParts.push(isNull(s.doctorProfile.bmdcVerifiedAt));
+  if (statusFilter) whereParts.push(eq(s.tenant.status, statusFilter));
+  const whereClause = whereParts.length ? and(...whereParts) : undefined;
+
   const rows = await ownerDb
     .select({
       tenantId: s.tenant.id,
       tenantName: s.tenant.name,
+      chamberName: sql<string | null>`(
+        select c.name from chamber c
+         where c.tenant_id = ${s.doctorProfile.tenantId}
+           and c.doctor_user_id = ${s.doctorProfile.userId}
+         order by c.created_at
+         limit 1
+      )`,
       status: s.tenant.status,
       userId: s.doctorProfile.userId,
       nameEn: s.doctorProfile.nameEn,
@@ -28,42 +60,55 @@ export default async function DoctorsPage({ searchParams }: { searchParams: Prom
     })
     .from(s.doctorProfile)
     .innerJoin(s.tenant, eq(s.tenant.id, s.doctorProfile.tenantId))
-    .where(unverified ? isNull(s.doctorProfile.bmdcVerifiedAt) : undefined)
+    .where(whereClause)
     .orderBy(asc(s.doctorProfile.nameEn), asc(s.doctorProfile.userId))
     .limit(SIZE + 1)
     .offset((page - 1) * SIZE);
-  const shown = rows.slice(0, SIZE);
+
+  const shown: DoctorListRow[] = rows.slice(0, SIZE).map((r) => ({
+    tenantId: r.tenantId,
+    chamberName: r.chamberName ?? r.tenantName,
+    status: r.status,
+    userId: r.userId,
+    nameEn: r.nameEn,
+    bmdcNumber: r.bmdcNumber,
+    bmdcExpiry: r.bmdcExpiry,
+    verifiedAt: r.verifiedAt ? r.verifiedAt.toISOString() : null,
+    specialty: r.specialty,
+    rxCount: r.rxCount,
+  }));
+
   const today = new Date().toISOString().slice(0, 10);
-  const base = unverified ? "/admin/doctors?filter=unverified" : "/admin/doctors";
+  const base = filterHref(filter);
+
   return (
     <>
-      <PageHeader title="Doctors & chambers" subtitle="Onboarding, BMDC verification and chamber status" actions={<Link href="/admin/doctors/new" className="btn-primary">+ Onboard doctor</Link>} />
-      <div className="mb-2 flex gap-3 text-sm">
-        <Link href="/admin/doctors" className="underline">All</Link>
-        <Link href="/admin/doctors?filter=unverified" className="underline">BMDC unverified</Link>
+      <PageHeader
+        title="Doctors & chambers"
+        subtitle="Verify BMDC, control account status (only Active can sign in), and manage chambers"
+        actions={
+          <Link href="/admin/doctors/new" className="btn-primary">
+            + Onboard doctor
+          </Link>
+        }
+      />
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {STATUS_FILTERS.map((f) => {
+          const on = (f.key || "") === (filter || "");
+          return (
+            <Link
+              key={f.key || "all"}
+              href={filterHref(f.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                on ? "bg-brand-700 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-slate-200/80 hover:bg-slate-50"
+              }`}
+            >
+              {f.label}
+            </Link>
+          );
+        })}
       </div>
-      <div className="card overflow-x-auto">
-        <table className="table">
-          <thead><tr><th>Doctor</th><th>Chamber / tenant</th><th>BMDC</th><th>Verification</th><th>Specialty</th><th>Final Rx</th><th>Status</th></tr></thead>
-          <tbody>
-            {shown.map((r) => {
-              const expired = r.bmdcExpiry && r.bmdcExpiry < today;
-              return (
-                <tr key={r.userId}>
-                  <td><Link className="font-medium text-brand-700 hover:underline" href={`/admin/doctors/${r.tenantId}`}>{r.nameEn}</Link></td>
-                  <td>{r.tenantName}</td>
-                  <td>{r.bmdcNumber}{r.bmdcExpiry && <div className={`text-xs ${expired ? "text-red-600" : "text-slate-500"}`}>{expired ? "Expired " : "Valid to "}{r.bmdcExpiry}</div>}</td>
-                  <td>{r.verifiedAt ? <span className="badge bg-green-50 text-green-700">Verified</span> : <span className="badge bg-amber-50 text-amber-800">Pending</span>}</td>
-                  <td>{r.specialty}</td>
-                  <td className="tabular-nums">{r.rxCount}</td>
-                  <td>{r.status}</td>
-                </tr>
-              );
-            })}
-            {!shown.length && <tr><td colSpan={7} className="text-slate-500">No doctors on this page.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      <DoctorsList rows={shown} today={today} />
       {(page > 1 || rows.length > SIZE) && <Pager page={page} hasNext={rows.length > SIZE} base={base} />}
     </>
   );

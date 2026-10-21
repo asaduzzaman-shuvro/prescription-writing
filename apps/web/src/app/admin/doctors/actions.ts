@@ -38,7 +38,7 @@ export async function onboardDoctor(_prev: unknown, form: FormData) {
   const bmdcClash = await ownerDb.select({ id: s.doctorProfile.userId }).from(s.doctorProfile).where(eq(sql`upper(${s.doctorProfile.bmdcNumber})`, d.bmdcNumber.toUpperCase()));
   if (bmdcClash[0]) return { error: "This BMDC number is already registered" };
   const tenantId = await ownerDb.transaction(async (tx) => {
-    const [t] = await tx.insert(s.tenant).values({ name: d.tenantName, kind: d.kind, status: "active" }).returning({ id: s.tenant.id });
+    const [t] = await tx.insert(s.tenant).values({ name: d.tenantName, kind: d.kind, status: "pending" }).returning({ id: s.tenant.id });
     const [u] = await tx.insert(s.appUser).values({ email: d.email, name: d.name, phone: d.phone || null, passwordHash: await hashPassword(d.password) }).returning({ id: s.appUser.id });
     await tx.insert(s.membership).values({ tenantId: t!.id, userId: u!.id, role: "doctor" });
     await tx.insert(s.doctorProfile).values({
@@ -167,6 +167,44 @@ export async function recordPayment(_prev: unknown, form: FormData) {
     .returning({ id: s.subscriptionPayment.id });
   await settlePayment(row!.id, { gatewayRef: p.data.reference, actorUserId: session.userId });
   revalidatePath(`/admin/doctors/${p.data.tenantId}`);
+  return { ok: true };
+}
+
+export async function deleteDoctorChamber(_prev: unknown, form: FormData) {
+  const session = await requireAdmin({ superOnly: true });
+  const tenantId = String(form.get("tenantId"));
+  const userId = String(form.get("userId"));
+  const [profile] = await ownerDb.select().from(s.doctorProfile).where(and(eq(s.doctorProfile.tenantId, tenantId), eq(s.doctorProfile.userId, userId)));
+  if (!profile) return { error: "Doctor not found" };
+  const [counts] = await ownerDb.execute<{ patients: number; rx: number }>(sql`
+    select (select count(*)::int from patient where tenant_id = ${tenantId}) as patients,
+           (select count(*)::int from prescription where tenant_id = ${tenantId}) as rx
+  `);
+  const row = (Array.isArray(counts) ? counts[0] : counts) as { patients: number; rx: number } | undefined;
+  if ((row?.patients ?? 0) > 0 || (row?.rx ?? 0) > 0) {
+    return { error: "This chamber has patients or prescriptions. Set status to Inactive instead of deleting." };
+  }
+  await ownerDb.transaction(async (tx) => {
+    await tx.delete(s.appointment).where(eq(s.appointment.tenantId, tenantId));
+    await tx.delete(s.smsLog).where(eq(s.smsLog.tenantId, tenantId));
+    await tx.delete(s.chamber).where(eq(s.chamber.tenantId, tenantId));
+    await tx.delete(s.doctorProfile).where(eq(s.doctorProfile.tenantId, tenantId));
+    await tx.delete(s.membership).where(eq(s.membership.tenantId, tenantId));
+    await tx.delete(s.subscriptionPayment).where(eq(s.subscriptionPayment.tenantId, tenantId));
+    await tx.delete(s.rxTemplate).where(eq(s.rxTemplate.tenantId, tenantId));
+    await tx.delete(s.auditLog).where(eq(s.auditLog.tenantId, tenantId));
+    await tx.delete(s.tenant).where(eq(s.tenant.id, tenantId));
+  });
+  invalidateTenantBrief(tenantId);
+  await audit({
+    actorUserId: session.userId,
+    tenantId,
+    action: "tenant.delete",
+    entity: "tenant",
+    entityId: tenantId,
+    before: { name: profile.nameEn, userId },
+  });
+  revalidatePath("/admin/doctors");
   return { ok: true };
 }
 
