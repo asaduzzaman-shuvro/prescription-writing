@@ -3,16 +3,24 @@
 import { usePowerSync, useQuery, useStatus } from "@powersync/react";
 import {
   CalendarDays,
+  CalendarPlus,
+  CheckCircle2,
+  ChevronDown,
   ClipboardPlus,
+  Clock,
   // FlaskConical,
   LayoutDashboard,
   LayoutTemplate,
+  LogOut,
   Menu,
   Microscope,
   Monitor,
   Pill,
+  Search,
   Settings,
+  UserCheck,
   Users,
+  UsersRound,
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -40,10 +48,12 @@ function RejectedNotice() {
   if (!items.length) return null;
   return (
     <details className="relative" data-testid="sync-rejected">
-      <summary className="badge cursor-pointer bg-red-100 text-alert">{items.length} change{items.length > 1 ? "s" : ""} not saved</summary>
-      <div className="absolute right-0 z-40 mt-1 w-80 rounded-md border border-red-200 bg-white p-2 text-xs shadow-lg">
-        <ul className="space-y-1">{items.map((r, i) => <li key={i}><b>{r.table}</b>: {r.reason}</li>)}</ul>
-        <button className="btn-ghost mt-1 text-xs" onClick={() => setItems([])}>Dismiss</button>
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-alert ring-1 ring-red-200/80 ring-inset">
+        {items.length} unsaved
+      </summary>
+      <div className="absolute right-0 z-40 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-2 text-xs shadow-xl ring-1 ring-slate-900/5">
+        <ul className="space-y-1">{items.map((r, i) => <li key={i} className="rounded-lg px-1 py-0.5 hover:bg-slate-50"><b>{r.table}</b>: {r.reason}</li>)}</ul>
+        <button className="btn-ghost mt-1.5 w-full text-xs" onClick={() => setItems([])}>Dismiss</button>
       </div>
     </details>
   );
@@ -86,9 +96,15 @@ function SyncBadge() {
       ? "bg-blue-100 text-blue-800"
       : "bg-green-100 text-green-800";
   return (
-    <span data-testid="sync-status" className={`badge ${color}`} title={custom.error ?? status.dataFlowStatus?.uploadError?.message ?? ""}>
-      <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${connected ? "bg-current" : "bg-amber-500"}`} />
-      {label}
+    <span
+      data-testid="sync-status"
+      className={`inline-flex max-w-[9.5rem] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset sm:max-w-none ${color} ${
+        !connected ? "ring-amber-200/80" : pending || !fullSynced ? "ring-blue-200/80" : "ring-green-200/80"
+      }`}
+      title={custom.error ?? status.dataFlowStatus?.uploadError?.message ?? ""}
+    >
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-current" : "bg-amber-500"}`} />
+      <span className="truncate">{label}</span>
     </span>
   );
 }
@@ -105,9 +121,12 @@ function LiveClock() {
   const date = now ? today() : "\u00a0";
   const time = now ? now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "\u00a0";
   return (
-    <div className="hidden text-right text-xs text-slate-500 sm:block">
-      <div className="font-medium tabular-nums text-slate-700">{time}</div>
-      <div className="tabular-nums">{date}</div>
+    <div className="hidden items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50/60 px-2 py-1 sm:flex">
+      <Clock className="h-3.5 w-3.5 shrink-0 text-brand-600" aria-hidden />
+      <div className="text-right text-[11px] leading-tight text-slate-500">
+        <div className="font-semibold tabular-nums text-slate-800">{time}</div>
+        <div className="tabular-nums">{date}</div>
+      </div>
     </div>
   );
 }
@@ -139,9 +158,10 @@ function HeaderSearch() {
 
   return (
     <div className="relative min-w-0 flex-1">
+      <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden />
       <input
         id="header-patient-search"
-        className="input h-8 bg-slate-50"
+        className="input h-8 rounded-lg border-slate-200/80 bg-slate-50/80 pr-8 pl-8 text-[13px] shadow-sm transition placeholder:text-slate-400 focus:bg-white"
         placeholder="Search name, mobile or ID"
         title="Search by name, mobile or patient ID. Press / to focus."
         value={q}
@@ -154,21 +174,28 @@ function HeaderSearch() {
         }}
         data-testid="header-patient-search"
       />
+      <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400 lg:inline">
+        /
+      </kbd>
       {q.trim().length >= 2 && (
-        <ul className="absolute z-40 mt-1 max-h-72 w-full overflow-auto rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+        <ul className="absolute z-40 mt-2 max-h-72 w-full overflow-auto rounded-xl border border-slate-200/80 bg-white py-1 text-sm shadow-xl ring-1 ring-slate-900/5">
           {data.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-slate-50">
-              <Link to={`/patients/${p.id}`} className="min-w-0 truncate hover:underline" onClick={() => setQ("")}>
+            <li key={p.id} className="flex items-center justify-between gap-2 px-2 py-0.5">
+              <Link
+                to={`/patients/${p.id}`}
+                className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 hover:bg-slate-50"
+                onClick={() => setQ("")}
+              >
                 <b>{p.name}</b> <span className="text-slate-500">{p.mobile} · {p.code}</span>
               </Link>
-              <button type="button" className="btn-secondary shrink-0 px-2 py-0.5 text-xs" onClick={() => void start(p.id)}>
+              <button type="button" className="btn-secondary shrink-0 rounded-lg px-2.5 py-1 text-xs" onClick={() => void start(p.id)}>
                 {isDoctor ? "Rx" : "Queue"}
               </button>
             </li>
           ))}
           {!data.length && (
-            <li className="px-3 py-2 text-slate-500">
-              No match. <Link to="/patients/new" className="text-brand-700 underline" onClick={() => setQ("")}>New patient</Link>
+            <li className="px-3 py-2.5 text-slate-500">
+              No match. <Link to="/patients/new" className="font-medium text-brand-700 underline" onClick={() => setQ("")}>New patient</Link>
             </li>
           )}
         </ul>
@@ -183,7 +210,7 @@ function PlanBanner() {
   const days = Math.ceil((new Date(`${planExpiresAt}T23:59:59`).getTime() - Date.now()) / 86400000);
   if (days > 7) return null;
   return (
-    <div className={`shrink-0 px-4 py-1.5 text-center text-sm print:hidden ${days < 0 ? "bg-red-50 text-alert" : "bg-amber-50 text-warn"}`}>
+    <div className={`shrink-0 border-b px-4 py-2 text-center text-sm print:hidden ${days < 0 ? "border-red-100 bg-red-50/90 text-alert" : "border-amber-100 bg-amber-50/90 text-warn"}`}>
       {days < 0
         ? `Subscription expired on ${planExpiresAt}. Sync and SMS are paused until you renew.`
         : `Subscription ends in ${days} day${days === 1 ? "" : "s"} (${planExpiresAt}).`}{" "}
@@ -231,24 +258,38 @@ function ChamberSwitcher() {
     }
   }
 
+  const chamberTriggerClass =
+    "flex max-w-full min-w-0 items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50/60 px-2 py-1 text-left shadow-sm transition hover:bg-white";
+
   if (chambers.length <= 1 && !open) {
-    return <span className="block truncate text-sm font-medium text-slate-800" title={label} data-testid="header-doctor-name">{label}</span>;
+    return (
+      <div className={chamberTriggerClass} title={label} data-testid="header-doctor-name">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-700" aria-hidden>
+          <UsersRound className="h-3 w-3" />
+        </span>
+        <span className="min-w-0 truncate text-xs font-semibold text-slate-800">{label}</span>
+      </div>
+    );
   }
 
   return (
-    <details className="relative" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-      <summary className="cursor-pointer list-none truncate text-sm text-slate-600 hover:text-slate-900" title="Switch clinic">
-        {label} ▾
+    <details className="relative min-w-0" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className={`${chamberTriggerClass} cursor-pointer list-none`} title="Switch clinic">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-700" aria-hidden>
+          <UsersRound className="h-3 w-3" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800">{label}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
       </summary>
-      <div className="absolute left-0 z-40 mt-1 w-64 rounded-md border border-slate-200 bg-white p-2 text-xs shadow-lg">
-        <p className="mb-1 px-1 font-medium text-slate-700">Your clinics</p>
-        <ul className="space-y-1">
+      <div className="absolute left-0 z-40 mt-2 w-72 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-2 text-xs shadow-xl ring-1 ring-slate-900/5">
+        <p className="px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Your clinics</p>
+        <ul className="space-y-0.5">
           {(chambers.length ? chambers : [{ tenantId: session.tenantId, name: session.tenantName, role: session.tenantRole, current: true }]).map((c) => (
             <li key={c.tenantId}>
               <button
                 type="button"
                 disabled={c.current || busy}
-                className={`w-full rounded px-2 py-1.5 text-left ${c.current ? "bg-brand-50 text-brand-800" : "hover:bg-slate-50"}`}
+                className={`w-full rounded-lg px-2.5 py-2 text-left transition ${c.current ? "bg-brand-50 text-brand-800 ring-1 ring-brand-200/80" : "hover:bg-slate-50"}`}
                 onClick={() => switchTo(c.tenantId)}
               >
                 <b>{c.name}</b>
@@ -336,19 +377,26 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
     window.location.href = "/login";
   }
 
-  const linkClass = (on: boolean) =>
-    `flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition ${
-      on ? "bg-brand-600 font-medium text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"
+  const navLinkClass = (on: boolean) =>
+    `group flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition-all duration-200 ${
+      on
+        ? "bg-white/12 text-white shadow-sm ring-1 ring-white/10"
+        : "text-slate-300/90 hover:bg-white/8 hover:text-white"
+    }`;
+
+  const navIconClass = (on: boolean) =>
+    `flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
+      on ? "bg-brand-500/35 text-white" : "bg-white/5 text-slate-400 group-hover:bg-white/10 group-hover:text-white"
     }`;
 
   const NavGroup = ({ title, items }: { title: string; items: NavItem[] }) =>
     items.length ? (
       <div className="space-y-0.5">
-        <p className="px-2.5 pb-0.5 pt-2 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">{title}</p>
+        <p className="px-2 pt-2 pb-0.5 text-[10px] font-medium tracking-wide text-slate-500 uppercase first:pt-1">{title}</p>
         {items.map((n) => (
-          <Link key={n.to} to={n.to} className={linkClass(n.match)} onClick={() => setMobileOpen(false)}>
-            {n.icon}
-            {n.label}
+          <Link key={n.to} to={n.to} className={navLinkClass(n.match)} onClick={() => setMobileOpen(false)} aria-current={n.match ? "page" : undefined}>
+            <span className={navIconClass(n.match)}>{n.icon}</span>
+            <span className="truncate">{n.label}</span>
           </Link>
         ))}
       </div>
@@ -356,56 +404,99 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
 
   const specialty = profile?.specialty_code?.replace(/_/g, " ") ?? session.tenantRole;
   const doctorLabel = profile?.name_en ?? session.name;
+  const doctorInitials = doctorLabel
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+
+  const sidebarSurface =
+    "flex flex-col bg-gradient-to-b from-[#0d4a44] via-[#0a3d39] to-[#062a27] shadow-xl shadow-black/15 ring-1 ring-white/5";
 
   const sidebar = (
     <>
-      <div className="border-b border-white/10 px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-base font-semibold tracking-tight text-white">RxPad</span>
-          <span className="rounded bg-sakura-500/90 px-1.5 py-0.5 text-[10px] font-semibold text-white uppercase">Clinic</span>
+      <div className="border-b border-white/10 px-2.5 py-2">
+        <div className="flex items-center gap-2">
+          <div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white shadow-md shadow-black/25"
+            aria-hidden
+          >
+            Rx
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-sm font-semibold tracking-tight text-white">RxPad</span>
+              <span className="shrink-0 rounded-full bg-sakura-500/25 px-1.5 py-px text-[9px] font-semibold tracking-wide text-sakura-100 uppercase ring-1 ring-sakura-400/30">
+                Clinic
+              </span>
+            </div>
+            <p className="truncate text-[10px] text-slate-400">Prescription workspace</p>
+          </div>
         </div>
       </div>
-      <nav className="flex-1 overflow-y-auto px-1.5 pb-2" aria-label="Main">
+      <nav className="flex-1 overflow-y-auto px-1.5 pb-1.5" aria-label="Main">
         <NavGroup title="Home" items={home} />
         <NavGroup title="Clinical" items={clinical} />
         <NavGroup title="Practice" items={practice} />
-        <div className="mt-2 space-y-0.5 border-t border-white/10 pt-2">
-          <a href="#/display" className={linkClass(route[0] === "display")} onClick={() => setMobileOpen(false)}>
-            <Monitor className="h-4 w-4 shrink-0" />
-            Display
+        <div className="mt-0.5 space-y-0.5 border-t border-white/10 pt-1.5">
+          <p className="px-2 pb-0.5 text-[10px] font-medium tracking-wide text-slate-500 uppercase">Tools</p>
+          <a
+            href="#/display"
+            className={navLinkClass(route[0] === "display")}
+            onClick={() => setMobileOpen(false)}
+            aria-current={route[0] === "display" ? "page" : undefined}
+          >
+            <span className={navIconClass(route[0] === "display")}>
+              <Monitor className="h-4 w-4 shrink-0" />
+            </span>
+            <span className="truncate">Display</span>
           </a>
         </div>
       </nav>
-      <div className="relative overflow-hidden border-t border-white/10 p-2">
-        <p className="truncate px-2 text-sm font-medium text-white" title={doctorLabel}>{doctorLabel}</p>
-        <p className="truncate px-2 text-xs capitalize text-slate-400">{specialty}</p>
-        <button
-          type="button"
-          disabled={signingOut}
-          onClick={() => void signOut()}
-          data-lpignore="true"
-          data-1p-ignore="true"
-          data-bwignore="true"
-          data-form-type="other"
-          data-testid="sign-out"
-          className="relative z-0 w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-50 [&::-webkit-credentials-auto-fill-button]:hidden [&::-webkit-contacts-auto-fill-button]:hidden"
-        >
-          {signingOut ? "Signing out…" : "Sign out"}
-        </button>
+      <div className="border-t border-white/10 p-2">
+        <div className="rounded-lg bg-black/20 p-2 ring-1 ring-white/10">
+          <div className="flex items-center gap-2">
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-400/30 to-brand-700/40 text-[10px] font-semibold text-white ring-1 ring-white/15"
+              aria-hidden
+            >
+              {doctorInitials || "?"}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-white" title={doctorLabel}>{doctorLabel}</p>
+              <p className="truncate text-[10px] capitalize text-slate-400">{specialty}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={signingOut}
+            onClick={() => void signOut()}
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-bwignore="true"
+            data-form-type="other"
+            data-testid="sign-out"
+            className="relative z-0 mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] font-medium text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50 [&::-webkit-credentials-auto-fill-button]:hidden [&::-webkit-contacts-auto-fill-button]:hidden"
+          >
+            <LogOut className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+            {signingOut ? "Signing out…" : "Sign out"}
+          </button>
+        </div>
       </div>
     </>
   );
 
   return (
     <div className="h-dvh overflow-hidden bg-slate-100">
-      <aside className={`fixed inset-y-0 left-0 z-40 w-52 flex-col bg-[#0a3d39] print:hidden ${sidebarOpen ? "hidden md:flex" : "hidden"}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 w-52 ${sidebarSurface} print:hidden ${sidebarOpen ? "hidden md:flex" : "hidden"}`}>
         {sidebar}
       </aside>
 
       {mobileOpen && (
         <div className="fixed inset-0 z-50 print:hidden md:hidden">
-          <button type="button" className="absolute inset-0 bg-slate-900/40" aria-label="Close menu" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-60 max-w-[85vw] flex-col bg-[#0a3d39] shadow-xl">
+          <button type="button" className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" aria-label="Close menu" onClick={() => setMobileOpen(false)} />
+          <aside className={`absolute inset-y-0 left-0 w-[min(13rem,88vw)] ${sidebarSurface}`}>
             <button type="button" className="absolute top-2.5 right-2.5 rounded p-1 text-slate-300 hover:bg-white/10" aria-label="Close" onClick={() => setMobileOpen(false)}>
               <X className="h-5 w-5" />
             </button>
@@ -415,11 +506,11 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className={`flex h-dvh flex-col ${sidebarOpen ? "md:pl-52" : ""}`}>
-        <header className="z-30 shrink-0 border-b border-slate-200 bg-white print:hidden">
-          <div className="flex h-12 items-center gap-2 px-3">
+        <header className="z-30 shrink-0 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-md print:hidden">
+          <div className="flex h-11 items-center gap-1.5 px-2 sm:gap-2 sm:px-2.5">
             <button
               type="button"
-              className="shrink-0 rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+              className="shrink-0 rounded-lg border border-slate-200/80 bg-white p-1.5 text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
               aria-label="Menu"
               data-testid="drawer-menu"
               onClick={() => {
@@ -427,20 +518,42 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
                 else setMobileOpen(true);
               }}
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-4 w-4" />
             </button>
-            <div className="hidden w-44 shrink-0 sm:block">
+            <div className="hidden min-w-0 max-w-[11rem] shrink-0 sm:block md:max-w-[13rem]">
               <ChamberSwitcher />
             </div>
             <HeaderSearch />
-            <button type="button" className="btn-primary h-8 shrink-0 whitespace-nowrap px-2.5 text-xs" data-testid="new-appointment" onClick={() => setNewPatientOpen(true)}>
-              New appointment
+            <button
+              type="button"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-brand-600 px-2.5 text-[11px] font-semibold whitespace-nowrap text-white shadow-sm shadow-brand-600/20 transition hover:bg-brand-700"
+              data-testid="new-appointment"
+              onClick={() => setNewPatientOpen(true)}
+            >
+              <CalendarPlus className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+              <span className="hidden sm:inline">New appointment</span>
+              <span className="sm:hidden">New</span>
             </button>
-            <div className="flex shrink-0 items-center gap-2">
-              <div className="hidden h-8 items-center overflow-hidden rounded-md border border-slate-200 text-[11px] font-medium sm:flex" data-testid="queue-status">
-                <span className="flex h-full items-center bg-amber-50 px-2 text-amber-900 tabular-nums" title="Waiting">{qs.waiting}<span className="ml-1 hidden font-normal lg:inline">waiting</span></span>
-                <span className="flex h-full items-center border-l border-slate-200 bg-blue-50 px-2 text-blue-900 tabular-nums" title="In room">{qs.active}<span className="ml-1 hidden font-normal lg:inline">in room</span></span>
-                <span className="flex h-full items-center border-l border-slate-200 bg-green-50 px-2 text-green-900 tabular-nums" title="Seen">{qs.done}<span className="ml-1 hidden font-normal lg:inline">seen</span></span>
+            <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+              <div
+                className="hidden h-8 items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50/60 p-0.5 text-[10px] font-semibold shadow-sm sm:flex"
+                data-testid="queue-status"
+              >
+                <span className="flex h-full items-center gap-0.5 rounded-md bg-amber-100/90 px-1.5 text-amber-950 tabular-nums" title="Waiting">
+                  <UsersRound className="h-3 w-3 opacity-70" aria-hidden />
+                  {qs.waiting}
+                  <span className="hidden font-medium lg:inline">waiting</span>
+                </span>
+                <span className="flex h-full items-center gap-0.5 rounded-md bg-blue-100/90 px-1.5 text-blue-950 tabular-nums" title="In room">
+                  <UserCheck className="h-3 w-3 opacity-70" aria-hidden />
+                  {qs.active}
+                  <span className="hidden font-medium lg:inline">in room</span>
+                </span>
+                <span className="flex h-full items-center gap-0.5 rounded-md bg-emerald-100/90 px-1.5 text-emerald-950 tabular-nums" title="Seen">
+                  <CheckCircle2 className="h-3 w-3 opacity-70" aria-hidden />
+                  {qs.done}
+                  <span className="hidden font-medium lg:inline">seen</span>
+                </span>
               </div>
               <LiveClock />
               <RejectedNotice />
@@ -449,7 +562,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <PlanBanner />
-        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-x-hidden overflow-y-auto p-2 sm:p-2.5 lg:h-0 lg:p-3 xl:[&:has([data-visit-fill])]:overflow-hidden">
+        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-x-hidden overflow-y-auto p-1.5 sm:p-2 lg:h-0 lg:p-2 xl:[&:has([data-visit-fill])]:overflow-hidden">
           <div className="flex flex-col lg:min-h-0 lg:flex-1 xl:[&:has([data-visit-fill])]:overflow-hidden">
             {children}
           </div>
