@@ -2,7 +2,7 @@
 
 import { usePowerSync, useQuery } from "@powersync/react";
 import { ArrowLeft, CalendarPlus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { checkInAppointment, createPatient, startVisit, updatePatient, type PatientInput, type PregnancyStatus } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
@@ -37,6 +37,52 @@ const EMPTY: FormState = {
   name: "", ageYears: "", ageMonths: "", ageDays: "", dob: "", useDob: false, sex: "", mobile: "", address: "", allergies: "",
   pregnancyStatus: "", guardianName: "", referredBy: "", nid: "", brn: "", healthId: "", notes: "", consent: false, birthWeightKg: "", gestationalAgeWeeks: "",
 };
+
+function Block({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h3 className="mb-1.5 text-[11px] font-semibold text-slate-500">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function AgeSegment({
+  years,
+  months,
+  days,
+  onYears,
+  onMonths,
+  onDays,
+}: {
+  years: string;
+  months: string;
+  days: string;
+  onYears: (v: string) => void;
+  onMonths: (v: string) => void;
+  onDays: (v: string) => void;
+}) {
+  const cell =
+    "flex min-w-0 flex-1 flex-col border-slate-200 bg-white first:rounded-l-lg last:rounded-r-lg [&:not(:first-child)]:border-l";
+  const sub = "px-1.5 pt-0.5 text-[10px] font-medium text-slate-400";
+  const inp = "w-full min-w-0 border-0 bg-transparent px-1.5 pb-1 text-sm outline-none focus:ring-0";
+  return (
+    <div className="flex overflow-hidden rounded-md border border-slate-200">
+      <div className={cell}>
+        <span className={sub}>Years</span>
+        <input className={inp} inputMode="numeric" placeholder="—" value={years} onChange={(e) => onYears(e.target.value.replace(/\D/g, ""))} data-testid="patient-age" />
+      </div>
+      <div className={cell}>
+        <span className={sub}>Mo</span>
+        <input className={inp} inputMode="numeric" placeholder="—" value={months} onChange={(e) => onMonths(e.target.value.replace(/\D/g, ""))} />
+      </div>
+      <div className={cell}>
+        <span className={sub}>Days</span>
+        <input className={inp} inputMode="numeric" placeholder="—" value={days} onChange={(e) => onDays(e.target.value.replace(/\D/g, ""))} />
+      </div>
+    </div>
+  );
+}
 
 export function PatientEdit({
   patientId,
@@ -95,13 +141,14 @@ export function PatientEdit({
   }, [existing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF((p) => ({ ...p, [k]: v }));
-  const sexBtn = (active: boolean) =>
-    `flex-1 rounded-lg border px-2 py-1.5 text-xs font-semibold transition ${
+  const sexBtn = (active: boolean, compact?: boolean) =>
+    `${compact ? "px-2 py-1 text-xs" : "flex-1 px-2 py-1.5 text-xs"} rounded-md border font-semibold transition ${
       active ? "border-brand-600 bg-brand-50 text-brand-800 shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
     }`;
   const years = Number(f.ageYears || 0);
   const sexOptions = f.sex === "other" ? (["male", "female", "other"] as const) : (["male", "female"] as const);
-  const fieldRow = "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";
+  const grid12 = "grid grid-cols-12 gap-2";
+  const cell3 = "col-span-12 sm:col-span-6 lg:col-span-3 min-w-0";
   // Birth details matter for infants; the fields show for patients under 2. Any age can be saved.
   const infant = f.useDob ? (ageParts(f.dob)?.years ?? 99) < 2 : f.ageYears === "" ? f.ageMonths !== "" || f.ageDays !== "" : years < 2;
   const num = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -239,125 +286,119 @@ export function PatientEdit({
     </div>
   );
 
-  const identityRow =
-    "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-12 lg:items-end lg:gap-3";
-
   const fieldsPage = (
-    <div className="space-y-4">
-      <div className={identityRow}>
-        <div className="col-span-2 sm:col-span-2 lg:col-span-3 lg:max-w-sm">
-          <label className="label">Name *</label>
-          <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus data-testid="patient-name" />
-        </div>
-        <div className="lg:col-span-2 lg:max-w-[8.5rem]">
-          <label className="label">Sex</label>
-          <select className="input" value={f.sex} onChange={(e) => set("sex", e.target.value as FormState["sex"])}>
-            <option value="">Select</option>
-            {sexOptions.map((x) => (
-              <option key={x} value={x}>{x[0]!.toUpperCase() + x.slice(1)}</option>
-            ))}
-          </select>
-        </div>
-        {f.useDob ? (
-          <div className="col-span-2 sm:col-span-1 lg:col-span-3">
-            <label className="label">Date of birth</label>
-            <input type="date" className="input" value={f.dob} onChange={(e) => set("dob", e.target.value)} />
+    <div className="space-y-3">
+      <Block title="Patient">
+        <div className={grid12}>
+          <div className={cell3}>
+            <label className="label">Name *</label>
+            <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus data-testid="patient-name" />
           </div>
-        ) : (
-          <>
-            <div className="lg:col-span-1 lg:max-w-[5.25rem]">
-              <label className="label">Age (years)</label>
-              <input className="input w-full min-w-0" inputMode="numeric" value={f.ageYears} onChange={(e) => set("ageYears", e.target.value.replace(/\D/g, ""))} data-testid="patient-age" />
+          <div className={cell3}>
+            <label className="label">Sex</label>
+            <div className="flex gap-0.5 rounded-md border border-slate-200 p-0.5">
+              {sexOptions.map((x) => (
+                <button type="button" key={x} onClick={() => set("sex", x)} className={`${sexBtn(f.sex === x, true)} flex-1`}>
+                  {x[0]!.toUpperCase() + x.slice(1)}
+                </button>
+              ))}
             </div>
-            <div className="lg:col-span-1 lg:max-w-[4.5rem]">
-              <label className="label">Months</label>
-              <input className="input w-full min-w-0" inputMode="numeric" value={f.ageMonths} onChange={(e) => set("ageMonths", e.target.value.replace(/\D/g, ""))} />
+          </div>
+          <div className={cell3}>
+            <div className="flex items-center justify-between gap-1">
+              <label className="label mb-0">{f.useDob ? "Date of birth" : "Age"}</label>
+              <label className="flex shrink-0 items-center gap-1 text-[10px] text-slate-600">
+                <input type="checkbox" className="h-3 w-3" checked={f.useDob} onChange={(e) => set("useDob", e.target.checked)} />
+                Exact DOB
+              </label>
             </div>
-            <div className="lg:col-span-1 lg:max-w-[4rem]">
-              <label className="label">Days</label>
-              <input className="input w-full min-w-0" inputMode="numeric" value={f.ageDays} onChange={(e) => set("ageDays", e.target.value.replace(/\D/g, ""))} />
+            {f.useDob ? (
+              <input type="date" className="input mt-0.5" value={f.dob} onChange={(e) => set("dob", e.target.value)} />
+            ) : (
+              <AgeSegment
+                years={f.ageYears}
+                months={f.ageMonths}
+                days={f.ageDays}
+                onYears={(v) => set("ageYears", v)}
+                onMonths={(v) => set("ageMonths", v)}
+                onDays={(v) => set("ageDays", v)}
+              />
+            )}
+          </div>
+        </div>
+      </Block>
+
+      <Block title="Contact">
+        <div className={grid12}>
+          <div className={cell3}>
+            <label className="label">Mobile</label>
+            <input className="input" inputMode="tel" value={f.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="01XXXXXXXXX" data-testid="patient-mobile" />
+          </div>
+          <div className={cell3}>
+            <label className="label">Address</label>
+            <input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} />
+          </div>
+          <div className={cell3}>
+            <label className="label" htmlFor="guardian">Guardian</label>
+            <input id="guardian" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} />
+          </div>
+        </div>
+      </Block>
+
+      <Block title="Clinical">
+        <div className={grid12}>
+          <div className={cell3}>
+            <label className="label">Drug allergies (comma separated)</label>
+            <input className="input" value={f.allergies} onChange={(e) => set("allergies", e.target.value)} data-testid="patient-allergies" />
+          </div>
+          <div className={cell3}>
+            <label className="label" htmlFor="ref-by">Ref by — referring doctor</label>
+            <input id="ref-by" className="input" list="patient-referrers-page" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Blank: self" data-testid="patient-ref-by" />
+            <datalist id="patient-referrers-page">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
+          </div>
+          {(f.sex === "female" || f.sex === "") && (
+            <div className={cell3}>
+              <label className="label" htmlFor="preg">Pregnancy / lactation</label>
+              <select id="preg" className="input" value={f.pregnancyStatus} onChange={(e) => set("pregnancyStatus", e.target.value as FormState["pregnancyStatus"])} data-testid="patient-pregnancy">
+                <option value="">Not recorded</option>
+                <option value="none">Not pregnant / not lactating</option>
+                <option value="pregnant">Pregnant</option>
+                <option value="lactating">Lactating</option>
+                <option value="both">Pregnant and lactating</option>
+              </select>
             </div>
-          </>
-        )}
-        <div className={`col-span-2 flex items-end pb-2 sm:col-span-3 lg:min-w-0 lg:pb-0 ${f.useDob ? "lg:col-span-4" : "lg:col-span-3"}`}>
-          <label className="flex items-center gap-2 text-xs text-slate-700 sm:text-sm" title="Enter exact date of birth">
-            <input type="checkbox" checked={f.useDob} onChange={(e) => set("useDob", e.target.checked)} />
-            <span className="min-w-0 sm:whitespace-nowrap">Exact date of birth</span>
-          </label>
+          )}
+          {infant && (
+            <>
+              <div className={cell3}>
+                <label className="label" htmlFor="birth-wt">Birth weight (kg)</label>
+                <input id="birth-wt" className="input" inputMode="decimal" value={f.birthWeightKg} onChange={(e) => set("birthWeightKg", e.target.value.replace(/[^\d.]/g, ""))} data-testid="patient-birth-weight" />
+              </div>
+              <div className={cell3}>
+                <label className="label" htmlFor="ga">Gestational age (weeks)</label>
+                <input id="ga" className="input" inputMode="numeric" value={f.gestationalAgeWeeks} onChange={(e) => set("gestationalAgeWeeks", e.target.value.replace(/\D/g, ""))} data-testid="patient-ga" />
+              </div>
+            </>
+          )}
         </div>
-      </div>
+      </Block>
 
-      <div className={fieldRow}>
-        <div>
-          <label className="label">Mobile</label>
-          <input className="input" inputMode="tel" value={f.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="01XXXXXXXXX" data-testid="patient-mobile" />
-        </div>
-        <div>
-          <label className="label">Address</label>
-          <input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} />
-        </div>
-        <div>
-          <label className="label" htmlFor="guardian">Guardian name</label>
-          <input id="guardian" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div>
-          <label className="label">Drug allergies (comma separated)</label>
-          <input className="input" value={f.allergies} onChange={(e) => set("allergies", e.target.value)} data-testid="patient-allergies" />
-        </div>
-        <div>
-          <label className="label" htmlFor="ref-by">Ref By — Referring doctor</label>
-          <input id="ref-by" className="input" list="patient-referrers-page" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Blank: self" data-testid="patient-ref-by" />
-          <datalist id="patient-referrers-page">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
-        </div>
-      </div>
-
-      {(f.sex === "female" || f.sex === "") && (
-        <div className={fieldRow}>
-          <div className="lg:max-w-xs">
-            <label className="label" htmlFor="preg">Pregnancy / lactation</label>
-            <select id="preg" className="input" value={f.pregnancyStatus} onChange={(e) => set("pregnancyStatus", e.target.value as FormState["pregnancyStatus"])} data-testid="patient-pregnancy">
-              <option value="">Not recorded</option>
-              <option value="none">Not pregnant / not lactating</option>
-              <option value="pregnant">Pregnant</option>
-              <option value="lactating">Lactating</option>
-              <option value="both">Pregnant and lactating</option>
-            </select>
-          </div>
-        </div>
-      )}
-
-      {infant && (
-        <div className={fieldRow}>
-          <div>
-            <label className="label" htmlFor="birth-wt">Birth weight (kg)</label>
-            <input id="birth-wt" className="input" inputMode="decimal" value={f.birthWeightKg} onChange={(e) => set("birthWeightKg", e.target.value.replace(/[^\d.]/g, ""))} data-testid="patient-birth-weight" />
-          </div>
-          <div>
-            <label className="label" htmlFor="ga">Gestational age at birth (weeks)</label>
-            <input id="ga" className="input" inputMode="numeric" value={f.gestationalAgeWeeks} onChange={(e) => set("gestationalAgeWeeks", e.target.value.replace(/\D/g, ""))} data-testid="patient-ga" />
-          </div>
-        </div>
-      )}
-
-      <details className="rounded-lg border border-slate-200 bg-slate-50/40 px-2.5 py-1.5">
-        <summary className="cursor-pointer text-sm font-medium text-slate-700">National IDs & notes (optional)</summary>
-        <div className={`mt-2 ${fieldRow}`}>
-          <div><label className="label">NID</label><input className="input" value={f.nid} onChange={(e) => set("nid", e.target.value)} /></div>
-          <div><label className="label">Birth reg. no. (BRN)</label><input className="input" value={f.brn} onChange={(e) => set("brn", e.target.value)} /></div>
-          <div><label className="label">Health ID</label><input className="input" value={f.healthId} onChange={(e) => set("healthId", e.target.value)} /></div>
-          <div className="sm:col-span-2 lg:col-span-3">
-            <label className="label">Notes (past history etc.)</label>
+      <details className="text-sm">
+        <summary className="cursor-pointer font-medium text-slate-600">National IDs & notes (optional)</summary>
+        <div className={`mt-1.5 ${grid12}`}>
+          <div className={cell3}><label className="label">NID</label><input className="input" value={f.nid} onChange={(e) => set("nid", e.target.value)} /></div>
+          <div className={cell3}><label className="label">BRN</label><input className="input" value={f.brn} onChange={(e) => set("brn", e.target.value)} /></div>
+          <div className={cell3}><label className="label">Health ID</label><input className="input" value={f.healthId} onChange={(e) => set("healthId", e.target.value)} /></div>
+          <div className={cell3}>
+            <label className="label">Notes</label>
             <textarea className="input" rows={2} value={f.notes} onChange={(e) => set("notes", e.target.value)} />
           </div>
         </div>
       </details>
 
-      <label className="flex items-start gap-2 rounded-lg border border-brand-100 bg-brand-50/40 p-2.5 text-sm">
-        <input type="checkbox" className="mt-1" checked={f.consent} onChange={(e) => set("consent", e.target.checked)} data-testid="patient-consent" />
-        <span>The patient or their guardian consents to storing their health information for treatment (রোগীর তথ্য সংরক্ষণে সম্মতি দিয়েছেন).</span>
+      <label className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50/50 p-2 text-sm">
+        <input type="checkbox" className="mt-0.5" checked={f.consent} onChange={(e) => set("consent", e.target.checked)} data-testid="patient-consent" />
+        <span>Consent to store health data for treatment (রোগীর তথ্য সংরক্ষণে সম্মতি দিয়েছেন).</span>
       </label>
     </div>
   );
@@ -417,31 +458,34 @@ export function PatientEdit({
 
   const thenLab = qs.get("then") === "lab";
 
-  return (
-    <form onSubmit={(e) => save(e, true)} className="w-full space-y-3" data-testid="patient-form-page">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link
-          to={thenLab ? "/lab" : "/patients"}
-          className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:text-brand-800 hover:underline"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          {thenLab ? "Back to lab" : "Back to patients"}
-        </Link>
-        {apptId && !patientId && (
-          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-800 ring-1 ring-blue-200/80">
-            From booking
-          </span>
-        )}
-        {patientId && <span className="text-sm font-semibold text-slate-700">Edit patient</span>}
-      </div>
+  const pageTitle = patientId ? "Edit patient" : "New patient";
 
-      <section className="[&_.input]:h-9 [&_.input]:rounded-lg [&_.input]:border-slate-200/80 [&_.input]:shadow-sm [&_.label]:mb-0.5 [&_.label]:text-[11px] rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm ring-1 ring-slate-900/5 sm:p-4">
+  return (
+    <form onSubmit={(e) => save(e, true)} className="w-full" data-testid="patient-form-page">
+      <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            to={thenLab ? "/lab" : "/patients"}
+            className="inline-flex items-center gap-1 text-sm text-brand-700 hover:underline"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            {thenLab ? "Back to lab" : "Back to patients"}
+          </Link>
+          <span className="text-slate-300" aria-hidden>|</span>
+          <h1 className="text-base font-semibold text-slate-900">{pageTitle}</h1>
+        </div>
+        {apptId && !patientId && (
+          <span className="rounded bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-800">From booking</span>
+        )}
+      </header>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 [&_.input]:h-8 [&_.label]:mb-0.5">
         {fields}
       </section>
 
-      {error && <p className="alert-danger">{error}</p>}
+      {error && <p className="alert-danger mt-2">{error}</p>}
 
-      <div className="sticky bottom-0 z-10 rounded-xl border border-slate-200/80 bg-white/95 p-3 shadow-sm backdrop-blur-sm">
+      <div className="sticky bottom-0 z-10 mt-2 border-t border-slate-200 bg-white/95 py-2 backdrop-blur-sm">
         {actions}
       </div>
     </form>
