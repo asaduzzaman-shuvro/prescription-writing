@@ -101,13 +101,13 @@ function useSakuraFonts() {
 
 function typeBadgeClass(identifier: string | undefined, css: typeof styles): string {
   const id = identifier || "New";
-  if (id === "New") return css.badgeNew;
-  if (id === "Old") return css.badgeOld;
-  if (id === "Lab Report" || id === "Lab" || id === "Report") return css.badgeLab;
-  if (id === "Emergency") return css.badgeEmergency;
-  if (id === "OT Case" || id === "OT") return css.badgeOt;
-  if (id === "Research Case" || id === "Research") return css.badgeResearch;
-  return css.badgeDefault;
+  if (id === "New") return css.badgeNew ?? "";
+  if (id === "Old") return css.badgeOld ?? "";
+  if (id === "Lab Report" || id === "Lab" || id === "Report") return css.badgeLab ?? "";
+  if (id === "Emergency") return css.badgeEmergency ?? "";
+  if (id === "OT Case" || id === "OT") return css.badgeOt ?? "";
+  if (id === "Research Case" || id === "Research") return css.badgeResearch ?? "";
+  return css.badgeDefault ?? "";
 }
 
 export function SakuraDashboard() {

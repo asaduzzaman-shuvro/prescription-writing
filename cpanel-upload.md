@@ -54,6 +54,15 @@ ls index.js apps/web/server.js apps/web/.env.production
 
 স্কিমার SQL (`cpanel-schema.sql`) আবার চালাবেন না। টেবিল আগেই তৈরি।
 
+এই রিলিজে নতুন কলাম আছে (`doctor_profile.sakura_phone` / `sakura_password`)। অ্যাপ রিস্টার্টের **আগে** cPanel Postgres-এ একবার চালান (phpPgAdmin / psql):
+
+```sql
+ALTER TABLE "doctor_profile" ADD COLUMN IF NOT EXISTS "sakura_phone" text;
+ALTER TABLE "doctor_profile" ADD COLUMN IF NOT EXISTS "sakura_password" text;
+```
+
+অথবা এই পিসি থেকে টানেল খুলে: `pnpm db:migrate:cpanel -- --host 127.0.0.1 --port 5433`
+
 **Run NPM Install** চাপবেন না। `node_modules` জিপের ভিতরেই আছে।
 
 ## 4. অ্যাপ রিস্টার্ট

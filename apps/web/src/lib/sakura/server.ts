@@ -36,45 +36,51 @@ export async function getSakuraCookieToken(): Promise<string | null> {
 /**
  * Sakura phone/password for the logged-in clinic user:
  * own doctor profile first, otherwise any doctor in the same chamber with credentials set.
+ * Returns null if columns are missing (migration not applied yet) so /doctor still loads.
  */
 export async function getSakuraDoctorCredentials(): Promise<Creds | null> {
   const session = await getSession();
   if (!session?.tenantId) return null;
 
-  const [own] = await ownerDb
-    .select({
-      userId: s.doctorProfile.userId,
-      phone: s.doctorProfile.sakuraPhone,
-      password: s.doctorProfile.sakuraPassword,
-    })
-    .from(s.doctorProfile)
-    .where(eq(s.doctorProfile.userId, session.userId))
-    .limit(1);
+  try {
+    const [own] = await ownerDb
+      .select({
+        userId: s.doctorProfile.userId,
+        phone: s.doctorProfile.sakuraPhone,
+        password: s.doctorProfile.sakuraPassword,
+      })
+      .from(s.doctorProfile)
+      .where(eq(s.doctorProfile.userId, session.userId))
+      .limit(1);
 
-  if (own?.phone?.trim() && own.password) {
-    return { userId: own.userId, phone: own.phone.trim(), password: own.password };
-  }
+    if (own?.phone?.trim() && own.password) {
+      return { userId: own.userId, phone: own.phone.trim(), password: own.password };
+    }
 
-  const [any] = await ownerDb
-    .select({
-      userId: s.doctorProfile.userId,
-      phone: s.doctorProfile.sakuraPhone,
-      password: s.doctorProfile.sakuraPassword,
-    })
-    .from(s.doctorProfile)
-    .where(
-      and(
-        eq(s.doctorProfile.tenantId, session.tenantId),
-        isNotNull(s.doctorProfile.sakuraPhone),
-        isNotNull(s.doctorProfile.sakuraPassword),
-        ne(s.doctorProfile.sakuraPhone, ""),
-        ne(s.doctorProfile.sakuraPassword, ""),
-      ),
-    )
-    .limit(1);
+    const [any] = await ownerDb
+      .select({
+        userId: s.doctorProfile.userId,
+        phone: s.doctorProfile.sakuraPhone,
+        password: s.doctorProfile.sakuraPassword,
+      })
+      .from(s.doctorProfile)
+      .where(
+        and(
+          eq(s.doctorProfile.tenantId, session.tenantId),
+          isNotNull(s.doctorProfile.sakuraPhone),
+          isNotNull(s.doctorProfile.sakuraPassword),
+          ne(s.doctorProfile.sakuraPhone, ""),
+          ne(s.doctorProfile.sakuraPassword, ""),
+        ),
+      )
+      .limit(1);
 
-  if (any?.phone?.trim() && any.password) {
-    return { userId: any.userId, phone: any.phone.trim(), password: any.password };
+    if (any?.phone?.trim() && any.password) {
+      return { userId: any.userId, phone: any.phone.trim(), password: any.password };
+    }
+  } catch {
+    // e.g. sakura_phone / sakura_password columns not migrated yet on production DB
+    return null;
   }
 
   return null;

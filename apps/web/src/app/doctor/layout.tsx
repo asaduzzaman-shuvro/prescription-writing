@@ -24,7 +24,13 @@ export default async function DoctorLayout({ children }: { children: React.React
   if (t.status === "suspended") {
     return <main className="p-8 text-center text-slate-600">This chamber is suspended. Please contact RxPad support.</main>;
   }
-  const sakuraCreds = await getSakuraDoctorCredentials();
+  let sakuraWebEnabled = false;
+  try {
+    sakuraWebEnabled = Boolean(await getSakuraDoctorCredentials());
+  } catch {
+    sakuraWebEnabled = false;
+  }
+
   return (
     <DoctorRoot
       session={{
@@ -35,7 +41,7 @@ export default async function DoctorLayout({ children }: { children: React.React
         tenantRole: session.tenantRole!,
         publicBaseUrl: process.env.PUBLIC_BASE_URL ?? "http://localhost:3000",
         planExpiresAt: t?.planExpiresAt ?? null,
-        sakuraWebEnabled: Boolean(sakuraCreds),
+        sakuraWebEnabled,
       }}
     >
       {children}
