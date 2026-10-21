@@ -2,7 +2,8 @@
 
 import { DEFAULT_PRINT_SETTINGS, defaultSectionLabel, SECTION_KEYS, SKETCH_IDS, SKETCHES, type PrintSettings, type SectionKey, type SketchId } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
-import { useEffect, useState } from "react";
+import { ChevronRight, FlaskConical, Settings } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { printSettingsOf, savePrintSettings, saveSignature } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useMyProfile } from "@/lib/doctor/hooks";
@@ -36,6 +37,46 @@ function calibrationHtml(s: PrintSettings): string {
   <text x="${left + 2}" y="${top + 6}" font-size="3" fill="red">Body starts here (x ${left} mm, y ${top} mm)</text></svg></body></html>`;
 }
 
+function SettingsSection({
+  title,
+  description,
+  children,
+  testId,
+  action,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+  testId?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm" data-testid={testId}>
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-1.5">
+        <div className="min-w-0">
+          <h2 className="text-xs font-semibold text-slate-900">{title}</h2>
+          {description ? <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{description}</p> : null}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SubBlock({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <h3 className="text-[11px] font-semibold text-slate-600">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+const fieldGrid = "grid grid-cols-12 gap-1.5";
+const cell3 = "col-span-12 sm:col-span-6 lg:col-span-3 min-w-0";
+const checkGrid = "grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3";
+
 function PrefStepper({
   label,
   value,
@@ -50,10 +91,10 @@ function PrefStepper({
   return (
     <div data-testid={testId}>
       <span className="label">{label}</span>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <button
           type="button"
-          className="btn-secondary min-w-8 px-2"
+          className="btn-secondary h-7 min-w-7 px-1.5 text-sm"
           aria-label={`Decrease ${label}`}
           disabled={value <= UI_PREF_MIN}
           onClick={() => onChange(bumpUiPref(value, -UI_PREF_STEP))}
@@ -62,7 +103,7 @@ function PrefStepper({
         </button>
         <input
           type="number"
-          className="input w-16 text-center tabular-nums"
+          className="input h-7 w-14 text-center tabular-nums text-sm"
           min={UI_PREF_MIN}
           max={UI_PREF_MAX}
           step={UI_PREF_STEP}
@@ -72,7 +113,7 @@ function PrefStepper({
         />
         <button
           type="button"
-          className="btn-secondary min-w-8 px-2"
+          className="btn-secondary h-7 min-w-7 px-1.5 text-sm"
           aria-label={`Increase ${label}`}
           disabled={value >= UI_PREF_MAX}
           onClick={() => onChange(bumpUiPref(value, UI_PREF_STEP))}
@@ -80,7 +121,6 @@ function PrefStepper({
           +
         </button>
       </div>
-      <p className="mt-0.5 text-[11px] text-slate-400">Step {UI_PREF_STEP} · {UI_PREF_MIN}–{UI_PREF_MAX}</p>
     </div>
   );
 }
@@ -102,24 +142,22 @@ function DisplayPrefsPanel() {
   const changed = prefs.font !== 1 || prefs.padding !== 1 || prefs.gap !== 1;
 
   return (
-    <section className="card space-y-2 p-2.5 text-sm" data-testid="display-prefs">
-      <div>
-        <h2 className="font-semibold">Display</h2>
-        <p className="text-slate-500">
-          Font size, padding and gaps on this device. 1 is the default. Use + / − to change by {UI_PREF_STEP}. Does not change printed prescriptions.
-        </p>
-      </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <PrefStepper label="Font size" testId="ui-pref-font" value={prefs.font} onChange={(font) => update({ font })} />
-        <PrefStepper label="Padding" testId="ui-pref-padding" value={prefs.padding} onChange={(padding) => update({ padding })} />
-        <PrefStepper label="Gap" testId="ui-pref-gap" value={prefs.gap} onChange={(gap) => update({ gap })} />
+    <SettingsSection
+      title="Display"
+      description={`This device only — step ${UI_PREF_STEP}, range ${UI_PREF_MIN}–${UI_PREF_MAX}. Does not affect print.`}
+      testId="display-prefs"
+    >
+      <div className={`${fieldGrid} text-sm`}>
+        <div className={cell3}><PrefStepper label="Font size" testId="ui-pref-font" value={prefs.font} onChange={(font) => update({ font })} /></div>
+        <div className={cell3}><PrefStepper label="Padding" testId="ui-pref-padding" value={prefs.padding} onChange={(padding) => update({ padding })} /></div>
+        <div className={cell3}><PrefStepper label="Gap" testId="ui-pref-gap" value={prefs.gap} onChange={(gap) => update({ gap })} /></div>
       </div>
       {changed && (
-        <button type="button" className="btn-ghost text-xs" data-testid="ui-pref-reset" onClick={() => update(DEFAULT_UI_PREFS)}>
-          Reset to default (1)
+        <button type="button" className="btn-ghost mt-1.5 h-7 px-2 text-xs" data-testid="ui-pref-reset" onClick={() => update(DEFAULT_UI_PREFS)}>
+          Reset to default
         </button>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -174,48 +212,48 @@ function MfaPanel() {
   }
 
   return (
-    <section className="card space-y-2 p-2.5 text-sm" data-testid="mfa-settings">
-      <h2 className="font-semibold">Two-factor authentication (MFA)</h2>
-      <p className="text-slate-500">Protect sign-in with Google Authenticator, Authy, or any TOTP app.</p>
+    <SettingsSection title="Two-factor authentication" description="TOTP app (Google Authenticator, Authy, etc.)" testId="mfa-settings">
       {enabled === null && <span className="block h-4 w-32 animate-pulse rounded bg-slate-200" />}
       {enabled === true && (
-        <div className="space-y-2">
-          <p className="text-green-700">MFA is on for this account.</p>
-          <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5 text-sm">
+          <span className="inline-flex rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-100">Enabled</span>
+          <div className="flex flex-wrap items-end gap-1.5">
             <label className="text-sm">
               <span className="label">Code to disable</span>
-              <input className="input w-32" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} maxLength={6} />
+              <input className="input h-8 w-28" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} maxLength={6} />
             </label>
-            <button type="button" className="btn-secondary" disabled={busy || code.length < 6} onClick={() => confirm("disable")}>
-              Disable MFA
+            <button type="button" className="btn-secondary h-8 text-xs" disabled={busy || code.length < 6} onClick={() => confirm("disable")}>
+              Disable
             </button>
           </div>
         </div>
       )}
       {enabled === false && !setup && (
-        <button type="button" className="btn-secondary" disabled={busy} onClick={startSetup}>
+        <button type="button" className="btn-secondary h-8 text-xs" disabled={busy} onClick={startSetup}>
           Set up authenticator
         </button>
       )}
       {enabled === false && setup && (
-        <div className="space-y-2">
-          <img src={setup.qrDataUrl} alt="MFA QR code" className="h-40 w-40 border border-slate-200" />
-          <p className="text-xs text-slate-500">
-            Or enter secret manually: <code className="rounded bg-slate-100 px-1">{setup.secret}</code>
-          </p>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="text-sm">
-              <span className="label">Confirm with code</span>
-              <input className="input w-32" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} maxLength={6} data-testid="mfa-enable-code" />
-            </label>
-            <button type="button" className="btn-primary" disabled={busy || code.length < 6} onClick={() => confirm("enable")} data-testid="mfa-enable">
-              Enable MFA
-            </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+          <img src={setup.qrDataUrl} alt="MFA QR code" className="h-32 w-32 shrink-0 rounded border border-slate-200" />
+          <div className="min-w-0 space-y-1.5 text-sm">
+            <p className="text-[11px] text-slate-500">
+              Manual secret: <code className="rounded bg-slate-100 px-1 text-[10px]">{setup.secret}</code>
+            </p>
+            <div className="flex flex-wrap items-end gap-1.5">
+              <label>
+                <span className="label">6-digit code</span>
+                <input className="input h-8 w-28" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} maxLength={6} data-testid="mfa-enable-code" />
+              </label>
+              <button type="button" className="btn-primary h-8 text-xs" disabled={busy || code.length < 6} onClick={() => confirm("enable")} data-testid="mfa-enable">
+                Enable MFA
+              </button>
+            </div>
           </div>
         </div>
       )}
-      {msg && <p className="text-sm text-slate-700">{msg}</p>}
-    </section>
+      {msg && <p className="mt-1.5 text-xs text-slate-600">{msg}</p>}
+    </SettingsSection>
   );
 }
 
@@ -228,7 +266,7 @@ function NumberField({ label, value, step, onChange }: { label: string; value: n
       <input
         type="number"
         step={step}
-        className="input"
+        className="input h-8 text-sm"
         value={draft ?? (Number.isFinite(value) ? value : "")}
         onFocus={() => setDraft(Number.isFinite(value) ? String(value) : "")}
         onChange={(e) => {
@@ -306,130 +344,191 @@ export function SettingsScreen() {
   }
 
   const p = prof[0];
+  const chamberSelect =
+    chambers.length > 1 ? (
+      <select className="input h-8 w-auto max-w-xs text-sm" value={current?.id ?? ""} onChange={(e) => select(e.target.value)} aria-label="Chamber for print settings">
+        {chambers.map((c) => (
+          <option key={c.id} value={c.id}>{c.name.replace(/\s*\n\s*/g, " ")}</option>
+        ))}
+      </select>
+    ) : current ? (
+      <span className="text-[11px] text-slate-500">{current.name.replace(/\s*\n\s*/g, " ")}</span>
+    ) : null;
+
   return (
-    <div className="space-y-2.5">
-      <h1 className="text-lg font-semibold">Settings</h1>
-      <DisplayPrefsPanel />
+    <div className="space-y-1.5 pb-1 [&_.input]:h-8 [&_.input]:text-sm [&_section.card]:rounded-lg [&_section.card]:border [&_section.card]:border-slate-200 [&_section.card]:bg-white [&_section.card]:p-2.5 [&_section.card]:shadow-sm [&_section.card_h2]:text-xs [&_section.card_h2]:font-semibold [&_section.card_h2]:text-slate-900">
+      <header className="flex items-start gap-2">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 ring-1 ring-brand-100" aria-hidden>
+          <Settings className="h-4 w-4" />
+        </div>
+        <div>
+          <h1 className="text-base font-semibold text-slate-900">Settings</h1>
+          <p className="text-[11px] text-slate-500">Display, practice, security, and prescription print layout</p>
+        </div>
+      </header>
+
+      <div className="grid gap-1.5 xl:grid-cols-2">
+        <DisplayPrefsPanel />
+        <MfaPanel />
+      </div>
+
       {p && (
-        <section className="card p-2.5 text-sm">
-          <h2 className="mb-1 font-semibold">Profile (printed on header)</h2>
-          <p>{p.name_en} · BMDC {p.bmdc_number} · {p.bmdc_verified_at ? <span className="text-green-700">verified</span> : <span className="text-amber-700">verification pending</span>}{p.bmdc_expiry && ` · valid to ${p.bmdc_expiry}`}</p>
-          <p className="text-slate-500">Name, degrees and BMDC number are verified by RxPad admin. Ask support to change them.</p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <span className="label mb-0">Signature image</span>
-            {profile?.signature_data_url && <img src={profile.signature_data_url} alt="Signature" className="h-10 border border-slate-200 bg-white" />}
-            <input type="file" accept="image/png,image/jpeg" onChange={(e) => onSignature(e.target.files?.[0])} className="text-xs" />
-            {profile?.signature_data_url && <button className="btn-ghost text-xs" onClick={() => saveSignature(db, session.userId, null)}>Remove</button>}
+        <SettingsSection title="Doctor profile" description="Printed on the prescription header. Name and BMDC are managed by RxPad admin.">
+          <div className="space-y-1.5 text-sm">
+            <p className="font-medium text-slate-900">
+              {p.name_en}
+              {p.degrees_en ? <span className="font-normal text-slate-600"> · {p.degrees_en}</span> : null}
+            </p>
+            <p className="text-xs text-slate-600">
+              BMDC {p.bmdc_number} ·{" "}
+              {p.bmdc_verified_at ? <span className="text-emerald-700">verified</span> : <span className="text-amber-700">pending</span>}
+              {p.bmdc_expiry ? ` · valid to ${p.bmdc_expiry}` : ""}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-1.5">
+              <span className="label mb-0">Signature</span>
+              {profile?.signature_data_url && <img src={profile.signature_data_url} alt="Signature" className="h-9 rounded border border-slate-200 bg-white px-1" />}
+              <input type="file" accept="image/png,image/jpeg" onChange={(e) => onSignature(e.target.files?.[0])} className="max-w-[11rem] text-[11px]" />
+              {profile?.signature_data_url && (
+                <button type="button" className="btn-ghost h-7 px-2 text-xs" onClick={() => saveSignature(db, session.userId, null)}>Remove</button>
+              )}
+            </div>
           </div>
-        </section>
+        </SettingsSection>
       )}
-      <BillingPanel />
-      <MfaPanel />
+
       <ChamberManager />
-      <section className="card flex flex-wrap items-center justify-between gap-2 p-2.5 text-sm">
-        <div>
-          <h2 className="font-semibold">Lab reports</h2>
-          <p className="text-slate-500">The clinic lab&apos;s report heading and signatories, and its tests: normal ranges, units, hidden tests, your own tests.</p>
-        </div>
-        <a href="#/settings/lab" className="btn-secondary" data-testid="settings-lab">Lab settings</a>
-      </section>
-      <section className="card space-y-2.5 p-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-semibold">Print layout</h2>
-          {chambers.length > 1 && (
-            <select className="input w-auto" value={current?.id ?? ""} onChange={(e) => select(e.target.value)}>
-              {chambers.map((c) => <option key={c.id} value={c.id}>{c.name.replace(/\s*\n\s*/g, " ")}</option>)}
-            </select>
-          )}
-          {current && chambers.length === 1 && <span className="text-sm text-slate-500">{current.name}</span>}
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="text-sm"><span className="label">Mode</span>
-            <select className="input" value={s.mode} onChange={(e) => set("mode", e.target.value as PrintSettings["mode"])}>
-              <option value="letterhead">Full letterhead (plain paper)</option><option value="pad">Pre-printed pad (body only)</option>
-            </select>
-          </label>
-          <label className="text-sm"><span className="label">Paper</span>
-            <select className="input" value={typeof s.paper === "string" ? s.paper : "custom"} onChange={(e) => set("paper", e.target.value === "custom" ? { widthMm: 150, heightMm: 230 } : (e.target.value as "A4"))}>
-              <option>A4</option><option>A5</option><option>Letter</option><option value="custom">Custom size</option>
-            </select>
-          </label>
-          {typeof s.paper === "object" && (
-            <>
-              <NumberField label="Width mm" value={s.paper.widthMm} onChange={(widthMm) => set("paper", { ...(s.paper as { widthMm: number; heightMm: number }), widthMm })} />
-              <NumberField label="Height mm" value={s.paper.heightMm} onChange={(heightMm) => set("paper", { ...(s.paper as { widthMm: number; heightMm: number }), heightMm })} />
-            </>
-          )}
-          {num("fontSizePt", "Font size (pt)", 0.5)}
-          {num("leftColumnPct", "Left column width %", 1)}
-          {s.mode === "pad" && num("padHeaderMm", "Pad header height (mm)")}
-          {s.mode === "pad" && num("padFooterMm", "Pad footer height (mm)")}
-          {num("marginTopMm", "Margin top")}
-          {num("marginBottomMm", "Margin bottom")}
-          {num("marginLeftMm", "Margin left")}
-          {num("marginRightMm", "Margin right")}
-          {num("offsetXmm", "Printer offset X (→ +)")}
-          {num("offsetYmm", "Printer offset Y (↓ +)")}
-          <label className="text-sm"><span className="label">Medicine names</span>
-            <select className="input" value={s.drugNameCase} onChange={(e) => set("drugNameCase", e.target.value as PrintSettings["drugNameCase"])}>
-              <option value="upper">CAPITALS (court order 2017)</option><option value="as_is">As typed</option>
-            </select>
-          </label>
-          <label className="text-sm"><span className="label">Show generic</span>
-            <select className="input" value={s.genericDisplay} onChange={(e) => set("genericDisplay", e.target.value as PrintSettings["genericDisplay"])}>
-              <option value="brand_generic">Brand (Generic)</option><option value="brand">Brand only</option><option value="generic">Generic only</option>
-            </select>
-          </label>
-          <label className="text-sm"><span className="label">Instructions</span>
-            <select className="input" value={s.instructionLang} onChange={(e) => set("instructionLang", e.target.value as PrintSettings["instructionLang"])}>
-              <option value="bn">বাংলা</option><option value="en">English</option>
-            </select>
-          </label>
-          <label className="text-sm"><span className="label">Numerals</span>
-            <select className="input" value={s.numerals} onChange={(e) => set("numerals", e.target.value as PrintSettings["numerals"])}>
-              <option value="bn">বাংলা ১২৩</option><option value="en">English 123</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showQr} onChange={(e) => set("showQr", e.target.checked)} /> QR verification code</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showSchedule} onChange={(e) => set("showSchedule", e.target.checked)} data-testid="show-schedule" /> Visiting days &amp; times</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showSerialPhone} onChange={(e) => set("showSerialPhone", e.target.checked)} data-testid="show-serial-phone" /> Serial phone</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showChamberPhone} onChange={(e) => set("showChamberPhone", e.target.checked)} data-testid="show-chamber-phone" /> Chamber phone</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.showBarcode} onChange={(e) => set("showBarcode", e.target.checked)} data-testid="show-barcode" /> Patient ID barcode</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.chambersInHeader} onChange={(e) => set("chambersInHeader", e.target.checked)} /> List all chambers under the header</label>
-          {hasTm && (
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.tmMapAlways} onChange={(e) => set("tmMapAlways", e.target.checked)} data-testid="tm-map-always" /> Always print the TM map (blank drums when nothing is marked)</label>
-          )}
-          {sketchesInTemplate.map((id) => (
-            <label key={id} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={s.sketchesAlways.includes(id)} onChange={(e) => toggleSketch(id, e.target.checked)} data-testid={`sketch-always-${id}`} />
-              Always print the {SKETCHES[id].title.toLowerCase()} picture
-            </label>
-          ))}
-        </div>
-        <div>
-          <h3 className="mb-1 text-sm font-semibold">Section headings</h3>
-          <p className="mb-2 text-xs text-slate-500">Rename a heading (e.g. Dx → Δ, Ix → Investigations) or untick it to keep that section off the print.</p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {SECTION_KEYS.map((k: SectionKey) => (
-              <label key={k} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={!s.hiddenSections.includes(k)} aria-label={`Print ${defaultSectionLabel(k, s.instructionLang)}`}
-                  onChange={(e) => set("hiddenSections", e.target.checked ? s.hiddenSections.filter((x) => x !== k) : [...s.hiddenSections, k])} />
-                <input className="input" value={s.sectionLabels[k] ?? ""} placeholder={defaultSectionLabel(k, s.instructionLang)} data-testid={`section-label-${k}`}
-                  onChange={(e) => set("sectionLabels", { ...s.sectionLabels, [k]: e.target.value || undefined })} />
-              </label>
-            ))}
+      <BillingPanel />
+
+      <a
+        href="#/settings/lab"
+        className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm transition hover:border-brand-200 hover:bg-brand-50/30"
+        data-testid="settings-lab"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+          <div>
+            <h2 className="text-xs font-semibold text-slate-900">Lab reports</h2>
+            <p className="text-[11px] text-slate-500">Report header, signatories, test catalogue and ranges</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SaveButton type="button" className="btn-primary" saving={saving} onClick={save} data-testid="save-print">Save</SaveButton>
-          <button className="btn-secondary" onClick={testPrint}>Print alignment test sheet</button>
-          {saved && <span className="text-sm text-green-700">Saved</span>}
+        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+      </a>
+
+      <SettingsSection
+        title="Print layout"
+        description="Per chamber — margins, pad calibration, and what appears on the prescription."
+        action={chamberSelect}
+      >
+        <div className="space-y-3">
+          <SubBlock title="Paper & mode">
+            <div className={fieldGrid}>
+              <label className={`${cell3} text-sm`}>
+                <span className="label">Mode</span>
+                <select className="input" value={s.mode} onChange={(e) => set("mode", e.target.value as PrintSettings["mode"])}>
+                  <option value="letterhead">Full letterhead</option>
+                  <option value="pad">Pre-printed pad</option>
+                </select>
+              </label>
+              <label className={`${cell3} text-sm`}>
+                <span className="label">Paper</span>
+                <select className="input" value={typeof s.paper === "string" ? s.paper : "custom"} onChange={(e) => set("paper", e.target.value === "custom" ? { widthMm: 150, heightMm: 230 } : (e.target.value as "A4"))}>
+                  <option>A4</option><option>A5</option><option>Letter</option><option value="custom">Custom</option>
+                </select>
+              </label>
+              {typeof s.paper === "object" && (
+                <>
+                  <div className={cell3}><NumberField label="Width (mm)" value={s.paper.widthMm} onChange={(widthMm) => set("paper", { ...(s.paper as { widthMm: number; heightMm: number }), widthMm })} /></div>
+                  <div className={cell3}><NumberField label="Height (mm)" value={s.paper.heightMm} onChange={(heightMm) => set("paper", { ...(s.paper as { widthMm: number; heightMm: number }), heightMm })} /></div>
+                </>
+              )}
+              <div className={cell3}>{num("fontSizePt", "Font (pt)", 0.5)}</div>
+              <div className={cell3}>{num("leftColumnPct", "Left column %", 1)}</div>
+            </div>
+          </SubBlock>
+
+          <SubBlock title="Margins & calibration">
+            <div className={fieldGrid}>
+              {s.mode === "pad" && <div className={cell3}>{num("padHeaderMm", "Pad header (mm)")}</div>}
+              {s.mode === "pad" && <div className={cell3}>{num("padFooterMm", "Pad footer (mm)")}</div>}
+              <div className={cell3}>{num("marginTopMm", "Margin top")}</div>
+              <div className={cell3}>{num("marginBottomMm", "Margin bottom")}</div>
+              <div className={cell3}>{num("marginLeftMm", "Margin left")}</div>
+              <div className={cell3}>{num("marginRightMm", "Margin right")}</div>
+              <div className={cell3}>{num("offsetXmm", "Offset X (→)")}</div>
+              <div className={cell3}>{num("offsetYmm", "Offset Y (↓)")}</div>
+            </div>
+          </SubBlock>
+
+          <SubBlock title="Prescription content">
+            <div className={`${fieldGrid} mb-1.5`}>
+              <label className={`${cell3} text-sm`}>
+                <span className="label">Medicine names</span>
+                <select className="input" value={s.drugNameCase} onChange={(e) => set("drugNameCase", e.target.value as PrintSettings["drugNameCase"])}>
+                  <option value="upper">CAPITALS</option><option value="as_is">As typed</option>
+                </select>
+              </label>
+              <label className={`${cell3} text-sm`}>
+                <span className="label">Generic line</span>
+                <select className="input" value={s.genericDisplay} onChange={(e) => set("genericDisplay", e.target.value as PrintSettings["genericDisplay"])}>
+                  <option value="brand_generic">Brand (Generic)</option><option value="brand">Brand only</option><option value="generic">Generic only</option>
+                </select>
+              </label>
+              <label className={`${cell3} text-sm`}>
+                <span className="label">Instructions</span>
+                <select className="input" value={s.instructionLang} onChange={(e) => set("instructionLang", e.target.value as PrintSettings["instructionLang"])}>
+                  <option value="bn">বাংলা</option><option value="en">English</option>
+                </select>
+              </label>
+              <label className={`${cell3} text-sm`}>
+                <span className="label">Numerals</span>
+                <select className="input" value={s.numerals} onChange={(e) => set("numerals", e.target.value as PrintSettings["numerals"])}>
+                  <option value="bn">বাংলা ১২৩</option><option value="en">English 123</option>
+                </select>
+              </label>
+            </div>
+            <div className={checkGrid}>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700"><input type="checkbox" checked={s.showQr} onChange={(e) => set("showQr", e.target.checked)} /> QR code</label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700"><input type="checkbox" checked={s.showSchedule} onChange={(e) => set("showSchedule", e.target.checked)} data-testid="show-schedule" /> Visiting schedule</label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700"><input type="checkbox" checked={s.showSerialPhone} onChange={(e) => set("showSerialPhone", e.target.checked)} data-testid="show-serial-phone" /> Serial phone</label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700"><input type="checkbox" checked={s.showChamberPhone} onChange={(e) => set("showChamberPhone", e.target.checked)} data-testid="show-chamber-phone" /> Chamber phone</label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700"><input type="checkbox" checked={s.showBarcode} onChange={(e) => set("showBarcode", e.target.checked)} data-testid="show-barcode" /> Patient barcode</label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700"><input type="checkbox" checked={s.chambersInHeader} onChange={(e) => set("chambersInHeader", e.target.checked)} /> All chambers in header</label>
+              {hasTm && (
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 sm:col-span-2"><input type="checkbox" checked={s.tmMapAlways} onChange={(e) => set("tmMapAlways", e.target.checked)} data-testid="tm-map-always" /> TM map always (blank drums OK)</label>
+              )}
+              {sketchesInTemplate.map((id) => (
+                <label key={id} className="flex items-center gap-1.5 text-xs text-slate-700">
+                  <input type="checkbox" checked={s.sketchesAlways.includes(id)} onChange={(e) => toggleSketch(id, e.target.checked)} data-testid={`sketch-always-${id}`} />
+                  Always print {SKETCHES[id].title.toLowerCase()}
+                </label>
+              ))}
+            </div>
+          </SubBlock>
+
+          <SubBlock title="Section headings">
+            <p className="mb-1 text-[10px] text-slate-500">Untick to hide on print; edit label to rename.</p>
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+              {SECTION_KEYS.map((k: SectionKey) => (
+                <label key={k} className="flex items-center gap-1.5 text-xs">
+                  <input type="checkbox" className="shrink-0" checked={!s.hiddenSections.includes(k)} aria-label={`Print ${defaultSectionLabel(k, s.instructionLang)}`}
+                    onChange={(e) => set("hiddenSections", e.target.checked ? s.hiddenSections.filter((x) => x !== k) : [...s.hiddenSections, k])} />
+                  <input className="input h-7 min-w-0 flex-1 py-0 text-xs" value={s.sectionLabels[k] ?? ""} placeholder={defaultSectionLabel(k, s.instructionLang)} data-testid={`section-label-${k}`}
+                    onChange={(e) => set("sectionLabels", { ...s.sectionLabels, [k]: e.target.value || undefined })} />
+                </label>
+              ))}
+            </div>
+          </SubBlock>
+
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
+            <SaveButton type="button" className="btn-primary h-8 text-xs" saving={saving} onClick={save} data-testid="save-print">Save print settings</SaveButton>
+            <button type="button" className="btn-secondary h-8 text-xs" onClick={testPrint}>Alignment test sheet</button>
+            {saved && <span className="text-xs font-medium text-emerald-700">Saved</span>}
+          </div>
+          <p className="text-[10px] leading-snug text-slate-500">
+            Pad: print the test sheet, align the red cross under your pad header, then adjust pad header height. Use offsets if the whole page shifts.
+          </p>
         </div>
-        <p className="text-xs text-slate-500">
-          Pad calibration: print the test sheet on a blank page, hold it over your pad against a light, and adjust
-          “Pad header height” until the red cross sits just below the pad’s printed header. If everything is shifted, use the printer offsets.
-        </p>
-      </section>
+      </SettingsSection>
     </div>
   );
 }
