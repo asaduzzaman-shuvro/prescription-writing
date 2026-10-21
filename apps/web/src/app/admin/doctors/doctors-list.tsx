@@ -4,6 +4,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { accountSelectClass, type TenantAccountStatus } from "./account-status";
 import { deleteDoctorChamber, setTenantStatus, verifyBmdc } from "./actions";
 
@@ -49,8 +50,10 @@ function ConfirmModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  if (!open) return null;
-  return (
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!open || !mounted) return null;
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
       <button type="button" className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" aria-label="Close" onClick={onCancel} />
       <div className="relative w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xl ring-1 ring-slate-900/5">
@@ -68,7 +71,8 @@ function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
