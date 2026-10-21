@@ -97,6 +97,7 @@ export async function productGenericIds(db: Db, productId: string): Promise<stri
 // ---------------------------------------------------------------------------
 
 export type PregnancyStatus = "none" | "pregnant" | "lactating" | "both";
+export type VisitType = "new" | "followup" | "report";
 
 export interface PatientInput {
   name: string;
@@ -159,7 +160,17 @@ export function emptyDoc(): PrescriptionDoc {
 /** Start a visit: today's encounter with the next serial number (and a draft Rx when a doctor starts it). */
 export async function startVisit(
   db: Db,
-  opts: { tenantId: string; userId: string; patientId: string; doctorUserId: string; chamberId: string | null; specialtyCode: string; asDoctor: boolean },
+  opts: {
+    tenantId: string;
+    userId: string;
+    patientId: string;
+    doctorUserId: string;
+    chamberId: string | null;
+    specialtyCode: string;
+    asDoctor: boolean;
+    /** When set at registration/check-in, overrides the default new vs follow-up guess. */
+    visitType?: VisitType;
+  },
 ): Promise<string> {
   const date = today();
   const existing = await db.getOptional<{ id: string }>(
@@ -176,12 +187,13 @@ export async function startVisit(
     const row = await tx.get<{ n: number }>(`SELECT COALESCE(MAX(serial_no), 0) + 1 AS n FROM encounter WHERE visit_date = ? AND doctor_user_id = ?`, [date, opts.doctorUserId]);
     // A patient seen before comes for a follow-up; the doctor can switch it to "report showing".
     const seen = await tx.getOptional<{ id: string }>(`SELECT id FROM encounter WHERE patient_id = ? AND status = 'done' LIMIT 1`, [opts.patientId]);
+    const visitType = opts.visitType ?? (seen ? "followup" : "new");
     await tx.execute(
       `INSERT INTO encounter (id, tenant_id, patient_id, doctor_user_id, chamber_id, visit_date, serial_no, status, specialty_code, visit_type,
                               vitals, exam_findings, created_by, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', '{}', ?, ?, ?)`,
       [id, opts.tenantId, opts.patientId, opts.doctorUserId, opts.chamberId, date, row.n, opts.asDoctor ? "in_progress" : "waiting", opts.specialtyCode,
-        seen ? "followup" : "new", opts.userId, now, now],
+        visitType, opts.userId, now, now],
     );
   });
   if (opts.asDoctor) await ensureDraft(db, id, opts.userId);
@@ -696,13 +708,19 @@ export async function setAppointmentStatus(db: Db, id: string, status: "booked" 
 }
 
 /** Check a booked patient in: link/creates the visit, keeping the booked serial number. */
-export async function checkInAppointment(db: Db, apptId: string, patientId: string, opts: { userId: string; asDoctor: boolean; specialtyCode: string }): Promise<string> {
+export async function checkInAppointment(
+  db: Db,
+  apptId: string,
+  patientId: string,
+  opts: { userId: string; asDoctor: boolean; specialtyCode: string; visitType?: VisitType },
+): Promise<string> {
   const a = await db.get<{ tenant_id: string; doctor_user_id: string; chamber_id: string | null; serial_no: number }>(
     `SELECT tenant_id, doctor_user_id, chamber_id, serial_no FROM appointment WHERE id = ?`,
     [apptId],
   );
   const encId = await startVisit(db, {
     tenantId: a.tenant_id, userId: opts.userId, patientId, doctorUserId: a.doctor_user_id, chamberId: a.chamber_id, specialtyCode: opts.specialtyCode, asDoctor: opts.asDoctor,
+    visitType: opts.visitType,
   });
   const now = nowIso();
   await db.execute(`UPDATE encounter SET serial_no = ?, updated_at = ? WHERE id = ?`, [a.serial_no, now, encId]);
@@ -713,8 +731,6 @@ export async function checkInAppointment(db: Db, apptId: string, patientId: stri
 export async function saveFee(db: Db, encounterId: string, fee: number | null) {
   await db.execute(`UPDATE encounter SET fee = ?, updated_at = ? WHERE id = ?`, [fee, nowIso(), encounterId]);
 }
-
-export type VisitType = "new" | "followup" | "report";
 
 export async function saveVisitType(db: Db, encounterId: string, visitType: VisitType, fee?: number | null) {
   if (fee === undefined) await db.execute(`UPDATE encounter SET visit_type = ?, updated_at = ? WHERE id = ?`, [visitType, nowIso(), encounterId]);

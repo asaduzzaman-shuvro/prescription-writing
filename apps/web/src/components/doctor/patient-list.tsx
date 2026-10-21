@@ -1,7 +1,8 @@
 "use client";
 
 import { usePowerSync, useQuery } from "@powersync/react";
-import { useState } from "react";
+import { Search } from "lucide-react";
+import { useEffect, useState } from "react";
 import { startVisit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
@@ -37,6 +38,10 @@ function groupFromHash(): PatientGroup {
   if (typeof window === "undefined") return "today";
   const g = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("group");
   return g === "unseen" || g === "seen" ? g : "today";
+}
+
+function patientsPath(group: PatientGroup) {
+  return group === "today" ? "/patients" : `/patients?group=${group}`;
 }
 
 export function PatientList() {
@@ -86,12 +91,19 @@ export function PatientList() {
   );
   const tally = counts[0];
   const isDoctor = session.tenantRole === "doctor";
-  const tabs: { id: PatientGroup; label: string; hint: string; n: number }[] = [
-    { id: "today", label: "Current date", hint: `Registered or visiting today (${date}), with no prescription yet`, n: tally?.today_n ?? 0 },
-    { id: "unseen", label: "Unseen patients", hint: "Older patients who do not have a prescription yet", n: tally?.unseen_n ?? 0 },
-    { id: "seen", label: "Seen patients", hint: "Patients who have a prescription written", n: tally?.seen_n ?? 0 },
+  const tabs: { id: PatientGroup; label: string; short: string; hint: string; n: number }[] = [
+    { id: "today", label: "Current date", short: "Today", hint: `Registered or visiting today (${date}), no prescription yet`, n: tally?.today_n ?? 0 },
+    { id: "unseen", label: "Unseen patients", short: "Unseen", hint: "Older patients without a prescription yet", n: tally?.unseen_n ?? 0 },
+    { id: "seen", label: "Seen patients", short: "Seen", hint: "Patients with a prescription written", n: tally?.seen_n ?? 0 },
   ];
   const active = tabs.find((t) => t.id === group) ?? tabs[0]!;
+  const listTotal = Number(matched[0]?.n ?? 0);
+
+  useEffect(() => {
+    const sync = () => setGroup(groupFromHash());
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
 
   async function visit(patientId: string) {
     const doctorId = isDoctor ? session.userId : doctors[0]?.id;
@@ -108,93 +120,114 @@ export function PatientList() {
     navigate(`/visit/${id}`);
   }
 
+  function selectGroup(id: PatientGroup) {
+    setGroup(id);
+    setPage(0);
+    navigate(patientsPath(id));
+  }
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold">Patients</h1>
-          <p className="text-sm text-slate-500">{tally?.n ?? 0} registered — available offline on this device</p>
+          <h1 className="text-base font-semibold text-slate-900">Patients</h1>
+          <p className="text-xs text-slate-500">
+            <span className="tabular-nums font-medium text-slate-700">{tally?.n ?? 0}</span> registered · offline on this device
+          </p>
         </div>
-        <Link to="/patients/new" className="btn-primary">+ New patient</Link>
-      </div>
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <nav className="flex flex-wrap gap-0.5 rounded-md bg-slate-100 p-0.5" aria-label="Patient groups" data-testid="patient-groups">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm ${group === t.id ? "bg-white font-medium text-brand-700 shadow-sm" : "text-slate-600 hover:bg-white/70 hover:text-slate-900"}`}
-              aria-pressed={group === t.id}
-              data-testid={`patient-tab-${t.id}`}
-              onClick={() => {
-                setGroup(t.id);
+        <p className="text-xs tabular-nums text-slate-500">
+          Showing <span className="font-medium text-slate-700">{listTotal}</span> in {active.short.toLowerCase()}
+        </p>
+      </header>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <nav className="flex flex-wrap gap-1" aria-label="Patient groups" data-testid="patient-groups">
+            {tabs.map((t) => {
+              const on = group === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+                    on
+                      ? "border-brand-200 bg-brand-50 text-brand-800 shadow-sm"
+                      : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900"
+                  }`}
+                  aria-pressed={on}
+                  data-testid={`patient-tab-${t.id}`}
+                  onClick={() => selectGroup(t.id)}
+                >
+                  {t.short}
+                  <span className={`ml-1.5 tabular-nums ${on ? "text-brand-600" : "text-slate-400"}`}>{t.n}</span>
+                </button>
+              );
+            })}
+          </nav>
+          <div className="relative w-full min-w-0 lg:max-w-xs">
+            <Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden />
+            <input
+              className="input h-8 w-full pl-7 text-sm"
+              placeholder="Search mobile, name or ID"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
                 setPage(0);
               }}
-            >
-              {t.label}
-              <span className="ml-1.5 tabular-nums text-xs text-slate-400">{t.n}</span>
-            </button>
-          ))}
-        </nav>
-        <p className="text-xs text-slate-500">{active.hint}</p>
-      </div>
-      <input
-        className="input max-w-xl"
-        placeholder="Search by mobile, name or ID"
-        value={q}
-        onChange={(e) => {
-          setQ(e.target.value);
-          setPage(0);
-        }}
-        data-testid="patient-list-search"
-        autoFocus
-      />
-      <div className="card overflow-x-auto">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Age/Sex</th>
-              <th>Mobile</th>
-              <th>Last visit</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.data.map((p) => (
-              <tr key={p.id} className="hover:bg-slate-50/80">
-                <td className="text-xs text-slate-500">{p.code ?? "pending"}</td>
-                <td>
-                  <Link to={`/patients/${p.id}`} className="font-medium text-brand-700 hover:underline">{p.name}</Link>
-                </td>
-                <td>{ageLabel(p.dob)} {p.sex?.[0]?.toUpperCase()}</td>
-                <td>{p.mobile}</td>
-                <td className="tabular-nums text-slate-600">{p.last_visit ?? "—"}</td>
-                <td className="text-right">
-                  <button type="button" className="btn-secondary text-xs" onClick={() => void visit(p.id)}>
-                    {isDoctor ? "Open Rx" : "Queue"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!rows.data.length && (
+              data-testid="patient-list-search"
+              autoFocus
+            />
+          </div>
+        </div>
+        <p className="mt-1.5 text-[11px] text-slate-500">{active.hint}</p>
+      </section>
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
               <tr>
-                <td colSpan={6} className="py-5 text-center text-slate-500">
-                  {searching ? (
-                    <>
-                      No match in {active.label.toLowerCase()}.{" "}
-                      <Link to="/patients/new" className="text-brand-700 underline">Register new patient</Link>
-                    </>
-                  ) : (
-                    <>No one in {active.label.toLowerCase()}.</>
-                  )}
-                </td>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Age / sex</th>
+                <th>Mobile</th>
+                <th>Last visit</th>
+                <th className="text-right">Action</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-        <ListPager page={page} total={Number(matched[0]?.n ?? 0)} size={PAGE} onPage={setPage} />
+            </thead>
+            <tbody>
+              {rows.data.map((p) => (
+                <tr key={p.id} className="hover:bg-slate-50/80">
+                  <td className="text-xs tabular-nums text-slate-500">{p.code ?? "pending"}</td>
+                  <td>
+                    <Link to={`/patients/${p.id}`} className="font-medium text-brand-700 hover:underline">
+                      {p.name}
+                    </Link>
+                  </td>
+                  <td className="text-slate-700">
+                    {ageLabel(p.dob)}
+                    {p.sex ? ` · ${p.sex[0]!.toUpperCase()}` : ""}
+                  </td>
+                  <td className="tabular-nums text-slate-700">{p.mobile || "—"}</td>
+                  <td className="tabular-nums text-slate-600">{p.last_visit ?? "—"}</td>
+                  <td className="text-right">
+                    <button type="button" className="btn-primary h-7 px-2 text-xs" onClick={() => void visit(p.id)}>
+                      {isDoctor ? "Open Rx" : "Queue"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!rows.data.length && (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-sm text-slate-500">
+                    {searching ? `No match in ${active.label.toLowerCase()}.` : `No one in ${active.label.toLowerCase()}.`}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <ListPager page={page} total={listTotal} size={PAGE} onPage={setPage} />
       </div>
     </div>
   );
