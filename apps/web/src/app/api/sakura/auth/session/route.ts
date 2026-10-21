@@ -1,24 +1,25 @@
 import { NextResponse } from "next/server";
 import {
   clearSakuraEnvTokenCache,
-  loginSakuraWithEnv,
+  getSakuraDoctorCredentials,
+  loginSakuraWithDoctor,
   resolveSakuraAccessToken,
   sakuraApiBase,
-  sakuraEnvCredentials,
 } from "@/lib/sakura/server";
 
-/** Ensure Sakura is reachable and we have a token (cookie or env auto-login). */
+/** Ensure Sakura is reachable and we have a token (cookie or doctor auto-login). */
 export async function GET() {
+  const creds = await getSakuraDoctorCredentials();
   let token: string | null = null;
   try {
     token = await resolveSakuraAccessToken();
-    if (!token && sakuraEnvCredentials()) {
-      token = await loginSakuraWithEnv();
+    if (!token && creds) {
+      token = await loginSakuraWithDoctor();
     }
   } catch (err) {
     return NextResponse.json({
       authenticated: false,
-      autoLogin: Boolean(sakuraEnvCredentials()),
+      autoLogin: Boolean(creds),
       error: err instanceof Error ? err.message : "Sakura auto-login failed",
     });
   }
@@ -28,7 +29,7 @@ export async function GET() {
       authenticated: false,
       autoLogin: false,
       error:
-        "Sakura credentials missing. Set SAKURA_PHONE and SAKURA_PASSWORD in apps/web/.env.local (same doctor as Sakura Web).",
+        "Sakura Web credentials missing. A platform admin must add this doctor's Sakura phone & password under Doctors & chambers → Sakura Web.",
     });
   }
 
@@ -38,10 +39,10 @@ export async function GET() {
       cache: "no-store",
     });
     if (upstream.status === 401 || upstream.status === 403) {
-      clearSakuraEnvTokenCache();
-      if (sakuraEnvCredentials()) {
+      clearSakuraEnvTokenCache(creds?.userId);
+      if (creds) {
         try {
-          token = await loginSakuraWithEnv();
+          token = await loginSakuraWithDoctor();
           const retry = await fetch(`${sakuraApiBase()}/chambers`, {
             headers: { Authorization: `Bearer ${token}`, accept: "application/json" },
             cache: "no-store",
@@ -59,25 +60,25 @@ export async function GET() {
       }
       return NextResponse.json({
         authenticated: false,
-        autoLogin: Boolean(sakuraEnvCredentials()),
+        autoLogin: Boolean(creds),
         error: "Sakura session expired",
       });
     }
     if (!upstream.ok) {
       return NextResponse.json({
         authenticated: true,
-        autoLogin: Boolean(sakuraEnvCredentials()),
+        autoLogin: Boolean(creds),
         warning: `Sakura API status ${upstream.status}`,
       });
     }
     return NextResponse.json({
       authenticated: true,
-      autoLogin: Boolean(sakuraEnvCredentials()),
+      autoLogin: Boolean(creds),
     });
   } catch {
     return NextResponse.json({
       authenticated: true,
-      autoLogin: Boolean(sakuraEnvCredentials()),
+      autoLogin: Boolean(creds),
       warning: `Could not reach Sakura at ${sakuraApiBase()}`,
     });
   }

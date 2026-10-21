@@ -12,6 +12,8 @@ export interface ClientSession {
   publicBaseUrl: string;
   /** Paid-until date of the chamber's subscription (null = trial / not set). */
   planExpiresAt: string | null;
+  /** True when admin set Sakura Web phone/password for this doctor or chamber. */
+  sakuraWebEnabled: boolean;
 }
 
 const Ctx = createContext<ClientSession | null>(null);

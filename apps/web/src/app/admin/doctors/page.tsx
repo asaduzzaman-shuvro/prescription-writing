@@ -56,6 +56,8 @@ export default async function DoctorsPage({ searchParams }: { searchParams: Prom
       bmdcExpiry: s.doctorProfile.bmdcExpiry,
       verifiedAt: s.doctorProfile.bmdcVerifiedAt,
       specialty: s.doctorProfile.specialtyCode,
+      sakuraPhone: s.doctorProfile.sakuraPhone,
+      hasSakuraPassword: sql<boolean>`(${s.doctorProfile.sakuraPassword} is not null and ${s.doctorProfile.sakuraPassword} <> '')`,
       rxCount: sql<number>`(select count(*)::int from prescription p where p.doctor_user_id = ${s.doctorProfile.userId} and p.status = 'final')`,
     })
     .from(s.doctorProfile)
@@ -75,6 +77,8 @@ export default async function DoctorsPage({ searchParams }: { searchParams: Prom
     bmdcExpiry: r.bmdcExpiry,
     verifiedAt: r.verifiedAt ? r.verifiedAt.toISOString() : null,
     specialty: r.specialty,
+    sakuraPhone: r.sakuraPhone,
+    hasSakura: Boolean(r.sakuraPhone && r.hasSakuraPassword),
     rxCount: r.rxCount,
   }));
 

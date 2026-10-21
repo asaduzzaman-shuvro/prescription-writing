@@ -132,6 +132,9 @@ export const doctorProfile = pgTable(
     bmdcVerifiedAt: timestamp({ withTimezone: true }),
     bmdcVerifiedBy: uuid().references(() => appUser.id),
     signatureDataUrl: text(),
+    /** Sakura Web login for this doctor (admin-managed; not synced to clients). */
+    sakuraPhone: text(),
+    sakuraPassword: text(),
     ...timestamps,
   },
   (t) => [uniqueIndex("doctor_profile_bmdc_uq").on(sql`upper(${t.bmdcNumber})`)],

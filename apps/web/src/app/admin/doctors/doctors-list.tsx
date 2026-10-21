@@ -1,12 +1,18 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { accountSelectClass, type TenantAccountStatus } from "./account-status";
-import { deleteDoctorChamber, setTenantStatus, verifyBmdc } from "./actions";
+import {
+  deleteDoctorChamber,
+  deleteSakuraCredentials,
+  saveSakuraCredentials,
+  setTenantStatus,
+  verifyBmdc,
+} from "./actions";
 
 export type DoctorListRow = {
   tenantId: string;
@@ -18,10 +24,12 @@ export type DoctorListRow = {
   bmdcExpiry: string | null;
   verifiedAt: string | null;
   specialty: string;
+  sakuraPhone: string | null;
+  hasSakura: boolean;
   rxCount: number;
 };
 
-type ConfirmKind = "delete" | "revoke-verify" | "status-inactive" | "status-pending";
+type ConfirmKind = "delete" | "revoke-verify" | "status-inactive" | "status-pending" | "sakura-delete";
 
 function VerificationBadge({ verifiedAt }: { verifiedAt: string | null }) {
   return verifiedAt ? (
@@ -76,12 +84,99 @@ function ConfirmModal({
   );
 }
 
+function SakuraCredsModal({
+  open,
+  doctorName,
+  initialPhone,
+  busy,
+  error,
+  onCancel,
+  onSave,
+}: {
+  open: boolean;
+  doctorName: string;
+  initialPhone: string;
+  busy?: boolean;
+  error?: string | null;
+  onCancel: () => void;
+  onSave: (phone: string, password: string) => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [phone, setPhone] = useState(initialPhone);
+  const [password, setPassword] = useState("");
+  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    if (open) {
+      setPhone(initialPhone);
+      setPassword("");
+    }
+  }, [open, initialPhone]);
+  if (!open || !mounted) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="sakura-creds-title">
+      <button type="button" className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" aria-label="Close" onClick={onCancel} />
+      <div className="relative w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xl ring-1 ring-slate-900/5">
+        <h2 id="sakura-creds-title" className="text-base font-semibold text-slate-900">Sakura Web</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Login phone &amp; password for <span className="font-medium text-slate-800">{doctorName}</span> on Sakura Web.
+        </p>
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSave(phone.trim(), password);
+          }}
+        >
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Phone</span>
+            <input
+              className="input w-full"
+              type="tel"
+              autoComplete="off"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="01XXXXXXXXX"
+              required
+              disabled={busy}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Password</span>
+            <input
+              className="input w-full"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={initialPhone ? "Enter new password" : "Sakura password"}
+              required
+              disabled={busy}
+            />
+          </label>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={busy}>
+              {busy ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function RowActions({ row, today }: { row: DoctorListRow; today: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirm, setConfirm] = useState<ConfirmKind | null>(null);
+  const [sakuraOpen, setSakuraOpen] = useState(false);
   const [statusDraft, setStatusDraft] = useState(row.status);
   const [error, setError] = useState<string | null>(null);
+  const [sakuraError, setSakuraError] = useState<string | null>(null);
 
   useEffect(() => {
     setStatusDraft(row.status);
@@ -130,6 +225,39 @@ function RowActions({ row, today }: { row: DoctorListRow; today: string }) {
     });
   }
 
+  function runSaveSakura(phone: string, password: string) {
+    startTransition(async () => {
+      setSakuraError(null);
+      const fd = new FormData();
+      fd.set("userId", row.userId);
+      fd.set("phone", phone);
+      fd.set("password", password);
+      const result = await saveSakuraCredentials(undefined, fd);
+      if (result && "error" in result && result.error) {
+        setSakuraError(result.error);
+        return;
+      }
+      setSakuraOpen(false);
+      router.refresh();
+    });
+  }
+
+  function runDeleteSakura() {
+    startTransition(async () => {
+      setError(null);
+      const fd = new FormData();
+      fd.set("userId", row.userId);
+      const result = await deleteSakuraCredentials(undefined, fd);
+      if (result && "error" in result && result.error) {
+        setError(result.error);
+        setConfirm(null);
+        return;
+      }
+      setConfirm(null);
+      router.refresh();
+    });
+  }
+
   function cancelConfirm() {
     setConfirm(null);
     setStatusDraft(row.status);
@@ -168,7 +296,15 @@ function RowActions({ row, today }: { row: DoctorListRow; today: string }) {
                 danger: false,
                 onConfirm: () => runStatus("pending"),
               }
-            : null;
+            : confirm === "sakura-delete"
+              ? {
+                  title: "Remove Sakura Web login?",
+                  message: `${row.nameEn} will no longer auto-connect to Sakura Web until you add credentials again.`,
+                  confirmLabel: "Remove",
+                  danger: true,
+                  onConfirm: runDeleteSakura,
+                }
+              : null;
 
   return (
     <>
@@ -227,6 +363,49 @@ function RowActions({ row, today }: { row: DoctorListRow; today: string }) {
         </td>
         <td className="tabular-nums text-sm text-slate-700">{row.rxCount}</td>
         <td>
+          {row.hasSakura ? (
+            <div className="flex flex-col gap-1">
+              <span className="font-mono text-[11px] text-slate-700">{row.sakuraPhone}</span>
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-brand-700 hover:bg-brand-50"
+                  onClick={() => {
+                    setSakuraError(null);
+                    setSakuraOpen(true);
+                  }}
+                  disabled={busy}
+                >
+                  <Pencil className="h-3 w-3" aria-hidden />
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-slate-500 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => setConfirm("sakura-delete")}
+                  disabled={busy}
+                >
+                  <Trash2 className="h-3 w-3" aria-hidden />
+                  Delete
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
+              onClick={() => {
+                setSakuraError(null);
+                setSakuraOpen(true);
+              }}
+              disabled={busy}
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Add
+            </button>
+          )}
+        </td>
+        <td>
           <div className="flex items-center gap-0.5">
             <Link
               href={`/admin/doctors/${row.tenantId}`}
@@ -260,6 +439,15 @@ function RowActions({ row, today }: { row: DoctorListRow; today: string }) {
           onConfirm={confirmCopy.onConfirm}
         />
       )}
+      <SakuraCredsModal
+        open={sakuraOpen}
+        doctorName={row.nameEn}
+        initialPhone={row.sakuraPhone ?? ""}
+        busy={busy}
+        error={sakuraError}
+        onCancel={() => setSakuraOpen(false)}
+        onSave={runSaveSakura}
+      />
     </>
   );
 }
@@ -277,6 +465,7 @@ export function DoctorsList({ rows, today }: { rows: DoctorListRow[]; today: str
               <th>Verification</th>
               <th>Account</th>
               <th>Final Rx</th>
+              <th>Sakura Web</th>
               <th className="w-16">Actions</th>
             </tr>
           </thead>
@@ -284,7 +473,7 @@ export function DoctorsList({ rows, today }: { rows: DoctorListRow[]; today: str
             {rows.map((r) => <RowActions key={r.userId} row={r} today={today} />)}
             {!rows.length && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-500">No doctors match this filter.</td>
+                <td colSpan={8} className="py-8 text-center text-slate-500">No doctors match this filter.</td>
               </tr>
             )}
           </tbody>

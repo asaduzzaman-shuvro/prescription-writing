@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import {
   clearSakuraEnvTokenCache,
-  loginSakuraWithEnv,
+  getSakuraDoctorCredentials,
+  loginSakuraWithDoctor,
   resolveSakuraAccessToken,
   sakuraApiBase,
-  sakuraEnvCredentials,
 } from "@/lib/sakura/server";
 
 type Ctx = { params: Promise<{ path: string[] }> };
@@ -16,10 +16,11 @@ async function proxy(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Use /api/sakura/auth/login" }, { status: 400 });
   }
 
+  const creds = await getSakuraDoctorCredentials();
   let token = await resolveSakuraAccessToken();
-  if (!token && sakuraEnvCredentials()) {
+  if (!token && creds) {
     try {
-      token = await loginSakuraWithEnv();
+      token = await loginSakuraWithDoctor();
     } catch (err) {
       return NextResponse.json(
         { error: err instanceof Error ? err.message : "Sakura auto-login failed" },
@@ -31,7 +32,7 @@ async function proxy(req: Request, ctx: Ctx) {
     return NextResponse.json(
       {
         error:
-          "Sakura not connected. Set SAKURA_PHONE and SAKURA_PASSWORD in apps/web/.env.local.",
+          "Sakura not connected. Ask a platform admin to add Sakura Web phone & password for this doctor under Doctors & chambers.",
       },
       { status: 401 },
     );
@@ -57,9 +58,9 @@ async function proxy(req: Request, ctx: Ctx) {
   let upstream: Response;
   try {
     upstream = await call(token);
-    if ((upstream.status === 401 || upstream.status === 403) && sakuraEnvCredentials()) {
-      clearSakuraEnvTokenCache();
-      token = await loginSakuraWithEnv();
+    if ((upstream.status === 401 || upstream.status === 403) && creds) {
+      clearSakuraEnvTokenCache(creds.userId);
+      token = await loginSakuraWithDoctor();
       upstream = await call(token);
     }
   } catch (err) {
