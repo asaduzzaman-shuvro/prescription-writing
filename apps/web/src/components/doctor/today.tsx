@@ -1,6 +1,6 @@
 "use client";
 
-import { usePowerSync, useQuery } from "@powersync/react";
+import { useQuery } from "@powersync/react";
 import {
   Activity,
   Banknote,
@@ -9,17 +9,14 @@ import {
   FileText,
   Stethoscope,
   TrendingUp,
-  UserPlus,
   Users,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { startVisit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors, useMyProfile } from "@/lib/doctor/hooks";
-import { Link, navigate } from "@/lib/doctor/router";
+import { Link } from "@/lib/doctor/router";
 import { today } from "@/lib/doctor/util";
 import { useAppointments, useCheckIn } from "./bookings";
-import { PatientSearch } from "./patient-search";
 
 /** Same rule as the patient list: a written prescription has medicines, or has been finalised. */
 const WRITTEN_RX = `EXISTS (
@@ -274,7 +271,6 @@ function StatCard({
 }
 
 export function Today() {
-  const db = usePowerSync();
   const session = useSession();
   const { current: chamber, chambers, select } = useChambers();
   const doctors = useDoctors();
@@ -374,21 +370,6 @@ export function Today() {
   const month = monthRows[0];
   const weekVisitTotal = days.reduce((s, d) => s + num(weekRows.find((r) => r.visit_date === d)?.n), 0);
 
-  async function visit(patientId: string) {
-    if (!effectiveDoctor) return alert("No doctor in this chamber yet.");
-    const doc = doctors.find((d) => d.id === effectiveDoctor);
-    const id = await startVisit(db, {
-      tenantId: session.tenantId,
-      userId: session.userId,
-      patientId,
-      doctorUserId: effectiveDoctor,
-      chamberId: chamber?.id ?? null,
-      specialtyCode: doc?.specialty_code ?? "general",
-      asDoctor: isDoctor,
-    });
-    navigate(`/visit/${id}`);
-  }
-
   const queueSegments = [
     { value: waiting, color: "#fbbf24" },
     { value: inRoom, color: "#3b82f6" },
@@ -406,7 +387,7 @@ export function Today() {
   ];
 
   return (
-    <div className="space-y-2">
+    <div className="w-full space-y-3">
       {bmdcExpired && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-alert ring-1 ring-red-100">
           Your BMDC registration expired on {profile!.bmdc_expiry}. Please renew it and inform the RxPad admin.
@@ -453,7 +434,7 @@ export function Today() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 xl:grid-cols-4" data-testid="dashboard-stats">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4" data-testid="dashboard-stats">
         <StatCard label="Waiting" value={waiting} tone="amber" icon={<Users className="h-4 w-4" />} />
         <StatCard label="With the doctor" value={inRoom} tone="blue" icon={<Stethoscope className="h-4 w-4" />} />
         <StatCard label="Prescription written" value={writtenToday} tone="green" icon={<FileText className="h-4 w-4" />} />
@@ -465,21 +446,8 @@ export function Today() {
         />
       </div>
 
-      <section className="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm ring-1 ring-slate-900/5">
-        <div className="mb-1.5 flex items-center gap-1.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-50 text-brand-700">
-            <UserPlus className="h-3.5 w-3.5" />
-          </div>
-          <div>
-            <h2 className="text-xs font-semibold text-slate-900">Find patient</h2>
-            <p className="text-[10px] text-slate-500">Search and start a visit or add to queue</p>
-          </div>
-        </div>
-        <PatientSearch onPick={(p) => visit(p.id)} actionLabel={isDoctor ? "Start visit" : "Add to queue"} />
-      </section>
-
-      <div className="grid gap-1.5 lg:grid-cols-12">
-        <section className="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm ring-1 ring-slate-900/5 lg:col-span-5">
+      <div className="grid gap-2 xl:grid-cols-12">
+        <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm ring-1 ring-slate-900/5 xl:col-span-6">
           <div className="mb-1.5 flex items-baseline justify-between gap-2">
             <h2 className="text-xs font-semibold text-slate-900">Today&apos;s queue</h2>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium tabular-nums text-slate-600">{totalToday} visits</span>
@@ -508,7 +476,7 @@ export function Today() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm ring-1 ring-slate-900/5 lg:col-span-3">
+        <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm ring-1 ring-slate-900/5 xl:col-span-3">
           <h2 className="mb-1.5 text-xs font-semibold text-slate-900">Visit mix today</h2>
           <DonutChart
             segments={visitTypeSegments}
@@ -522,12 +490,12 @@ export function Today() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm ring-1 ring-slate-900/5 lg:col-span-4">
+        <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm ring-1 ring-slate-900/5 xl:col-span-3">
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <h2 className="text-xs font-semibold text-slate-900">This month</h2>
             <CalendarDays className="h-4 w-4 text-slate-400" aria-hidden />
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <MonthTile label="Visits" value={num(month?.visits)} />
             <MonthTile label="Finished" value={num(month?.finished)} />
             {showMoney && <MonthTile label="Fees" value={money(num(month?.fees))} accent="emerald" />}
@@ -538,8 +506,8 @@ export function Today() {
         </section>
       </div>
 
-      <div className="grid gap-1.5 lg:grid-cols-2">
-        <section className="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm ring-1 ring-slate-900/5">
+      <div className="grid gap-2 xl:grid-cols-2">
+        <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-1 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-brand-600" aria-hidden />
@@ -550,7 +518,7 @@ export function Today() {
           <WeekVisitChart days={days} weekRows={weekRows} todayDate={date} />
         </section>
 
-        <section className="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm ring-1 ring-slate-900/5">
+        <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-1 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
               <Banknote className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
@@ -587,28 +555,32 @@ export function Today() {
         </div>
       )}
 
-      <section className="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-sm ring-1 ring-slate-900/5">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-          <div className="shrink-0 lg:w-36">
-            <h2 className="text-xs font-semibold text-slate-900">Patient registry</h2>
-            <p className="text-xs text-slate-500">{registered} registered</p>
-            <DonutChart segments={patientSegments} centerValue={registered} centerLabel="patients" size={100} />
+      <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm ring-1 ring-slate-900/5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Patient registry</h2>
+            <p className="text-xs text-slate-500">{registered} registered in this chamber</p>
           </div>
-          <div className="min-w-0 flex-1">
-            <ShareBar
-              parts={[
-                { n: currentOpen, className: "bg-amber-400" },
-                { n: olderOpen, className: "bg-slate-400" },
-                { n: writtenPatients, className: "bg-emerald-500" },
-              ]}
-            />
-            <div className="mt-1 divide-y divide-slate-100">
-              <Metric to="/patients?group=today" label="Current date, no prescription" value={currentOpen} swatch="bg-amber-400" />
-              <Metric to="/patients?group=unseen" label="Older, no prescription" value={olderOpen} swatch="bg-slate-400" />
-              <Metric to="/patients?group=seen" label="Prescription written" value={writtenPatients} swatch="bg-emerald-500" />
-              <Metric label="Registered today" value={num(book?.registered_today)} />
+          <DonutChart segments={patientSegments} centerValue={registered} centerLabel="patients" size={96} />
+        </div>
+        <ShareBar
+          parts={[
+            { n: currentOpen, className: "bg-amber-400" },
+            { n: olderOpen, className: "bg-slate-400" },
+            { n: writtenPatients, className: "bg-emerald-500" },
+          ]}
+        />
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { to: "/patients?group=today" as const, label: "Current date, no prescription", value: currentOpen, swatch: "bg-amber-400" },
+            { to: "/patients?group=unseen" as const, label: "Older, no prescription", value: olderOpen, swatch: "bg-slate-400" },
+            { to: "/patients?group=seen" as const, label: "Prescription written", value: writtenPatients, swatch: "bg-emerald-500" },
+            { label: "Registered today", value: num(book?.registered_today) },
+          ].map((m) => (
+            <div key={m.label} className="rounded-lg border border-slate-200/80 bg-slate-50/50 px-2.5 py-1 ring-1 ring-slate-900/5">
+              <Metric to={m.to} label={m.label} value={m.value} swatch={m.swatch} />
             </div>
-          </div>
+          ))}
         </div>
       </section>
     </div>
