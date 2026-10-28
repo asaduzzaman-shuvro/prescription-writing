@@ -23,6 +23,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await owner.execute(sql`delete from audit_log where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from lab_report where tenant_id in (${A}::uuid, ${B}::uuid)`);
+  await owner.execute(sql`delete from custom_medicine where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from lab_test where tenant_id in (${A}::uuid, ${B}::uuid) or code like 'rls-%'`);
   await owner.execute(sql`delete from lab_profile where tenant_id in (${A}::uuid, ${B}::uuid)`);
   await owner.execute(sql`delete from lab_file where tenant_id in (${A}::uuid, ${B}::uuid)`);
@@ -136,6 +137,27 @@ describe("row-level security", () => {
 
   it("cannot write the catalogue", async () => {
     await expect(app.execute(sql`update brand_product set brand_name = brand_name where false`)).rejects.toMatchObject({ cause: { message: expect.stringMatching(/permission denied/) } });
+  });
+
+  it("keeps doctor-added medicines inside their clinic, and can't delete them", async () => {
+    const id = randomUUID();
+    const form = await owner.execute(sql`select id from dosage_form limit 1`);
+    const formId = (form as unknown as { id: string }[])[0]?.id ?? null;
+    await withTenant(app, { tenantId: A, userId: userA }, (tx) =>
+      tx.insert(s.customMedicine).values({ id, tenantId: A, ownerUserId: userA, brandName: "Rls-med", formId, genericText: "Paracetamol" }),
+    );
+    const own = await withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.select().from(s.customMedicine).where(sql`id = ${id}::uuid`));
+    expect(own[0]?.status).toBe("pending");
+    const other = await withTenant(app, { tenantId: B, userId: userA }, (tx) => tx.select().from(s.customMedicine).where(sql`id = ${id}::uuid`));
+    expect(other).toEqual([]);
+    await expect(
+      withTenant(app, { tenantId: A, userId: userA }, (tx) =>
+        tx.insert(s.customMedicine).values({ id: randomUUID(), tenantId: B, ownerUserId: userA, brandName: "sneaky" }),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      withTenant(app, { tenantId: A, userId: userA }, (tx) => tx.execute(sql`delete from custom_medicine where id = ${id}::uuid`)),
+    ).rejects.toMatchObject({ cause: { message: expect.stringMatching(/permission denied/) } });
   });
 
   it("reads but cannot write the history library", async () => {
