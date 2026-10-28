@@ -63,6 +63,8 @@ export interface RxItem {
   id: string;
   /** Catalogue product id when picked from the medicine DB; absent for free-text medicines. */
   productId?: string | null;
+  /** A doctor-added medicine not (yet) in the catalogue (`custom_medicine` id); productId stays null. */
+  customMedicineId?: string;
   /** Dosage form label, e.g. "Tab.", "Syp.", "Ear Drop". */
   form?: string;
   brandName: string;
