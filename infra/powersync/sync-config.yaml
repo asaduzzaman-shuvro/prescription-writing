@@ -60,3 +60,4 @@ streams:
     priority: 1
     queries:
       - SELECT * FROM doctor_favorite WHERE user_id = auth.user_id()
+      - SELECT * FROM custom_medicine WHERE owner_user_id = auth.user_id()
