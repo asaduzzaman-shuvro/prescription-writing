@@ -10,6 +10,8 @@ type Pack = { description: string; packSize: string; mrp: string; govtFixed: boo
 
 export interface ProductFormValue {
   id?: string;
+  /** Set when approving a doctor-added medicine (custom_medicine id). */
+  requestId?: string;
   brandName: string;
   formId: string;
   companyId: string;
@@ -41,6 +43,7 @@ export function ProductForm({
     start(async () => {
       const res = await saveProduct({
         id: v.id,
+        requestId: v.requestId,
         brandName: v.brandName,
         formId: v.formId,
         companyId: v.companyId,
@@ -141,7 +144,7 @@ export function ProductForm({
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <SaveButton className="btn-primary" saving={pending}>Save medicine</SaveButton>
+      <SaveButton className="btn-primary" saving={pending}>{v.requestId ? "Approve & add for all doctors" : "Save medicine"}</SaveButton>
     </form>
   );
 }

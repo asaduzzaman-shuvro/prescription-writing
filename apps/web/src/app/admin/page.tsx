@@ -17,6 +17,7 @@ interface Dash {
   companies: number;
   tenants: number;
   unverified: number;
+  medRequests: number;
   devSeed: number;
   jobs: { id: string; createdAt: Date; filename: string; source: string; summary: unknown }[];
 }
@@ -34,12 +35,14 @@ async function loadDash(): Promise<Dash> {
       companies: number;
       tenants: number;
       unverified: number;
+      med_requests: number;
     }>(sql`
       SELECT p.products, p.active, p.dev_seed,
              (SELECT count(*)::int FROM generic) AS generics,
              (SELECT count(*)::int FROM company) AS companies,
              (SELECT count(*)::int FROM tenant) AS tenants,
-             (SELECT count(*)::int FROM doctor_profile WHERE bmdc_verified_at IS NULL) AS unverified
+             (SELECT count(*)::int FROM doctor_profile WHERE bmdc_verified_at IS NULL) AS unverified,
+             (SELECT count(*)::int FROM custom_medicine WHERE status = 'pending') AS med_requests
         FROM (
           SELECT count(*)::int AS products,
                  count(*) FILTER (WHERE is_active)::int AS active,
@@ -67,6 +70,7 @@ async function loadDash(): Promise<Dash> {
     companies: 0,
     tenants: 0,
     unverified: 0,
+    med_requests: 0,
   };
   const n = (v: unknown) => Number(v) || 0;
   dashCache = {
@@ -77,6 +81,7 @@ async function loadDash(): Promise<Dash> {
     companies: n(row.companies),
     tenants: n(row.tenants),
     unverified: n(row.unverified),
+    medRequests: n(row.med_requests),
     devSeed: n(row.dev_seed),
     jobs,
   };
@@ -85,7 +90,7 @@ async function loadDash(): Promise<Dash> {
 
 export default async function AdminDashboard() {
   await connection();
-  const { products, active, generics, companies, tenants, unverified, devSeed, jobs } = await loadDash();
+  const { products, active, generics, companies, tenants, unverified, medRequests, devSeed, jobs } = await loadDash();
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -96,13 +101,14 @@ export default async function AdminDashboard() {
           replaced by licensed or DGDA data before production.
         </div>
       )}
-      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4 xl:grid-cols-7">
         <Stat label="Products" value={products.toLocaleString()} href="/admin/medicines" accent="border-l-4 border-l-brand-500" />
         <Stat label="Active" value={active.toLocaleString()} accent="border-l-4 border-l-green-500" />
         <Stat label="Generics" value={generics.toLocaleString()} href="/admin/generics" accent="border-l-4 border-l-brand-500" />
         <Stat label="Companies" value={companies.toLocaleString()} href="/admin/companies" accent="border-l-4 border-l-brand-500" />
         <Stat label="Chambers" value={tenants.toLocaleString()} href="/admin/doctors" accent="border-l-4 border-l-blue-500" />
         <Stat label="BMDC unverified" value={unverified.toLocaleString()} href="/admin/doctors?filter=unverified" accent="border-l-4 border-l-amber-500" />
+        <Stat label="Medicines to review" value={medRequests.toLocaleString()} href="/admin/medicine-requests" accent="border-l-4 border-l-amber-500" />
       </div>
       <div className="mt-3 grid min-h-0 flex-1 items-stretch gap-1.5 lg:grid-cols-3">
         <div className="card flex min-h-0 flex-col overflow-hidden lg:col-span-2">
