@@ -11,6 +11,8 @@ import { requireAdmin } from "@/lib/session";
 
 const ProductInput = z.object({
   id: z.string().uuid().optional(),
+  /** Approving a doctor-added medicine: the new product takes the request's id, so the doctor's device links up. */
+  requestId: z.string().uuid().optional(),
   brandName: z.string().trim().min(1, "Brand name is required"),
   formId: z.string().uuid("Choose a dosage form"),
   companyId: z.string().uuid("Choose a company"),
@@ -61,6 +63,13 @@ export async function saveProduct(input: ProductInputT): Promise<{ error?: strin
   const genericText = d.ingredients.map((i) => nameOf.get(i.genericId) ?? "").join(" + ");
   const today = new Date().toISOString().slice(0, 10);
 
+  if (d.requestId) {
+    if (d.id) return { error: "A request is approved as a new product" };
+    const [request] = await ownerDb.select({ status: s.customMedicine.status }).from(s.customMedicine).where(eq(s.customMedicine.id, d.requestId));
+    if (!request) return { error: "Request not found" };
+    if (request.status === "approved") return { error: "This request is already approved" };
+  }
+
   const id = await ownerDb.transaction(async (tx) => {
     const before = d.id ? (await tx.select().from(s.brandProduct).where(eq(s.brandProduct.id, d.id)))[0] : undefined;
     const values = {
@@ -80,7 +89,10 @@ export async function saveProduct(input: ProductInputT): Promise<{ error?: strin
     if (productId) {
       await tx.update(s.brandProduct).set(values).where(eq(s.brandProduct.id, productId));
     } else {
-      const [row] = await tx.insert(s.brandProduct).values({ ...values, source: "admin" }).returning({ id: s.brandProduct.id });
+      const [row] = await tx
+        .insert(s.brandProduct)
+        .values({ ...values, ...(d.requestId ? { id: d.requestId, source: "doctor" } : { source: "admin" }) })
+        .returning({ id: s.brandProduct.id });
       productId = row!.id;
     }
     await tx.delete(s.productIngredient).where(eq(s.productIngredient.productId, productId));
@@ -115,9 +127,29 @@ export async function saveProduct(input: ProductInputT): Promise<{ error?: strin
       before: before ?? null,
       after: { ...values, ingredients: d.ingredients, packs: d.packs },
     });
+    if (d.requestId) {
+      // The request keeps the generics the product ended up with, so the doctor's earlier prescriptions check the same.
+      await tx
+        .update(s.customMedicine)
+        .set({
+          status: "approved",
+          approvedProductId: productId,
+          genericIds: d.ingredients.map((i) => i.genericId),
+          reviewNote: null,
+          reviewedBy: session.userId,
+          reviewedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(s.customMedicine.id, d.requestId));
+      await audit({ actorUserId: session.userId, action: "catalogue.custom_medicine.approve", entity: "custom_medicine", entityId: d.requestId, after: { productId } });
+    }
     return productId;
   });
   revalidatePath("/admin/medicines");
+  if (d.requestId) {
+    revalidatePath("/admin/medicine-requests");
+    redirect(`/admin/medicine-requests?done=approved`);
+  }
   redirect(`/admin/medicines/${id}?saved=1`);
 }
 

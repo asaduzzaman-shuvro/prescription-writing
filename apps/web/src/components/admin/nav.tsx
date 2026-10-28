@@ -8,6 +8,7 @@ import {
   FlaskConical,
   LayoutDashboard,
   Pill,
+  PillBottle,
   ScrollText,
   Stethoscope,
   Tags,
@@ -29,6 +30,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Catalogue",
     items: [
       { href: "/admin/medicines", label: "Medicines", icon: <Pill className="h-4 w-4" /> },
+      { href: "/admin/medicine-requests", label: "Doctor-added", icon: <PillBottle className="h-4 w-4" /> },
       { href: "/admin/generics", label: "Generics", icon: <Tags className="h-4 w-4" /> },
       { href: "/admin/companies", label: "Companies", icon: <Building2 className="h-4 w-4" /> },
       { href: "/admin/import", label: "Import CSV", icon: <Upload className="h-4 w-4" /> },
