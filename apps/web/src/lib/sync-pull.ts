@@ -196,6 +196,16 @@ function clinicParts(tenantId: string, userId: string): Part[] {
           FROM doctor_favorite WHERE tenant_id = ${tenant} AND user_id = ${user}`,
       rev: revUpdated("doctor_favorite", sql`tenant_id = ${tenant} AND user_id = ${user}`),
     },
+    {
+      // Only the doctor who added a medicine sees it here; once approved it also arrives as a catalogue product.
+      table: "custom_medicine",
+      query: sql`SELECT id::text AS id, tenant_id::text AS tenant_id, owner_user_id::text AS owner_user_id, brand_name,
+            form_id::text AS form_id, strength_text, generic_text, to_json(generic_ids)::text AS generic_ids,
+            company_id::text AS company_id, company_name, status::text AS status, review_note,
+            approved_product_id::text AS approved_product_id, ${sql.raw(ts("created_at"))}, ${sql.raw(ts("updated_at"))}
+          FROM custom_medicine WHERE tenant_id = ${tenant} AND owner_user_id = ${user}`,
+      rev: revUpdated("custom_medicine", sql`tenant_id = ${tenant} AND owner_user_id = ${user}`),
+    },
   ];
 }
 

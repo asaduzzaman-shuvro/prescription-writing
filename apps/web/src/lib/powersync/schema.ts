@@ -216,6 +216,26 @@ const doctor_favorite = new Table(
   { indexes: { product: ["product_id"] } },
 );
 
+/** Medicines this doctor added that are not in the catalogue (yet); generic_ids is a JSON array of generic ids. */
+const custom_medicine = new Table(
+  {
+    tenant_id: column.text,
+    owner_user_id: column.text,
+    brand_name: column.text,
+    form_id: column.text,
+    strength_text: column.text,
+    generic_text: column.text,
+    generic_ids: column.text,
+    company_id: column.text,
+    company_name: column.text,
+    status: column.text,
+    review_note: column.text,
+    approved_product_id: column.text,
+    ...timestamps,
+  },
+  { indexes: { brand: ["brand_name"] } },
+);
+
 const appointment = new Table(
   {
     tenant_id: column.text,
@@ -263,6 +283,7 @@ export const AppSchema = new Schema({
   doctor_profile,
   rx_template,
   doctor_favorite,
+  custom_medicine,
   // Device-only queue of lab report photos/PDFs (lab-files.ts); never synced.
   attachments: new AttachmentTable(),
 });
@@ -274,4 +295,4 @@ export type PrescriptionRow = Database["prescription"];
 export type LabReportRow = Database["lab_report"];
 
 /** Tables the client is allowed to write; everything else is read-only on the server side. */
-export const WRITABLE_TABLES = ["appointment", "patient", "encounter", "prescription", "lab_report", "lab_test", "lab_panel", "lab_profile", "chamber", "rx_template", "doctor_favorite", "doctor_profile"] as const;
+export const WRITABLE_TABLES = ["appointment", "patient", "encounter", "prescription", "lab_report", "lab_test", "lab_panel", "lab_profile", "chamber", "rx_template", "doctor_favorite", "doctor_profile", "custom_medicine"] as const;

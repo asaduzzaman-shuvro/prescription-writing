@@ -1,5 +1,5 @@
 import "server-only";
-import { formatInstruction, labCatalogueRowProblem, labReportProblem, type PrescriptionDoc } from "@rx/core";
+import { customMedicineProblem, formatInstruction, labCatalogueRowProblem, labReportProblem, type PrescriptionDoc, type RxItem } from "@rx/core";
 import { s, withTenant, type Tx } from "@rx/db";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { appDb } from "./db";
@@ -15,7 +15,7 @@ import type { Session } from "./session";
  * PUT is an upsert and DELETE of a missing row is a no-op, so retries are idempotent.
  */
 
-type Kind = "text" | "uuid" | "date" | "ts" | "int" | "num" | "bool" | "jsonb" | "textarr" | `enum:${string}`;
+type Kind = "text" | "uuid" | "date" | "ts" | "int" | "num" | "bool" | "jsonb" | "textarr" | "uuidarr" | `enum:${string}`;
 
 interface TableSpec {
   /** Columns a client may write. tenant_id is always forced from the session. */
@@ -107,6 +107,14 @@ const SPECS: Record<string, TableSpec> = {
     allowDelete: true,
     columns: { user_id: "uuid", product_id: "uuid", default_shortcut: "text", use_count: "int", created_at: "ts" },
   },
+  // A medicine the doctor added; review fields (status, note, approved product) are the platform admin's.
+  custom_medicine: {
+    roles: ["doctor"],
+    columns: {
+      brand_name: "text", form_id: "uuid", strength_text: "text", generic_text: "text", generic_ids: "uuidarr",
+      company_id: "uuid", company_name: "text", created_at: "ts",
+    },
+  },
   doctor_profile: {
     roles: ["doctor"],
     // Identity fields (BMDC, degrees) are admin-verified and not client-writable.
@@ -152,6 +160,8 @@ function valueSql(kind: Kind, raw: unknown): SQL {
       return sql`${typeof raw === "string" ? raw : JSON.stringify(raw)}::jsonb`;
     case "textarr":
       return sql`array(select jsonb_array_elements_text(${typeof raw === "string" ? raw : JSON.stringify(raw)}::jsonb))`;
+    case "uuidarr":
+      return sql`array(select jsonb_array_elements_text(${typeof raw === "string" ? raw : JSON.stringify(raw)}::jsonb)::uuid)`;
     default:
       return sql`${String(raw)}::${sql.raw(kind.slice(5))}`;
   }
@@ -226,6 +236,7 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
     if (v === "") data.pregnancy_status = null;
   }
   if (op.table === "lab_test" || op.table === "lab_panel") await checkLabCatalogue(tx, session.tenantId, op, data, before);
+  if (op.table === "custom_medicine") checkCustomMedicine(session.userId, data, before);
   if (op.table === "lab_profile") {
     if (typeof data.logo_data_url === "string" && data.logo_data_url.length > 400_000) throw new Rejection("logo image too large (max 300 KB)");
     const signatories = typeof data.signatories === "string" ? data.signatories : JSON.stringify(data.signatories ?? []);
@@ -250,6 +261,10 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
     const insertVals = [sql`${op.id}::uuid`, sql`${session.tenantId}::uuid`, ...cols.map(([k, v]) => valueSql(spec.columns[k]!, v))];
     if ((op.table === "patient" || op.table === "encounter" || op.table === "appointment" || op.table === "lab_report") && !("created_by" in data)) {
       insertCols.push(sql`created_by`);
+      insertVals.push(sql`${session.userId}::uuid`);
+    }
+    if (op.table === "custom_medicine") {
+      insertCols.push(sql`owner_user_id`);
       insertVals.push(sql`${session.userId}::uuid`);
     }
     const updates = cols.filter(([k]) => k !== "created_at").map(([k]) => sql`${sql.identifier(k)} = excluded.${sql.identifier(k)}`);
@@ -316,6 +331,14 @@ async function checkLabCatalogue(tx: Tx, tenantId: string, op: CrudOp, data: Rec
   }
 }
 
+/** A doctor edits only the medicines they added, and only until the platform admin has reviewed them. */
+function checkCustomMedicine(userId: string, data: Record<string, unknown>, before: Record<string, unknown> | undefined) {
+  if (before && before.owner_user_id !== userId) throw new Rejection("not your medicine");
+  if (before && before.status !== "pending") throw new Rejection("this medicine has already been reviewed");
+  const problem = customMedicineProblem({ ...before, ...data });
+  if (problem) throw new Rejection(problem);
+}
+
 /** The clinic lab's report number (L-000123), once per request: the request's other panels share it. */
 async function assignLabNo(tx: Tx, tenantId: string, reportId: string) {
   const [row] = (await tx.execute(sql`select source, request_id, lab_no from lab_report where id = ${reportId}::uuid`)) as unknown as { source: string; request_id: string | null; lab_no: string | null }[];
@@ -373,6 +396,9 @@ const normAllergy = (v: string) =>
     .replace(/\s+(hydrochloride|hcl|sodium|potassium|trihydrate|dihydrate|monohydrate|besilate|maleate|citrate)\b/g, "")
     .trim();
 
+/** The id an item's generics are looked up by: its catalogue product, else the doctor-added medicine. */
+const itemKey = (it: RxItem) => it.productId || it.customMedicineId || null;
+
 /** Hard gates mirrored by client `checkSafety` blockers — allergies, contraindicated DDI, pregnancy D/X. */
 async function assertFinalizeSafety(tx: Tx, patientId: string, doc: PrescriptionDoc) {
   const [patient] = await tx
@@ -386,18 +412,29 @@ async function assertFinalizeSafety(tx: Tx, patientId: string, doc: Prescription
   if (!patient) throw new Rejection("patient not found");
 
   const productIds = [...new Set(doc.items.map((i) => i.productId).filter((id): id is string => !!id && isUuid(id)))];
-  if (!productIds.length) return;
+  const customIds = [...new Set(doc.items.filter((i) => !i.productId).map((i) => i.customMedicineId).filter((id): id is string => !!id && isUuid(id)))];
+  if (!productIds.length && !customIds.length) return;
 
-  const ingredients = await tx
-    .select({
-      productId: s.productIngredient.productId,
-      genericId: s.generic.id,
-      genericName: s.generic.name,
-      pregnancyCategory: s.generic.pregnancyCategory,
-    })
-    .from(s.productIngredient)
-    .innerJoin(s.generic, eq(s.generic.id, s.productIngredient.genericId))
-    .where(inArray(s.productIngredient.productId, productIds));
+  const productIngredients = productIds.length
+    ? await tx
+        .select({
+          productId: s.productIngredient.productId,
+          genericId: s.generic.id,
+          genericName: s.generic.name,
+          pregnancyCategory: s.generic.pregnancyCategory,
+        })
+        .from(s.productIngredient)
+        .innerJoin(s.generic, eq(s.generic.id, s.productIngredient.genericId))
+        .where(inArray(s.productIngredient.productId, productIds))
+    : [];
+  // A doctor-added medicine's generics, keyed by its custom_medicine id (the client's safety.ts genericsFor does the same).
+  const customIngredients = customIds.length
+    ? ((await tx.execute(sql`
+        select c.id::text as "productId", g.id::text as "genericId", g.name as "genericName", g.pregnancy_category as "pregnancyCategory"
+        from custom_medicine c cross join unnest(c.generic_ids) as gid(id) join generic g on g.id = gid.id
+        where c.id in (${sql.join(customIds.map((id) => sql`${id}::uuid`), sql`, `)})`)) as unknown as typeof productIngredients)
+    : [];
+  const ingredients = [...productIngredients, ...customIngredients];
 
   const byProduct = new Map<string, typeof ingredients>();
   for (const row of ingredients) {
@@ -408,8 +445,9 @@ async function assertFinalizeSafety(tx: Tx, patientId: string, doc: Prescription
 
   const allergies = (patient.allergies ?? []).map(normAllergy).filter(Boolean);
   for (const it of doc.items) {
-    if (!it.productId) continue;
-    const gens = byProduct.get(it.productId) ?? [];
+    const key = itemKey(it);
+    if (!key) continue;
+    const gens = byProduct.get(key) ?? [];
     for (const a of allergies) {
       const hit =
         gens.find((g) => normAllergy(g.genericName).includes(a) || a.includes(normAllergy(g.genericName))) ??
@@ -440,8 +478,9 @@ async function assertFinalizeSafety(tx: Tx, patientId: string, doc: Prescription
   const pregnant = patient.pregnancyStatus === "pregnant" || patient.pregnancyStatus === "both";
   if (pregnant && (patient.sex === "female" || patient.sex === null)) {
     for (const it of doc.items) {
-      if (!it.productId) continue;
-      for (const g of byProduct.get(it.productId) ?? []) {
+      const key = itemKey(it);
+      if (!key) continue;
+      for (const g of byProduct.get(key) ?? []) {
         const cat = (g.pregnancyCategory ?? "").trim().toUpperCase().replace(/^CATEGORY\s+/, "");
         if (cat === "X" || cat === "D") {
           throw new Rejection(`pregnancy category ${cat}: ${g.genericName} — cannot finalise`);
