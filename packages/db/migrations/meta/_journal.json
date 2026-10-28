@@ -183,6 +183,20 @@
       "when": 1792265000000,
       "tag": "0025_doctor_sakura_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793210428229,
+      "tag": "0026_custom_medicine",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793210500000,
+      "tag": "0027_custom_medicine_rls",
+      "breakpoints": true
     }
   ]
 }

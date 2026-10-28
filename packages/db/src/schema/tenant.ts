@@ -21,7 +21,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { brandProduct, specialty, specialtyTemplate } from "./catalogue";
+import { brandProduct, company, dosageForm, specialty, specialtyTemplate } from "./catalogue";
 
 export const platformRole = pgEnum("platform_role", ["super_admin", "data_editor"]);
 export const tenantRole = pgEnum("tenant_role", ["clinic_admin", "doctor", "assistant"]);
@@ -32,6 +32,7 @@ export const prescriptionStatus = pgEnum("prescription_status", ["draft", "final
 /** new = first consultation, followup = paid revisit, report = showing test reports (often free). */
 export const visitType = pgEnum("visit_type", ["new", "followup", "report"]);
 export const encounterStatus = pgEnum("encounter_status", ["waiting", "in_progress", "done", "cancelled"]);
+export const customMedicineStatus = pgEnum("custom_medicine_status", ["pending", "approved", "rejected"]);
 
 const timestamps = {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -500,6 +501,44 @@ export const doctorFavorite = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("doctor_favorite_uq").on(t.userId, t.productId)],
+);
+
+/**
+ * A medicine a doctor added that is not in the catalogue. Until a platform admin approves it, only its owner sees
+ * it (the sync pull filters by owner). Approving copies it into brand_product under the same id, or points it at an
+ * existing product (`approved_product_id`); a rejected one stays private to its owner.
+ */
+export const customMedicine = pgTable(
+  "custom_medicine",
+  {
+    id: uuid().primaryKey(),
+    tenantId: uuid()
+      .notNull()
+      .references(() => tenant.id),
+    ownerUserId: uuid()
+      .notNull()
+      .references(() => appUser.id),
+    brandName: text().notNull(),
+    formId: uuid().references(() => dosageForm.id),
+    strengthText: text(),
+    /** As the doctor typed it, e.g. "Paracetamol + Caffeine". */
+    genericText: text(),
+    /** Generics picked from the catalogue; empty when the doctor only typed `generic_text`. */
+    genericIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
+    companyId: uuid().references(() => company.id),
+    /** Free-text company when it is not in the catalogue. */
+    companyName: text(),
+    status: customMedicineStatus().notNull().default("pending"),
+    reviewNote: text(),
+    reviewedBy: uuid(),
+    reviewedAt: timestamp({ withTimezone: true }),
+    approvedProductId: uuid().references(() => brandProduct.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("custom_medicine_owner_idx").on(t.tenantId, t.ownerUserId),
+    index("custom_medicine_status_idx").on(t.status, t.createdAt),
+  ],
 );
 
 export const auditLog = pgTable(
