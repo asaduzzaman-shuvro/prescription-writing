@@ -45,7 +45,9 @@ function itemFromMedicine(m: MedicineHit): RxItem {
   const route = (m.default_route ?? form.route) as RxItem["route"];
   const base: RxItem = {
     id: uuid(),
-    productId: m.id,
+    // A doctor-added medicine is not a catalogue product yet; finalising links prescription_item to products only.
+    productId: m.custom_status ? null : m.id,
+    ...(m.custom_status ? { customMedicineId: m.id } : {}),
     form: m.form_label ?? form.shortLabel,
     brandName: m.brand_name,
     genericName: m.generic_text,

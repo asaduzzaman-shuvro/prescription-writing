@@ -30,14 +30,23 @@ interface ItemGenerics {
 async function genericsFor(db: AbstractPowerSyncDatabase, doc: PrescriptionDoc): Promise<ItemGenerics[]> {
   const out: ItemGenerics[] = [];
   for (const it of doc.items) {
+    type Row = { id: string; name: string; pregnancy_category: string | null; adult_max_mg_per_day: string | null };
+    // A doctor-added medicine's generics come from its own row; the server's assertFinalizeSafety does the same.
     const generics = it.productId
-      ? await db.getAll<{ id: string; name: string; pregnancy_category: string | null; adult_max_mg_per_day: string | null }>(
+      ? await db.getAll<Row>(
           `SELECT g.id, g.name, g.pregnancy_category, g.adult_max_mg_per_day
              FROM product_ingredient pi JOIN generic g ON g.id = pi.generic_id
             WHERE pi.product_id = ? ORDER BY pi.position`,
           [it.productId],
         )
-      : [];
+      : it.customMedicineId
+        ? await db.getAll<Row>(
+            `SELECT g.id, g.name, g.pregnancy_category, g.adult_max_mg_per_day
+               FROM custom_medicine cm, json_each(cm.generic_ids) j JOIN generic g ON g.id = j.value
+              WHERE cm.id = ? ORDER BY j.key`,
+            [it.customMedicineId],
+          )
+        : [];
     out.push({
       itemId: it.id,
       label: it.brandName,
