@@ -5,7 +5,7 @@
  * PowerSync; writes are queued and uploaded to /api/sync/upload when online.
  */
 import type { ChamberSlot, LabFileRef, LabResult, LabSignatory, PrescriptionDoc, PrintSettings, RxItem, Vitals } from "@rx/core";
-import { DEFAULT_PRINT_SETTINGS, labCatalogueRowProblem, labLine, labReportProblem, labRowId } from "@rx/core";
+import { customMedicineProblem, DEFAULT_PRINT_SETTINGS, labCatalogueRowProblem, labLine, labReportProblem, labRowId, type CustomMedicineStatus } from "@rx/core";
 import type { AbstractPowerSyncDatabase } from "@powersync/web";
 import { localNowIso, nowIso, parseJson, randomToken, today, uuid } from "./util";
 
@@ -24,6 +24,9 @@ export interface MedicineHit {
   is_antibiotic: number;
   favorite_shortcut: string | null;
   is_favorite: number;
+  /** Set for a medicine this doctor added (custom_medicine); absent for catalogue products. */
+  custom_status?: CustomMedicineStatus | null;
+  review_note?: string | null;
 }
 
 const MED_SELECT = `
@@ -39,17 +42,35 @@ const MED_SELECT = `
     LEFT JOIN company c ON c.id = p.company_id
     LEFT JOIN doctor_favorite fav ON fav.product_id = p.id AND fav.user_id = ?`;
 
+/**
+ * The doctor's own added medicines, in MedicineHit shape. One drops out once its catalogue product has synced to
+ * this device (approved as itself, or merged into an existing product); until then it stays, whatever its status.
+ */
+const CUSTOM_SELECT = `
+  SELECT cm.id, cm.brand_name, cm.strength_text, coalesce(cm.generic_text, '') AS generic_text,
+         f.name AS form_name, f.short_label AS form_label, f.default_route, f.default_unit,
+         coalesce(c.name, cm.company_name) AS company_name,
+         EXISTS (SELECT 1 FROM json_each(cm.generic_ids) j JOIN generic g ON g.id = j.value WHERE g.is_antibiotic = 1) AS is_antibiotic,
+         NULL AS favorite_shortcut, 0 AS is_favorite, cm.status AS custom_status, cm.review_note
+    FROM custom_medicine cm
+    LEFT JOIN dosage_form f ON f.id = cm.form_id
+    LEFT JOIN company c ON c.id = cm.company_id
+   WHERE cm.owner_user_id = ?
+     AND NOT EXISTS (SELECT 1 FROM brand_product bp WHERE bp.id = coalesce(cm.approved_product_id, cm.id))`;
+
 /** Brand/generic prefix search on the synced catalogue; favourites first. Works offline. */
 function medicineSearchTerms(q: string) {
   const term = q.trim().replace(/[%_]/g, "");
   return { prefix: `${term}%`, word: `% ${term}%` };
 }
 
-export async function searchMedicines(db: Db, userId: string, q: string, limit = 25, offset = 0): Promise<MedicineHit[]> {
+/** `withOwn` puts the doctor's own added medicines that match ahead of the first page (there are only ever a few). */
+export async function searchMedicines(db: Db, userId: string, q: string, limit = 25, offset = 0, withOwn = true): Promise<MedicineHit[]> {
   const term = q.trim();
   if (term.length < 2) return [];
   const { prefix, word } = medicineSearchTerms(q);
-  return db.getAll<MedicineHit>(
+  const own = withOwn && offset === 0 ? await searchCustomMedicines(db, userId, q) : [];
+  const catalogue = await db.getAll<MedicineHit>(
     `${MED_SELECT}
       WHERE p.brand_name LIKE ? OR p.generic_text LIKE ? OR p.generic_text LIKE ?
       ORDER BY is_favorite DESC,
@@ -57,6 +78,16 @@ export async function searchMedicines(db: Db, userId: string, q: string, limit =
                fav.use_count DESC, length(p.brand_name), p.brand_name, p.strength_text
       LIMIT ? OFFSET ?`,
     [userId, prefix, prefix, word, prefix, limit, offset],
+  );
+  return [...own, ...catalogue];
+}
+
+async function searchCustomMedicines(db: Db, userId: string, q: string): Promise<MedicineHit[]> {
+  const { prefix, word } = medicineSearchTerms(q);
+  return db.getAll<MedicineHit>(
+    `${CUSTOM_SELECT} AND (cm.brand_name LIKE ? OR cm.generic_text LIKE ? OR cm.generic_text LIKE ?)
+      ORDER BY cm.brand_name COLLATE NOCASE, cm.strength_text`,
+    [userId, prefix, prefix, word],
   );
 }
 
@@ -68,6 +99,73 @@ export async function searchMedicineCount(db: Db, q: string): Promise<number> {
     [prefix, prefix, word],
   );
   return Number(row?.n ?? 0);
+}
+
+/** Every medicine this doctor added that is not yet a catalogue product on this device, newest first. */
+export async function customMedicines(db: Db, userId: string): Promise<MedicineHit[]> {
+  return db.getAll<MedicineHit>(`${CUSTOM_SELECT} ORDER BY cm.created_at DESC`, [userId]);
+}
+
+export interface CustomMedicineInput {
+  brandName: string;
+  formId: string;
+  strengthText: string | null;
+  /** Printed generic line: the picked generics' names, plus any typed in. */
+  genericText: string;
+  genericIds: string[];
+  companyId: string | null;
+  companyName: string | null;
+}
+
+/** The snake_case row both this form and the server validate with customMedicineProblem. */
+export function customMedicineRow(m: CustomMedicineInput) {
+  return {
+    brand_name: m.brandName.trim(),
+    form_id: m.formId,
+    strength_text: m.strengthText?.trim() || null,
+    generic_text: m.genericText.trim() || null,
+    generic_ids: JSON.stringify(m.genericIds),
+    company_id: m.companyId,
+    company_name: m.companyId ? null : m.companyName?.trim() || null,
+  };
+}
+
+/** Adds a medicine only this doctor sees until the platform admin approves it. Returns it ready to prescribe. */
+export async function saveCustomMedicine(db: Db, tenantId: string, userId: string, m: CustomMedicineInput): Promise<MedicineHit> {
+  const row = customMedicineRow(m);
+  const problem = customMedicineProblem(row);
+  if (problem) throw new Error(problem);
+  const id = uuid();
+  const now = nowIso();
+  await db.execute(
+    `INSERT INTO custom_medicine (id, tenant_id, owner_user_id, brand_name, form_id, strength_text, generic_text, generic_ids,
+       company_id, company_name, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+    [id, tenantId, userId, row.brand_name, row.form_id, row.strength_text, row.generic_text, row.generic_ids, row.company_id, row.company_name, now, now],
+  );
+  const hit = await db.getOptional<MedicineHit>(`${CUSTOM_SELECT} AND cm.id = ?`, [userId, id]);
+  if (!hit) throw new Error("medicine not saved");
+  return hit;
+}
+
+export interface CatalogueOption {
+  id: string;
+  name: string;
+}
+
+export async function dosageForms(db: Db): Promise<(CatalogueOption & { short_label: string | null })[]> {
+  return db.getAll(`SELECT id, name, short_label FROM dosage_form ORDER BY name COLLATE NOCASE`);
+}
+
+/** Generic or company name search for the add-medicine form (prefix first, then word starts). */
+export async function searchCatalogueNames(db: Db, table: "generic" | "company", q: string, limit = 8): Promise<CatalogueOption[]> {
+  if (q.trim().length < 2) return [];
+  const { prefix, word } = medicineSearchTerms(q);
+  return db.getAll<CatalogueOption>(
+    `SELECT id, name FROM ${table} WHERE name LIKE ? OR name LIKE ?
+      ORDER BY CASE WHEN name LIKE ? THEN 0 ELSE 1 END, length(name), name LIMIT ?`,
+    [prefix, word, prefix, limit],
+  );
 }
 
 export async function favoriteMedicines(db: Db, userId: string, limit = 30): Promise<MedicineHit[]> {

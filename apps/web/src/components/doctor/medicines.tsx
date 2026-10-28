@@ -3,8 +3,9 @@
 import { usePowerSync } from "@powersync/react";
 import { Pill, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listMedicines, medicineCount, searchMedicineCount, searchMedicines, type MedicineHit } from "@/lib/doctor/data";
+import { customMedicines, listMedicines, medicineCount, searchMedicineCount, searchMedicines, type MedicineHit } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
+import { CustomMedicineBadge } from "./med-search";
 
 const PAGE = 20;
 
@@ -29,13 +30,18 @@ export function MedicinesScreen() {
   const [catalogue, setCatalogue] = useState<number | null>(null);
   const [matched, setMatched] = useState(0);
   const [hits, setHits] = useState<MedicineHit[]>([]);
+  const [own, setOwn] = useState<MedicineHit[]>([]);
   const searching = q.trim().length >= 2;
+
+  useEffect(() => {
+    void customMedicines(db, userId).then(setOwn);
+  }, [db, userId]);
 
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(async () => {
       const [rows, all, found] = await Promise.all([
-        searching ? searchMedicines(db, userId, q, PAGE, page * PAGE) : listMedicines(db, userId, page * PAGE, PAGE),
+        searching ? searchMedicines(db, userId, q, PAGE, page * PAGE, false) : listMedicines(db, userId, page * PAGE, PAGE),
         medicineCount(db),
         searching ? searchMedicineCount(db, q) : Promise.resolve(0),
       ]);
@@ -84,6 +90,27 @@ export function MedicinesScreen() {
           </p>
         )}
       </header>
+
+      {own.length > 0 && (
+        <section className="overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm" data-testid="my-medicines">
+          <h2 className="border-b border-amber-100 bg-amber-50/60 px-2.5 py-1.5 text-xs font-semibold text-amber-900">
+            Medicines you added · only you see them until they are approved for everyone
+          </h2>
+          <ul className="divide-y divide-slate-100 text-sm">
+            {own.map((m) => (
+              <li key={m.id} className="flex flex-wrap items-baseline gap-2 px-2.5 py-1.5">
+                <span className="text-slate-500">{m.form_label ?? m.form_name}</span>
+                <b>{m.brand_name}</b>
+                <span>{m.strength_text}</span>
+                <span className="text-slate-500">{m.generic_text}</span>
+                <span className="ml-auto">
+                  <CustomMedicineBadge m={m} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-2.5 py-1.5">
