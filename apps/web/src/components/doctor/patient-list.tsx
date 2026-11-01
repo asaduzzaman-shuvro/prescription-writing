@@ -11,6 +11,7 @@ import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, patientSearchClause, today } from "@/lib/doctor/util";
 import { ListPager } from "@/components/list-pager";
 import { ActiveChamberSelector } from "./active-chamber";
+import { NewBookingForm } from "./new-booking-form";
 import type { PatientHit } from "./patient-search";
 
 type PatientListRow = PatientHit & { serial_no: number | null };
@@ -213,6 +214,8 @@ export function PatientList() {
         </div>
         <ActiveChamberSelector className="shrink-0 sm:ml-2" />
       </header>
+
+      <NewBookingForm />
 
       <section className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">

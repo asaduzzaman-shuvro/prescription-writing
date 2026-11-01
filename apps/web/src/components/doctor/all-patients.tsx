@@ -6,14 +6,18 @@ import { useEffect, useState } from "react";
 import { backfillMissingPatientCodes, startVisit } from "@/lib/doctor/data";
 import {
   allPatientsFilterWhere,
+  allPatientsListGroupSql,
   allPatientsSerialSqlEmbedded,
   ORDER_BY_SERIAL_ASC,
+  WRITTEN_RX,
+  type AllPatientsListGroup,
 } from "@/lib/doctor/chamber-filter";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, patientSearchClause, today } from "@/lib/doctor/util";
 import { ListPager } from "@/components/list-pager";
+import { AllPatientsInsights } from "./all-patients-insights";
 import type { PatientHit } from "./patient-search";
 
 const PAGE = 50;
@@ -24,27 +28,42 @@ type AllPatientsTableProps = {
   filterChamberId: string | null;
   filterDateFrom: string | null;
   filterDateTo: string | null;
+  listGroup: AllPatientsListGroup;
   term: string;
   page: number;
   isDoctor: boolean;
   onPage: (page: number) => void;
   onVisit: (patientId: string) => void;
+  activeShort: string;
 };
 
-function AllPatientsTable({ filterChamberId, filterDateFrom, filterDateTo, term, page, isDoctor, onPage, onVisit }: AllPatientsTableProps) {
+function AllPatientsTable({
+  filterChamberId,
+  filterDateFrom,
+  filterDateTo,
+  listGroup,
+  term,
+  page,
+  isDoctor,
+  onPage,
+  onVisit,
+  activeShort,
+}: AllPatientsTableProps) {
   const { sql: filterSql, params: filterParams } = allPatientsFilterWhere(filterChamberId, filterDateFrom, filterDateTo);
+  const groupSql = allPatientsListGroupSql(listGroup);
   const { sql: searchSql, params: searchParams } = patientSearchClause(term);
   const searching = searchSql.length > 0;
   const from = filterDateFrom?.trim() || null;
   const to = filterDateTo?.trim() || null;
   const serialSql = allPatientsSerialSqlEmbedded(from, to, filterChamberId, today());
   const listParams = [...filterParams, ...searchParams, PAGE, page * PAGE];
-  const queryKey = `${filterChamberId ?? ""}|${from ?? ""}|${to ?? ""}|${term}|${page}`;
+  const queryKey = `${filterChamberId ?? ""}|${from ?? ""}|${to ?? ""}|${listGroup}|${term}|${page}`;
 
   return (
     <AllPatientsTableInner
       key={queryKey}
       filterSql={filterSql}
+      groupSql={groupSql}
       searchSql={searchSql}
       serialSql={serialSql}
       listParams={listParams}
@@ -53,15 +72,18 @@ function AllPatientsTable({ filterChamberId, filterDateFrom, filterDateTo, term,
       searching={searching}
       term={term}
       page={page}
+      listGroup={listGroup}
       isDoctor={isDoctor}
       onPage={onPage}
       onVisit={onVisit}
+      activeShort={activeShort}
     />
   );
 }
 
 function AllPatientsTableInner({
   filterSql,
+  groupSql,
   searchSql,
   serialSql,
   listParams,
@@ -70,11 +92,14 @@ function AllPatientsTableInner({
   searching,
   term,
   page,
+  listGroup,
   isDoctor,
   onPage,
   onVisit,
+  activeShort,
 }: {
   filterSql: string;
+  groupSql: string;
   searchSql: string;
   serialSql: string;
   listParams: (string | number)[];
@@ -83,9 +108,11 @@ function AllPatientsTableInner({
   searching: boolean;
   term: string;
   page: number;
+  listGroup: AllPatientsListGroup;
   isDoctor: boolean;
   onPage: (page: number) => void;
   onVisit: (patientId: string) => void;
+  activeShort: string;
 }) {
   const { data: rows } = useQuery<Row>(
     `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code,
@@ -93,21 +120,35 @@ function AllPatientsTableInner({
             (SELECT MAX(visit_date) FROM encounter e WHERE e.patient_id = p.id AND e.status <> 'cancelled') AS last_visit,
             ${serialSql}
        FROM patient p
-      WHERE p.deleted_at IS NULL AND (${filterSql}) ${searchSql}
+      WHERE p.deleted_at IS NULL AND (${filterSql}) AND (${groupSql}) ${searchSql}
       ORDER BY ${ORDER_BY_SERIAL_ASC}
       LIMIT ? OFFSET ?`,
     listParams,
   );
   const { data: matched } = useQuery<{ n: number }>(
-    `SELECT count(*) AS n FROM patient p WHERE p.deleted_at IS NULL AND (${filterSql}) ${searchSql}`,
+    `SELECT count(*) AS n FROM patient p WHERE p.deleted_at IS NULL AND (${filterSql}) AND (${groupSql}) ${searchSql}`,
     [...filterParams, ...searchParams],
   );
   const listTotal = Number(matched[0]?.n ?? 0);
 
+  const emptyMessage =
+    listGroup === "seen"
+      ? searching
+        ? "No seen patients match your search."
+        : "No seen patients in this filter."
+      : listGroup === "unseen"
+        ? searching
+          ? "No unseen patients match your search."
+          : "No unseen patients in this filter."
+        : searching
+          ? "No patients match your search."
+          : "No patients match these filters.";
+
   return (
     <>
       <p className="text-[11px] text-slate-500">
-        Showing <span className="font-medium text-slate-700">{listTotal}</span> patient{listTotal === 1 ? "" : "s"}
+        Showing <span className="font-medium text-slate-700">{listTotal}</span> {activeShort.toLowerCase()} patient
+        {listTotal === 1 ? "" : "s"}
         {searching ? (
           <>
             {" "}
@@ -157,7 +198,7 @@ function AllPatientsTableInner({
               {!rows.length && (
                 <tr>
                   <td colSpan={8} className="py-6 text-center text-sm text-slate-500">
-                    {searching ? "No patients match your search." : "No patients match these filters."}
+                    {emptyMessage}
                   </td>
                 </tr>
               )}
@@ -167,6 +208,65 @@ function AllPatientsTableInner({
         <ListPager page={page} total={listTotal} size={PAGE} onPage={onPage} />
       </div>
     </>
+  );
+}
+
+function AllPatientsListTabs({
+  filterSql,
+  filterParams,
+  listGroup,
+  onSelectGroup,
+  activeHint,
+}: {
+  filterSql: string;
+  filterParams: string[];
+  listGroup: AllPatientsListGroup;
+  onSelectGroup: (g: AllPatientsListGroup) => void;
+  activeHint: string;
+}) {
+  const { data: split } = useQuery<{ all_n: number; seen_n: number; unseen_n: number }>(
+    `SELECT count(*) AS all_n,
+            sum(CASE WHEN (${WRITTEN_RX}) THEN 1 ELSE 0 END) AS seen_n,
+            sum(CASE WHEN NOT (${WRITTEN_RX}) THEN 1 ELSE 0 END) AS unseen_n
+       FROM patient p
+      WHERE p.deleted_at IS NULL AND (${filterSql})`,
+    filterParams,
+  );
+  const all_n = Number(split[0]?.all_n ?? 0);
+  const seen_n = Number(split[0]?.seen_n ?? 0);
+  const unseen_n = Number(split[0]?.unseen_n ?? 0);
+  const listTabs: { id: AllPatientsListGroup; short: string; n: number }[] = [
+    { id: "all", short: "All", n: all_n },
+    { id: "seen", short: "Seen", n: seen_n },
+    { id: "unseen", short: "Unseen", n: unseen_n },
+  ];
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
+      <nav className="flex flex-wrap gap-1" aria-label="All patients list" data-testid="all-patients-tabs">
+        {listTabs.map((t) => {
+          const on = listGroup === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+                on
+                  ? "border-brand-200 bg-brand-50 text-brand-800 shadow-sm"
+                  : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900"
+              }`}
+              aria-pressed={on}
+              data-testid={`all-patients-tab-${t.id}`}
+              onClick={() => onSelectGroup(t.id)}
+            >
+              {t.short}
+              <span className={`ml-1.5 tabular-nums ${on ? "text-brand-600" : "text-slate-400"}`}>{t.n}</span>
+            </button>
+          );
+        })}
+      </nav>
+      <p className="mt-1.5 text-[11px] text-slate-500">{activeHint}</p>
+    </section>
   );
 }
 
@@ -180,8 +280,19 @@ export function AllPatientsScreen() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
+  const [listGroup, setListGroup] = useState<AllPatientsListGroup>("all");
   const term = q.trim();
   const isDoctor = session.tenantRole === "doctor";
+
+  const filterChamberParam = filterChamberId || null;
+  const filterFromParam = filterDateFrom.trim() || null;
+  const filterToParam = filterDateTo.trim() || null;
+  const { sql: filterSqlForCounts, params: filterParamsForCounts } = allPatientsFilterWhere(
+    filterChamberParam,
+    filterFromParam,
+    filterToParam,
+  );
+  const countsKey = `${filterChamberParam ?? ""}|${filterFromParam ?? ""}|${filterToParam ?? ""}`;
 
   const { data: totalRow } = useQuery<{ n: number }>("SELECT count(*) AS n FROM patient WHERE deleted_at IS NULL", []);
   const registeredTotal = Number(totalRow[0]?.n ?? 0);
@@ -192,7 +303,7 @@ export function AllPatientsScreen() {
 
   useEffect(() => {
     setPage(0);
-  }, [filterChamberId, filterDateFrom, filterDateTo, term]);
+  }, [filterChamberId, filterDateFrom, filterDateTo, term, listGroup]);
 
   async function visit(patientId: string) {
     const doctorId = isDoctor ? session.userId : doctors[0]?.id;
@@ -215,12 +326,10 @@ export function AllPatientsScreen() {
     setFilterDateFrom("");
     setFilterDateTo("");
     setQ("");
+    setListGroup("all");
     setPage(0);
   }
 
-  const filterChamberParam = filterChamberId || null;
-  const filterFromParam = filterDateFrom.trim() || null;
-  const filterToParam = filterDateTo.trim() || null;
   const hasDateFilter = Boolean(filterFromParam || filterToParam);
   const chamberName = chambers.find((c) => c.id === filterChamberId)?.name.replace(/\s*\n\s*/g, " ") ?? "All chambers";
 
@@ -233,6 +342,13 @@ export function AllPatientsScreen() {
     return `until ${filterToParam}`;
   }
   const rangeLabel = dateRangeLabel();
+
+  const listTabs: { id: AllPatientsListGroup; short: string; hint: string }[] = [
+    { id: "all", short: "All", hint: "Everyone matching chamber and date filters above" },
+    { id: "seen", short: "Seen", hint: "Prescription written at least once" },
+    { id: "unseen", short: "Unseen", hint: "No prescription written yet" },
+  ];
+  const activeTab = listTabs.find((t) => t.id === listGroup) ?? listTabs[0]!;
 
   return (
     <div className="space-y-2" data-testid="all-patients">
@@ -315,15 +431,32 @@ export function AllPatientsScreen() {
         </p>
       </section>
 
+      <AllPatientsInsights
+        filterChamberId={filterChamberParam}
+        filterDateFrom={filterFromParam}
+        filterDateTo={filterToParam}
+      />
+
+      <AllPatientsListTabs
+        key={countsKey}
+        filterSql={filterSqlForCounts}
+        filterParams={filterParamsForCounts}
+        listGroup={listGroup}
+        onSelectGroup={setListGroup}
+        activeHint={activeTab.hint}
+      />
+
       <AllPatientsTable
         filterChamberId={filterChamberParam}
         filterDateFrom={filterFromParam}
         filterDateTo={filterToParam}
+        listGroup={listGroup}
         term={term}
         page={page}
         isDoctor={isDoctor}
         onPage={setPage}
         onVisit={visit}
+        activeShort={activeTab.short}
       />
     </div>
   );
