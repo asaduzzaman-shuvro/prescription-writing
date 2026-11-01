@@ -2,6 +2,7 @@
 
 import { ChevronDown, MapPin } from "lucide-react";
 import { useChambers } from "@/lib/doctor/hooks";
+import { RX_CHAMBER_ALL } from "@/lib/doctor/chamber-context";
 
 function chamberLabel(name: string | undefined) {
   return (name ?? "No chamber").replace(/\s*\n\s*/g, " ").trim();
@@ -12,8 +13,8 @@ const rowShell =
 
 /** Active RxPad chamber selector — icon, label, and value on one row. */
 export function ActiveChamberSelector({ className = "" }: { className?: string }) {
-  const { chambers, current: chamber, select } = useChambers();
-  const name = chamberLabel(chamber?.name);
+  const { chambers, current: chamber, allChambers, select } = useChambers();
+  const name = allChambers ? "All chambers" : chamberLabel(chamber?.name);
 
   if (!chambers.length) {
     return (
@@ -33,28 +34,24 @@ export function ActiveChamberSelector({ className = "" }: { className?: string }
         <MapPin className="h-3.5 w-3.5" aria-hidden />
       </span>
       <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Active chamber</span>
-      {chambers.length > 1 ? (
-        <div className="relative min-w-[8rem] flex-1 sm:min-w-[10rem] sm:max-w-[16rem]">
-          <select
-            className="input h-8 w-full cursor-pointer appearance-none truncate py-0 pr-8 pl-2.5 text-sm font-medium text-slate-900"
-            value={chamber?.id ?? ""}
-            onChange={(e) => select(e.target.value)}
-            aria-label="Active chamber"
-            title={name}
-          >
-            {chambers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {chamberLabel(c.name)}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
-        </div>
-      ) : (
-        <span className="input flex h-8 min-w-[8rem] flex-1 items-center truncate px-2.5 text-sm font-medium text-slate-900 sm:max-w-[16rem]" title={name}>
-          {name}
-        </span>
-      )}
+      <div className="relative min-w-[8rem] flex-1 sm:min-w-[10rem] sm:max-w-[16rem]">
+        <select
+          className="input h-8 w-full cursor-pointer appearance-none truncate py-0 pr-8 pl-2.5 text-sm font-medium text-slate-900"
+          value={allChambers ? RX_CHAMBER_ALL : (chamber?.id ?? "")}
+          onChange={(e) => select(e.target.value)}
+          aria-label="Active chamber"
+          title={name}
+          data-testid="active-chamber-select"
+        >
+          <option value={RX_CHAMBER_ALL}>All chambers</option>
+          {chambers.map((c) => (
+            <option key={c.id} value={c.id}>
+              {chamberLabel(c.name)}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+      </div>
     </div>
   );
 }

@@ -31,6 +31,7 @@ import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors, useMyProfile } from "@/lib/doctor/hooks";
 import { Link, navigate, useHashRoute } from "@/lib/doctor/router";
 import { today } from "@/lib/doctor/util";
+import { encounterChamberAnd, encounterChamberParam } from "@/lib/doctor/chamber-filter";
 import type { Rejected } from "@/lib/powersync/connector";
 import { disconnectForChamberSwitch, disconnectSession } from "@/lib/powersync/provider";
 import { useCustomSync } from "@/lib/powersync/custom-sync";
@@ -316,6 +317,10 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [newPatientOpen, setNewPatientOpen] = useState(false);
   const date = today();
+  const { current: chamber, allChambers } = useChambers();
+  const chamberId = chamber?.id ?? null;
+  const encCh = encounterChamberAnd(chamberId, "encounter");
+  const encParam = encounterChamberParam(chamberId);
 
   const { data: queueStats } = useQuery<{ waiting: number | null; active: number | null; done: number | null; total: number | null }>(
     `SELECT
@@ -324,8 +329,8 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
         coalesce(sum(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) AS done,
         count(*) AS total
        FROM encounter
-      WHERE visit_date = ? AND status <> 'cancelled' ${isDoctor ? "AND doctor_user_id = ?" : ""}`,
-    isDoctor ? [date, session.userId] : [date],
+      WHERE visit_date = ? AND status <> 'cancelled' ${isDoctor ? "AND doctor_user_id = ?" : ""} ${encCh}`,
+    isDoctor ? [date, session.userId, ...encParam] : [date, ...encParam],
   );
   const qs = {
     waiting: queueStats[0]?.waiting ?? 0,

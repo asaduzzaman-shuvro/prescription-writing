@@ -7,9 +7,15 @@ import type { ChamberRow } from "./hooks";
 
 const RX_CHAMBER_KEY = "rx.chamber";
 
+/** Stored selection when the user wants stats/lists across every chamber. */
+export const RX_CHAMBER_ALL = "";
+
 type ChamberContextValue = {
   chambers: ChamberRow[];
+  /** Resolved chamber for this visit, or null when “All chambers” is selected. */
   current: ChamberRow | null;
+  /** True when Active chamber is “All chambers” (no single-chamber filter). */
+  allChambers: boolean;
   select: (id: string) => void;
 };
 
@@ -35,15 +41,22 @@ export function ChamberProvider({ children }: { children: ReactNode }) {
   const select = useCallback((id: string) => {
     setSelectedId(id);
     try {
-      localStorage.setItem(RX_CHAMBER_KEY, id);
+      if (id === RX_CHAMBER_ALL) localStorage.setItem(RX_CHAMBER_KEY, RX_CHAMBER_ALL);
+      else localStorage.setItem(RX_CHAMBER_KEY, id);
     } catch {
       // storage unavailable
     }
   }, []);
 
-  const current = useMemo(() => data.find((c) => c.id === selectedId) ?? data[0] ?? null, [data, selectedId]);
+  const allChambers = selectedId === RX_CHAMBER_ALL;
 
-  const value = useMemo(() => ({ chambers: data, current, select }), [data, current, select]);
+  const current = useMemo(() => {
+    if (allChambers) return null;
+    if (selectedId) return data.find((c) => c.id === selectedId) ?? data[0] ?? null;
+    return data[0] ?? null;
+  }, [allChambers, data, selectedId]);
+
+  const value = useMemo(() => ({ chambers: data, current, allChambers, select }), [allChambers, data, current, select]);
 
   return <ChamberContext.Provider value={value}>{children}</ChamberContext.Provider>;
 }
