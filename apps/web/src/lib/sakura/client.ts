@@ -44,6 +44,15 @@ export const sakuraApi = {
       method: "POST",
       body: JSON.stringify({ phone, password }),
     }),
+  /** Auto-login session for opening the Angular Sakura doctor UI in a new tab. */
+  externalHandoff: () =>
+    sakuraFetch<{
+      ok: boolean;
+      webBase: string;
+      token: string;
+      refreshToken: string | null;
+      user: { role?: string } | null;
+    }>("/auth/external-handoff", { method: "POST" }),
   logout: () => sakuraFetch<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   get: <T>(path: string) => sakuraFetch<T>(path),
   post: <T>(path: string, body: unknown) =>
