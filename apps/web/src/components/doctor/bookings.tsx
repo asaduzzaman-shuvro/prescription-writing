@@ -10,6 +10,8 @@ import { navigate } from "@/lib/doctor/router";
 import { ageLabel, normaliseMobile, today } from "@/lib/doctor/util";
 import { ListPager } from "@/components/list-pager";
 import { SaveButton } from "@/components/save-button";
+import { ActiveChamberSelector } from "./active-chamber";
+import { SakuraBookingsPanel } from "./sakura-bookings-panel";
 
 export interface ApptRow {
   id: string;
@@ -23,12 +25,14 @@ export interface ApptRow {
   doctor: string | null;
 }
 
-export function useAppointments(date: string) {
+export function useAppointments(date: string, chamberId: string | null = null) {
+  const chamberSql = chamberId ? "AND a.chamber_id = ?" : "";
+  const params = chamberId ? [date, chamberId] : [date];
   return useQuery<ApptRow>(
     `SELECT a.id, a.name, a.mobile, a.serial_no, a.status, a.patient_id, a.doctor_user_id, a.note, d.name_en AS doctor
        FROM appointment a LEFT JOIN doctor_profile d ON d.id = a.doctor_user_id
-      WHERE a.appt_date = ? ORDER BY a.serial_no`,
-    [date],
+      WHERE a.appt_date = ? ${chamberSql} ORDER BY a.serial_no`,
+    params,
   );
 }
 
@@ -89,6 +93,9 @@ export function BookingsScreen() {
   const session = useSession();
   const doctors = useDoctors();
   const { current: chamber } = useChambers();
+  const chamberId = chamber?.id ?? null;
+  const sakuraEnabled = session.sakuraWebEnabled;
+  const [source, setSource] = useState<"rxpad" | "sakura">("rxpad");
   const [date, setDate] = useState(today());
   const [form, setForm] = useState<{ name: string; mobile: string; note: VisitType; doctorId: string }>({
     name: "",
@@ -101,7 +108,7 @@ export function BookingsScreen() {
   const [msg, setMsg] = useState<string>();
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
-  const { data } = useAppointments(date);
+  const { data } = useAppointments(date, chamberId);
   const checkIn = useCheckIn();
   const isDoctor = session.tenantRole === "doctor";
   const doctorId = isDoctor ? session.userId : form.doctorId || doctors[0]?.id || "";
@@ -116,16 +123,21 @@ export function BookingsScreen() {
     searchParams.push(isMobile ? `%${mobileQ}%` : `%${term}%`);
     if (!isMobile) searchParams.push(`%${term}%`);
   }
+  const apptJoin =
+    chamberId != null
+      ? "LEFT JOIN appointment a ON a.patient_id = p.id AND a.appt_date = ? AND a.status <> 'cancelled' AND a.chamber_id = ?"
+      : "LEFT JOIN appointment a ON a.patient_id = p.id AND a.appt_date = ? AND a.status <> 'cancelled'";
+  const patientQueryParams = chamberId != null ? [date, chamberId, ...searchParams, patientPageSize, patientPage * patientPageSize] : [date, ...searchParams, patientPageSize, patientPage * patientPageSize];
   const { data: patients } = useQuery<{
     id: string; name: string; dob: string | null; sex: string | null; mobile: string | null; code: string | null; serial_no: number | null; appt_status: string | null;
   }>(
     `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code, a.serial_no, a.status AS appt_status
        FROM patient p
-       LEFT JOIN appointment a ON a.patient_id = p.id AND a.appt_date = ? AND a.status <> 'cancelled'
+       ${apptJoin}
       WHERE p.deleted_at IS NULL ${patientSearch}
       ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END, a.serial_no, p.name
       LIMIT ? OFFSET ?`,
-    [date, ...searchParams, patientPageSize, patientPage * patientPageSize],
+    patientQueryParams,
   );
   const { data: patientTotals } = useQuery<{ n: number }>(
     `SELECT count(*) AS n FROM patient p WHERE p.deleted_at IS NULL ${patientSearch}`,
@@ -135,6 +147,7 @@ export function BookingsScreen() {
   async function book(e: React.FormEvent) {
     e.preventDefault();
     if (booking || !form.name.trim() || !doctorId) return;
+    if (!chamberId) return setMsg("Select an active chamber (Settings → Chambers) before booking.");
     const mobile = normaliseMobile(form.mobile);
     const name = form.name;
     setBooking(true);
@@ -184,20 +197,54 @@ export function BookingsScreen() {
 
   return (
     <div className="space-y-2">
-      <header className="flex flex-wrap items-center justify-between gap-2">
+      <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-base font-semibold text-slate-900">Serial booking</h1>
           <p className="text-xs text-slate-500">
-            <span className="tabular-nums font-medium text-slate-700">{active.length}</span> booked ·{" "}
-            <span className="tabular-nums font-medium text-slate-700">{arrived}</span> arrived
+            {source === "sakura" ? (
+              <>Sakura Web queue · {date}</>
+            ) : (
+              <>
+                <span className="tabular-nums font-medium text-slate-700">{active.length}</span> booked ·{" "}
+                <span className="tabular-nums font-medium text-slate-700">{arrived}</span> arrived
+              </>
+            )}
           </p>
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-slate-600">
-          <CalendarDays className="h-3.5 w-3.5 text-slate-400" aria-hidden />
-          <input type="date" className="input h-8 w-auto text-sm" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
-        </label>
+        <div className="flex flex-wrap items-end gap-2">
+          {sakuraEnabled && (
+            <nav className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs" aria-label="Booking source">
+              <button
+                type="button"
+                className={`rounded-md px-2.5 py-1 font-medium transition ${source === "rxpad" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                onClick={() => setSource("rxpad")}
+              >
+                RxPad
+              </button>
+              <button
+                type="button"
+                className={`rounded-md px-2.5 py-1 font-medium transition ${source === "sakura" ? "bg-[#9DBD68]/25 text-[#325A46] shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                onClick={() => setSource("sakura")}
+                data-testid="bookings-sakura-tab"
+              >
+                Sakura Web
+              </button>
+            </nav>
+          )}
+          {source === "rxpad" && <ActiveChamberSelector />}
+          {source === "rxpad" && (
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <CalendarDays className="h-3.5 w-3.5 text-slate-400" aria-hidden />
+              <input type="date" className="input h-8 w-auto text-sm" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
+            </label>
+          )}
+        </div>
       </header>
 
+      {source === "sakura" && sakuraEnabled ? (
+        <SakuraBookingsPanel date={date} onDateChange={setDate} />
+      ) : (
+        <>
       <section className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
         <h2 className="mb-2 text-[11px] font-semibold text-slate-500">New booking</h2>
         <form onSubmit={book} className={grid12}>
@@ -380,6 +427,8 @@ export function BookingsScreen() {
         </div>
         <ListPager page={patientPage} total={Number(patientTotals[0]?.n ?? 0)} size={patientPageSize} onPage={setPatientPage} />
       </section>
+        </>
+      )}
     </div>
   );
 }
