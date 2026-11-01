@@ -56,6 +56,10 @@ export type SakuraPatient = {
 export type SakuraAppointment = {
   id: number;
   serialNumber: number;
+  /** Letter suffix a–z for linked patients under the same parent (display as 2.a). */
+  serialSuffix?: string | null;
+  parentAppointmentId?: number | null;
+  chamberId?: number;
   patient: SakuraPatient;
   appointmentTime?: string;
   appointmentSlot?: { startTime?: string; endTime?: string };
@@ -64,7 +68,7 @@ export type SakuraAppointment = {
   identifier?: string;
   isAutoBooked?: boolean;
   autoBookCategory?: "patient" | "doctor" | "clinic" | null;
-  chamber?: { name: string };
+  chamber?: { name: string; feeFirstTime?: number; feeFollowup?: number };
   appointmentDate?: string;
 };
 

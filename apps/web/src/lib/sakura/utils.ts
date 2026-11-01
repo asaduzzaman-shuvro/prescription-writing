@@ -225,16 +225,46 @@ export function sortQueue(appointments: SakuraAppointment[]): SakuraAppointment[
     return 2;
   };
 
+  const suffixRank = (apt: SakuraAppointment): string =>
+    (apt.serialSuffix || "").trim().toLowerCase();
+
   return [...appointments].sort((a, b) => {
     const ra = queueRank(a.status);
     const rb = queueRank(b.status);
     if (ra !== rb) return ra - rb;
     const sd = (a.serialNumber || 0) - (b.serialNumber || 0);
     if (sd !== 0) return sd;
+    const sa = suffixRank(a);
+    const sb = suffixRank(b);
+    if (sa !== sb) {
+      if (!sa) return -1;
+      if (!sb) return 1;
+      return sa.localeCompare(sb);
+    }
     const timeA = a.appointmentTime?.trim() || a.appointmentSlot?.startTime?.trim();
     const timeB = b.appointmentTime?.trim() || b.appointmentSlot?.startTime?.trim();
     return timeToMinutes(timeA) - timeToMinutes(timeB);
   });
+}
+
+/**
+ * Consecutive display serials for the queue: 1, 1.a, 1.b, 2, 2.a, 3…
+ * (avoids slot-grid gaps like 1, 1.a, 3).
+ */
+export function getDisplaySerial(
+  apt: SakuraAppointment,
+  sortedAppointments: SakuraAppointment[],
+): string {
+  const rootIndex = new Map<number, number>();
+  let next = 1;
+  for (const a of sortedAppointments) {
+    if (a.parentAppointmentId) continue;
+    if (!rootIndex.has(a.id)) rootIndex.set(a.id, next++);
+  }
+  const rootId = apt.parentAppointmentId ?? apt.id;
+  const n = rootIndex.get(rootId) ?? apt.serialNumber ?? "";
+  const suffix = (apt.serialSuffix || "").trim().toLowerCase();
+  return suffix ? `${n}.${suffix}` : String(n);
 }
 
 export function statsFromAppointments(appointments: SakuraAppointment[]): SakuraChamberStats {
