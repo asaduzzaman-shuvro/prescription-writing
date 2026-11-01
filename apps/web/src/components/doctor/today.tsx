@@ -16,16 +16,16 @@ import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors, useMyProfile } from "@/lib/doctor/hooks";
 import { Link } from "@/lib/doctor/router";
 import { today } from "@/lib/doctor/util";
+import {
+  chamberLinkedParams,
+  chamberLinkedWhere,
+  encounterChamberAnd,
+  encounterChamberParam,
+  groupCountParams,
+  groupWhere,
+} from "@/lib/doctor/chamber-filter";
 import { useAppointments, useCheckIn } from "./bookings";
 import { ActiveChamberSelector } from "./active-chamber";
-
-/** Same rule as the patient list: a written prescription has medicines, or has been finalised. */
-const WRITTEN_RX = `EXISTS (
-  SELECT 1 FROM prescription rx
-   WHERE rx.patient_id = p.id
-     AND (rx.status = 'final' OR rx.doc LIKE '%"items": [{%' OR rx.doc LIKE '%"items":[{%')
-)`;
-const ON_TODAY = `(EXISTS (SELECT 1 FROM encounter e WHERE e.patient_id = p.id AND e.visit_date = ? AND e.status <> 'cancelled') OR substr(p.created_at, 1, 10) = ?)`;
 
 function monthStart(date: string) {
   return `${date.slice(0, 8)}01`;
@@ -273,7 +273,8 @@ function StatCard({
 
 export function Today() {
   const session = useSession();
-  const { current: chamber } = useChambers();
+  const { current: chamber, allChambers } = useChambers();
+  const chamberId = chamber?.id ?? null;
   const doctors = useDoctors();
   const profile = useMyProfile();
   const isDoctor = session.tenantRole === "doctor";
@@ -282,8 +283,26 @@ export function Today() {
   const date = today();
   const fromMonth = monthStart(date);
   const days = recentDays(date, 7);
-  const docSql = isDoctor ? "AND doctor_user_id = ?" : "";
+  const docSql = isDoctor ? "AND e.doctor_user_id = ?" : "";
+  const docSqlBare = isDoctor ? "AND doctor_user_id = ?" : "";
   const docParams = isDoctor ? [session.userId] : [];
+  const encCh = encounterChamberAnd(chamberId);
+  const encChBare = encounterChamberAnd(chamberId, "encounter");
+  const encParam = encounterChamberParam(chamberId);
+  const rxEncCh = encounterChamberAnd(chamberId, "ev");
+  const linkedSql = chamberId ? `AND (${chamberLinkedWhere(chamberId)})` : "";
+  const todayGroup = groupWhere("today", date, chamberId);
+  const unseenGroup = groupWhere("unseen", date, chamberId);
+  const seenGroup = groupWhere("seen", date, chamberId);
+  const peopleParams = [
+    ...chamberLinkedParams(chamberId),
+    date,
+    ...chamberLinkedParams(chamberId),
+    ...groupCountParams("today", date, chamberId),
+    ...groupCountParams("unseen", date, chamberId),
+    ...groupCountParams("seen", date, chamberId),
+  ];
+  const chamberLabel = allChambers ? "All chambers" : (chamber?.name.replace(/\s*\n\s*/g, " ") ?? "");
 
   const { data: dayRows } = useQuery<{
     waiting: number; in_room: number; finished: number; total: number; fees: number; fresh: number; followup: number; report: number; written: number;
@@ -302,18 +321,18 @@ export function Today() {
             AND (rx.status = 'final' OR rx.doc LIKE '%"items": [{%' OR rx.doc LIKE '%"items":[{%')
         ) THEN 1 ELSE 0 END), 0) AS written
        FROM encounter e
-      WHERE e.visit_date = ? ${isDoctor ? "AND e.doctor_user_id = ?" : ""}`,
-    isDoctor ? [date, session.userId] : [date],
+      WHERE e.visit_date = ? ${docSql} ${encCh}`,
+    [date, ...docParams, ...encParam],
   );
 
   const { data: people } = useQuery<{ registered: number; registered_today: number; current_open: number; older_open: number; written: number }>(
     `SELECT
-        (SELECT count(*) FROM patient WHERE deleted_at IS NULL) AS registered,
-        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND substr(p.created_at, 1, 10) = ?) AS registered_today,
-        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND (${ON_TODAY}) AND NOT (${WRITTEN_RX})) AS current_open,
-        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND NOT (${WRITTEN_RX}) AND NOT (${ON_TODAY})) AS older_open,
-        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${WRITTEN_RX}) AS written`,
-    [date, date, date, date, date],
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL ${linkedSql}) AS registered,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND substr(p.created_at, 1, 10) = ? ${linkedSql}) AS registered_today,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${todayGroup}) AS current_open,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${unseenGroup}) AS older_open,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${seenGroup}) AS written`,
+    peopleParams,
   );
 
   const { data: monthRows } = useQuery<{ visits: number; finished: number; fees: number; followup: number; report: number; rx: number }>(
@@ -327,18 +346,21 @@ export function Today() {
            JOIN encounter ev ON ev.id = rx.encounter_id
           WHERE rx.status = 'final' AND ev.visit_date BETWEEN ? AND ?
             ${isDoctor ? "AND rx.doctor_user_id = ?" : ""}
+            ${rxEncCh}
             AND NOT EXISTS (SELECT 1 FROM prescription n WHERE n.supersedes_id = rx.id AND n.status = 'final')) AS rx
        FROM encounter e
-      WHERE e.visit_date BETWEEN ? AND ? ${isDoctor ? "AND e.doctor_user_id = ?" : ""}`,
-    isDoctor ? [fromMonth, date, session.userId, fromMonth, date, session.userId] : [fromMonth, date, fromMonth, date],
+      WHERE e.visit_date BETWEEN ? AND ? ${docSql} ${encCh}`,
+    isDoctor
+      ? [fromMonth, date, session.userId, ...encParam, fromMonth, date, session.userId, ...encParam]
+      : [fromMonth, date, ...encParam, fromMonth, date, ...encParam],
   );
 
   const { data: weekRows } = useQuery<{ visit_date: string; n: number; fee: number }>(
     `SELECT visit_date, count(*) AS n, coalesce(sum(fee), 0) AS fee
        FROM encounter
-      WHERE visit_date BETWEEN ? AND ? AND status <> 'cancelled' ${docSql}
+      WHERE visit_date BETWEEN ? AND ? AND status <> 'cancelled' ${docSqlBare} ${encChBare}
       GROUP BY visit_date`,
-    [days[0] ?? date, date, ...docParams],
+    [days[0] ?? date, date, ...docParams, ...encParam],
   );
 
   const { data: labRows } = useQuery<{ n: number }>(
@@ -402,6 +424,7 @@ export function Today() {
           <p className="text-xs text-slate-500">
             {profile?.specialty_code ? `${profile.specialty_code.replace(/_/g, " ")} · ` : ""}
             {date}
+            {allChambers || chamberId ? ` · ${chamberLabel}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -541,7 +564,9 @@ export function Today() {
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Patient registry</h2>
-            <p className="text-xs text-slate-500">{registered} registered in this chamber</p>
+            <p className="text-xs text-slate-500">
+              {registered} registered{allChambers ? " (all chambers)" : chamberId ? ` in ${chamberLabel}` : ""}
+            </p>
           </div>
           <DonutChart segments={patientSegments} centerValue={registered} centerLabel="patients" size={96} />
         </div>

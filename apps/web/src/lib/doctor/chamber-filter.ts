@@ -45,6 +45,15 @@ export function chamberLinkedParams(chamberId: string | null): string[] {
   return chamberId ? [chamberId, chamberId] : [];
 }
 
+/** Optional AND for encounter (or aliased) rows in one chamber. */
+export function encounterChamberAnd(chamberId: string | null, alias = "e") {
+  return chamberId ? `AND ${alias}.chamber_id = ?` : "";
+}
+
+export function encounterChamberParam(chamberId: string | null): string[] {
+  return chamberId ? [chamberId] : [];
+}
+
 export type AllPatientsListGroup = "all" | "seen" | "unseen";
 
 /** Seen/unseen split for the all-patients directory (among rows already matched by filter). */
