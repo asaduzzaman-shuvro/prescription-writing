@@ -121,7 +121,7 @@ function useSakuraFonts() {
     link.id = id;
     link.rel = "stylesheet";
     link.href =
-      "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&family=Outfit:wght@400;500;600;700&display=swap";
+      "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap";
     document.head.appendChild(link);
   }, []);
 }
@@ -1106,7 +1106,7 @@ export function SakuraDashboard() {
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
                           <div className="text-xs font-bold text-[var(--sg-ink)]">{apt.patient.fullName}</div>
-                          <div className="text-[10px] text-[var(--sg-muted)]">{apt.patient.phone}</div>
+                          <div className="text-xs text-[var(--sg-muted)]">{apt.patient.phone}</div>
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
                           {patientListTab === "auto" ? (
