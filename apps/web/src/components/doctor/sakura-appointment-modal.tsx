@@ -879,14 +879,14 @@ export function SakuraAppointmentModal({
                     value={form.months}
                     onChange={(e) => patch({ months: Number(e.target.value) || 0 })}
                   />
-                  <p className="text-[11px] leading-tight text-[var(--sg-muted)]">Additional months (0-11)</p>
+                  <p className="text-xs leading-tight text-[var(--sg-muted)]">Additional months (0-11)</p>
                 </Field>
 
                 <div className="sm:col-span-2 lg:col-span-4">
                   <label className={styles.aptFieldLabel}>
                     <Ms name="schedule" className="text-base text-[var(--sg-green-deep)]" />
                     Appointment Slot (Optional)
-                    {loadingSlots && <span className="ml-2 text-[10px] font-medium text-[var(--sg-muted)]">Loading...</span>}
+                    {loadingSlots && <span className="ml-2 text-xs font-medium text-[var(--sg-muted)]">Loading...</span>}
                   </label>
                   {availableSlots.length > 0 && (
                     <>
@@ -915,10 +915,10 @@ export function SakuraAppointmentModal({
                               onClick={() =>
                                 void selectTimeSlot(item.timeSlot, item.parentSlot, item.sequence)
                               }
-                              className={`flex w-full flex-col items-center justify-center gap-px rounded-md px-1 py-1 text-[11px] font-semibold transition-all ${slotBtnClass(item.timeSlot)}`}
+                              className={`flex w-full flex-col items-center justify-center gap-px rounded-md px-1 py-1 text-xs font-semibold transition-all ${slotBtnClass(item.timeSlot)}`}
                             >
-                              <span className="text-xs leading-none font-bold tabular-nums">{item.sequence}</span>
-                              <span className="text-[11px] leading-tight font-medium opacity-95">
+                              <span className="text-sm leading-none font-bold tabular-nums">{item.sequence}</span>
+                              <span className="text-xs leading-tight font-medium opacity-95">
                                 {formatTime12h(item.timeSlot.time)}
                               </span>
                             </button>
@@ -934,7 +934,7 @@ export function SakuraAppointmentModal({
                         <span>Selected Time:</span>
                         <span className="font-bold text-[var(--sg-green-deep)]">{formatTime12h(selectedSlot.time)}</span>
                         {selectedSequence != null && (
-                          <span className="rounded-md bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--sg-green-deep)] ring-1 ring-[var(--sg-line)]">
+                          <span className="rounded-md bg-white px-2 py-0.5 text-xs font-bold text-[var(--sg-green-deep)] ring-1 ring-[var(--sg-line)]">
                             Slot #{selectedSequence}
                           </span>
                         )}
@@ -1004,7 +1004,7 @@ export function SakuraAppointmentModal({
                     value={form.fee}
                     onChange={(e) => patch({ fee: Number(e.target.value) || 0 }, ["fee"])}
                   />
-                  <p className="text-[11px] leading-tight text-[var(--sg-muted)]">
+                  <p className="text-xs leading-tight text-[var(--sg-muted)]">
                     {form.identifier === "Customize"
                       ? "Enter the consultation fee for this visit."
                       : "Auto-calculated based on type"}
@@ -1151,7 +1151,7 @@ function Field({
         )}
       </label>
       {children}
-      {error ? <p className="mt-0.5 text-[10px] leading-tight text-red-600">{error}</p> : null}
+      {error ? <p className="mt-0.5 text-xs leading-tight text-red-600">{error}</p> : null}
     </div>
   );
 }
