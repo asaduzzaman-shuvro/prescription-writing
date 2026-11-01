@@ -84,14 +84,36 @@ export function todaySerialSqlEmbedded(date: string, chamberId: string | null) {
   ) AS serial_no`;
 }
 
-/** @deprecated Use todaySerialSqlEmbedded — positional params break when combined with WHERE filters. */
-export function todaySerialSql(chamberId: string | null) {
-  const apptCh = chamberId ? "AND a.chamber_id = ?" : "";
-  const encCh = chamberId ? "AND e.chamber_id = ?" : "";
-  return `COALESCE(
-    (SELECT MIN(a.serial_no) FROM appointment a WHERE a.patient_id = p.id AND a.appt_date = ? AND a.status <> 'cancelled' ${apptCh}),
-    (SELECT MIN(e.serial_no) FROM encounter e WHERE e.patient_id = p.id AND e.visit_date = ? AND e.status <> 'cancelled' ${encCh})
-  ) AS serial_no`;
+/** Lowest queue serial for a patient between two dates (inclusive). */
+export function rangeSerialSqlEmbedded(dateFrom: string, dateTo: string, chamberId: string | null) {
+  const from = sqlLiteral(dateFrom);
+  const to = sqlLiteral(dateTo);
+  const apptCh = chamberId ? `AND a.chamber_id = ${sqlLiteral(chamberId)}` : "";
+  const encCh = chamberId ? `AND e.chamber_id = ${sqlLiteral(chamberId)}` : "";
+  return `(SELECT MIN(x.sn) FROM (
+    SELECT a.serial_no AS sn FROM appointment a
+     WHERE a.patient_id = p.id AND a.appt_date >= ${from} AND a.appt_date <= ${to} AND a.status <> 'cancelled' ${apptCh}
+    UNION ALL
+    SELECT e.serial_no AS sn FROM encounter e
+     WHERE e.patient_id = p.id AND e.visit_date >= ${from} AND e.visit_date <= ${to} AND e.status <> 'cancelled' ${encCh}
+  ) AS x) AS serial_no`;
+}
+
+/** SI column for the all-patients list (single day, range, or today when no dates). */
+export function allPatientsSerialSqlEmbedded(
+  dateFrom: string | null,
+  dateTo: string | null,
+  chamberId: string | null,
+  fallbackDate: string,
+) {
+  const from = dateFrom?.trim() || null;
+  const to = dateTo?.trim() || null;
+  let start = from ?? to;
+  let end = to ?? from;
+  if (start && end && start > end) [start, end] = [end, start];
+  if (start && end && start !== end) return rangeSerialSqlEmbedded(start, end, chamberId);
+  const day = start ?? end ?? fallbackDate;
+  return todaySerialSqlEmbedded(day, chamberId);
 }
 
 export function todaySerialParams(date: string, chamberId: string | null): string[] {
@@ -102,6 +124,9 @@ export function todaySerialParams(date: string, chamberId: string | null): strin
 export const ORDER_BY_PATIENT_ID_ASC = `CASE WHEN p.code IS NULL OR p.code = '' THEN 1 ELSE 0 END, p.code ASC, p.name ASC`;
 
 export const ORDER_BY_LAST_VISIT_DESC = `last_visit DESC NULLS LAST, p.name ASC`;
+
+/** Queue order for lists that show SI No (nulls last). */
+export const ORDER_BY_SERIAL_ASC = `CASE WHEN serial_no IS NULL THEN 1 ELSE 0 END, serial_no ASC, p.name ASC`;
 
 /** Optional chamber and/or activity date range for the all-patients directory. */
 export function allPatientsFilterWhere(
