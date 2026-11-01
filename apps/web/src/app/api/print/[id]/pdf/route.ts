@@ -18,10 +18,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!file) return new Response("Not found (it may not have synced yet)", { status: 404 });
   await audit({ actorUserId: session.userId, tenantId: session.tenantId, action: "prescription.pdf", entity: "prescription", entityId: id });
   const ascii = file.filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
+  const disposition = new URL(_req.url).searchParams.get("download") === "1" ? "attachment" : "inline";
   return new Response(new Uint8Array(file.pdf), {
     headers: {
       "content-type": "application/pdf",
-      "content-disposition": `inline; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+      "content-disposition": `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
     },
   });
 }
