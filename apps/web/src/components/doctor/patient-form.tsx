@@ -2,7 +2,7 @@
 
 import { usePowerSync, useQuery } from "@powersync/react";
 import { ArrowLeft, CalendarPlus, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
   bookAppointment,
   checkInAppointment,
@@ -69,15 +69,6 @@ function VisitNoteSelect({ value, onChange, id }: { value: VisitType; onChange: 
         <option key={o.value} value={o.value}>{o.label}</option>
       ))}
     </select>
-  );
-}
-
-function Block({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section>
-      <h3 className="mb-1.5 text-[11px] font-semibold text-slate-500">{title}</h3>
-      {children}
-    </section>
   );
 }
 
@@ -309,30 +300,71 @@ export function PatientEdit({
   const fieldsModal = (
     <div className="grid gap-2 md:grid-cols-6">
       {chamberField}
-      <div className="md:col-span-4"><label className="label">Name *</label><input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus data-testid="patient-name" /></div>
+      <div className="md:col-span-4">
+        <label className="label">Name *</label>
+        <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus data-testid="patient-name" />
+      </div>
       <div className="md:col-span-2">
         <label className="label">Sex</label>
         <div className="flex gap-1">
           {sexOptions.map((x) => (
-            <button type="button" key={x} onClick={() => set("sex", x)} className={sexBtn(f.sex === x)}>{x[0]!.toUpperCase() + x.slice(1)}</button>
+            <button type="button" key={x} onClick={() => set("sex", x)} className={sexBtn(f.sex === x)}>
+              {x[0]!.toUpperCase() + x.slice(1)}
+            </button>
           ))}
         </div>
       </div>
       {f.useDob ? (
-        <div className="md:col-span-3"><label className="label">Date of birth</label><input type="date" className="input" value={f.dob} onChange={(e) => set("dob", e.target.value)} /></div>
+        <div className="md:col-span-3">
+          <label className="label">Date of birth</label>
+          <input type="date" className="input" value={f.dob} onChange={(e) => set("dob", e.target.value)} />
+        </div>
       ) : (
         <>
-          <div><label className="label">Age (years)</label><input className="input" inputMode="numeric" value={f.ageYears} onChange={(e) => set("ageYears", e.target.value.replace(/\D/g, ""))} data-testid="patient-age" /></div>
-          <div><label className="label">Months</label><input className="input" inputMode="numeric" value={f.ageMonths} onChange={(e) => set("ageMonths", e.target.value.replace(/\D/g, ""))} /></div>
-          <div><label className="label">Days</label><input className="input" inputMode="numeric" value={f.ageDays} onChange={(e) => set("ageDays", e.target.value.replace(/\D/g, ""))} /></div>
+          <div>
+            <label className="label">Age (years)</label>
+            <input className="input" inputMode="numeric" value={f.ageYears} onChange={(e) => set("ageYears", e.target.value.replace(/\D/g, ""))} data-testid="patient-age" />
+          </div>
+          <div>
+            <label className="label">Months</label>
+            <input className="input" inputMode="numeric" value={f.ageMonths} onChange={(e) => set("ageMonths", e.target.value.replace(/\D/g, ""))} />
+          </div>
+          <div>
+            <label className="label">Days</label>
+            <input className="input" inputMode="numeric" value={f.ageDays} onChange={(e) => set("ageDays", e.target.value.replace(/\D/g, ""))} />
+          </div>
         </>
       )}
       <div className="flex items-end md:col-span-3">
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.useDob} onChange={(e) => set("useDob", e.target.checked)} /> Enter exact date of birth</label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.useDob} onChange={(e) => set("useDob", e.target.checked)} /> Enter exact date of birth
+        </label>
       </div>
-      <div className="md:col-span-3"><label className="label">Mobile</label><input className="input" inputMode="tel" value={f.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="01XXXXXXXXX" data-testid="patient-mobile" /></div>
-      <div className="md:col-span-3"><label className="label">Address</label><input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} /></div>
-      <div className="md:col-span-6"><label className="label">Drug allergies (comma separated generics, e.g. Penicillin, Sulfonamide)</label><input className="input" value={f.allergies} onChange={(e) => set("allergies", e.target.value)} data-testid="patient-allergies" /></div>
+      <div className="md:col-span-3">
+        <label className="label">Mobile</label>
+        <input className="input" inputMode="tel" value={f.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="01XXXXXXXXX" data-testid="patient-mobile" />
+      </div>
+      <div className="md:col-span-3">
+        <label className="label">Address</label>
+        <input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} />
+      </div>
+      <div className="md:col-span-3">
+        <label className="label" htmlFor="guardian-m">Guardian name</label>
+        <input id="guardian-m" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} />
+      </div>
+      <div className="md:col-span-6">
+        <label className="label">Drug allergies (comma separated generics, e.g. Penicillin, Sulfonamide)</label>
+        <input className="input" value={f.allergies} onChange={(e) => set("allergies", e.target.value)} data-testid="patient-allergies" />
+      </div>
+      <div className="md:col-span-3">
+        <label className="label" htmlFor="ref-by-m">Ref By — Referring doctor</label>
+        <input id="ref-by-m" className="input" list="patient-referrers" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Referring doctor's name (blank: self)" data-testid="patient-ref-by" />
+        <datalist id="patient-referrers">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
+      </div>
+      <div className="md:col-span-3">
+        <label className="label" htmlFor="visit-note-m">Note</label>
+        <VisitNoteSelect id="visit-note-m" value={f.visitNote} onChange={(v) => set("visitNote", v)} />
+      </div>
       {(f.sex === "female" || f.sex === "") && (
         <div className="md:col-span-3">
           <label className="label" htmlFor="preg-modal">Pregnancy / lactation</label>
@@ -347,20 +379,16 @@ export function PatientEdit({
       )}
       {infant && (
         <>
-          <div><label className="label" htmlFor="birth-wt-m">Birth weight (kg)</label><input id="birth-wt-m" className="input" inputMode="decimal" value={f.birthWeightKg} onChange={(e) => set("birthWeightKg", e.target.value.replace(/[^\d.]/g, ""))} data-testid="patient-birth-weight" /></div>
-          <div><label className="label" htmlFor="ga-m">Gestational age at birth (weeks)</label><input id="ga-m" className="input" inputMode="numeric" value={f.gestationalAgeWeeks} onChange={(e) => set("gestationalAgeWeeks", e.target.value.replace(/\D/g, ""))} data-testid="patient-ga" /></div>
+          <div>
+            <label className="label" htmlFor="birth-wt-m">Birth weight (kg)</label>
+            <input id="birth-wt-m" className="input" inputMode="decimal" value={f.birthWeightKg} onChange={(e) => set("birthWeightKg", e.target.value.replace(/[^\d.]/g, ""))} data-testid="patient-birth-weight" />
+          </div>
+          <div>
+            <label className="label" htmlFor="ga-m">Gestational age at birth (weeks)</label>
+            <input id="ga-m" className="input" inputMode="numeric" value={f.gestationalAgeWeeks} onChange={(e) => set("gestationalAgeWeeks", e.target.value.replace(/\D/g, ""))} data-testid="patient-ga" />
+          </div>
         </>
       )}
-      <div className="md:col-span-3"><label className="label" htmlFor="guardian-m">Guardian name</label><input id="guardian-m" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} /></div>
-      <div className="md:col-span-3">
-        <label className="label" htmlFor="ref-by-m">Ref By — Referring doctor</label>
-        <input id="ref-by-m" className="input" list="patient-referrers" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Referring doctor's name (blank: self)" data-testid="patient-ref-by" />
-        <datalist id="patient-referrers">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
-      </div>
-      <div className="md:col-span-3">
-        <label className="label" htmlFor="visit-note-m">Note</label>
-        <VisitNoteSelect id="visit-note-m" value={f.visitNote} onChange={(v) => set("visitNote", v)} />
-      </div>
       <details className="md:col-span-6">
         <summary className="cursor-pointer text-sm font-medium text-slate-700">National IDs & notes (optional)</summary>
         <div className="mt-1.5 grid gap-2 md:grid-cols-3">
@@ -379,111 +407,95 @@ export function PatientEdit({
 
   const fieldsPage = (
     <div className="space-y-3">
-      {!patientId && chambers.length > 0 && (
-        <Block title="Chamber">
-          <div className={grid12}>{chamberField}</div>
-        </Block>
-      )}
-      <Block title="Patient">
-        <div className={grid12}>
-          <div className={cell3}>
-            <label className="label">Name *</label>
-            <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus data-testid="patient-name" />
-          </div>
-          <div className={cell3}>
-            <label className="label">Sex</label>
-            <div className="flex gap-0.5 rounded-md border border-slate-200 p-0.5">
-              {sexOptions.map((x) => (
-                <button type="button" key={x} onClick={() => set("sex", x)} className={`${sexBtn(f.sex === x, true)} flex-1`}>
-                  {x[0]!.toUpperCase() + x.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className={cell3}>
-            <div className="flex items-center justify-between gap-1">
-              <label className="label mb-0">{f.useDob ? "Date of birth" : "Age"}</label>
-              <label className="flex shrink-0 items-center gap-1 text-[10px] text-slate-600">
-                <input type="checkbox" className="h-3 w-3" checked={f.useDob} onChange={(e) => set("useDob", e.target.checked)} />
-                Exact DOB
-              </label>
-            </div>
-            {f.useDob ? (
-              <input type="date" className="input mt-0.5" value={f.dob} onChange={(e) => set("dob", e.target.value)} />
-            ) : (
-              <AgeSegment
-                years={f.ageYears}
-                months={f.ageMonths}
-                days={f.ageDays}
-                onYears={(v) => set("ageYears", v)}
-                onMonths={(v) => set("ageMonths", v)}
-                onDays={(v) => set("ageDays", v)}
-              />
-            )}
+      <div className={grid12}>
+        {!patientId && chambers.length > 0 && chamberField}
+        <div className={cell3}>
+          <label className="label">Name *</label>
+          <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus data-testid="patient-name" />
+        </div>
+        <div className={cell3}>
+          <label className="label">Sex</label>
+          <div className="flex gap-0.5 rounded-md border border-slate-200 p-0.5">
+            {sexOptions.map((x) => (
+              <button type="button" key={x} onClick={() => set("sex", x)} className={`${sexBtn(f.sex === x, true)} flex-1`}>
+                {x[0]!.toUpperCase() + x.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
-      </Block>
-
-      <Block title="Contact">
-        <div className={grid12}>
-          <div className={cell3}>
-            <label className="label">Mobile</label>
-            <input className="input" inputMode="tel" value={f.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="01XXXXXXXXX" data-testid="patient-mobile" />
+        <div className={cell3}>
+          <div className="flex items-center justify-between gap-1">
+            <label className="label mb-0">{f.useDob ? "Date of birth" : "Age"}</label>
+            <label className="flex shrink-0 items-center gap-1 text-[10px] text-slate-600">
+              <input type="checkbox" className="h-3 w-3" checked={f.useDob} onChange={(e) => set("useDob", e.target.checked)} />
+              Exact DOB
+            </label>
           </div>
-          <div className={cell3}>
-            <label className="label">Address</label>
-            <input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} />
-          </div>
-          <div className={cell3}>
-            <label className="label" htmlFor="guardian">Guardian</label>
-            <input id="guardian" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} />
-          </div>
+          {f.useDob ? (
+            <input type="date" className="input mt-0.5" value={f.dob} onChange={(e) => set("dob", e.target.value)} />
+          ) : (
+            <AgeSegment
+              years={f.ageYears}
+              months={f.ageMonths}
+              days={f.ageDays}
+              onYears={(v) => set("ageYears", v)}
+              onMonths={(v) => set("ageMonths", v)}
+              onDays={(v) => set("ageDays", v)}
+            />
+          )}
         </div>
-      </Block>
-
-      <Block title="Clinical">
-        <div className={grid12}>
+        <div className={cell3}>
+          <label className="label">Mobile</label>
+          <input className="input" inputMode="tel" value={f.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder="01XXXXXXXXX" data-testid="patient-mobile" />
+        </div>
+        <div className={cell3}>
+          <label className="label">Address</label>
+          <input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} />
+        </div>
+        <div className={cell3}>
+          <label className="label" htmlFor="guardian">Guardian</label>
+          <input id="guardian" className="input" value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} />
+        </div>
+        <div className={cell3}>
+          <label className="label">Drug allergies (comma separated)</label>
+          <input className="input" value={f.allergies} onChange={(e) => set("allergies", e.target.value)} data-testid="patient-allergies" />
+        </div>
+        <div className={cell3}>
+          <label className="label" htmlFor="ref-by">Ref by — referring doctor</label>
+          <input id="ref-by" className="input" list="patient-referrers-page" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Blank: self" data-testid="patient-ref-by" />
+          <datalist id="patient-referrers-page">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
+        </div>
+        {!patientId && (
           <div className={cell3}>
-            <label className="label">Drug allergies (comma separated)</label>
-            <input className="input" value={f.allergies} onChange={(e) => set("allergies", e.target.value)} data-testid="patient-allergies" />
+            <label className="label" htmlFor="visit-note">Note</label>
+            <VisitNoteSelect id="visit-note" value={f.visitNote} onChange={(v) => set("visitNote", v)} />
           </div>
+        )}
+        {(f.sex === "female" || f.sex === "") && (
           <div className={cell3}>
-            <label className="label" htmlFor="ref-by">Ref by — referring doctor</label>
-            <input id="ref-by" className="input" list="patient-referrers-page" value={f.referredBy} onChange={(e) => set("referredBy", e.target.value)} placeholder="Blank: self" data-testid="patient-ref-by" />
-            <datalist id="patient-referrers-page">{referrers.map((r) => <option key={r.r} value={r.r} />)}</datalist>
+            <label className="label" htmlFor="preg">Pregnancy / lactation</label>
+            <select id="preg" className="input" value={f.pregnancyStatus} onChange={(e) => set("pregnancyStatus", e.target.value as FormState["pregnancyStatus"])} data-testid="patient-pregnancy">
+              <option value="">Not recorded</option>
+              <option value="none">Not pregnant / not lactating</option>
+              <option value="pregnant">Pregnant</option>
+              <option value="lactating">Lactating</option>
+              <option value="both">Pregnant and lactating</option>
+            </select>
           </div>
-          {!patientId && (
+        )}
+        {infant && (
+          <>
             <div className={cell3}>
-              <label className="label" htmlFor="visit-note">Note</label>
-              <VisitNoteSelect id="visit-note" value={f.visitNote} onChange={(v) => set("visitNote", v)} />
+              <label className="label" htmlFor="birth-wt">Birth weight (kg)</label>
+              <input id="birth-wt" className="input" inputMode="decimal" value={f.birthWeightKg} onChange={(e) => set("birthWeightKg", e.target.value.replace(/[^\d.]/g, ""))} data-testid="patient-birth-weight" />
             </div>
-          )}
-          {(f.sex === "female" || f.sex === "") && (
             <div className={cell3}>
-              <label className="label" htmlFor="preg">Pregnancy / lactation</label>
-              <select id="preg" className="input" value={f.pregnancyStatus} onChange={(e) => set("pregnancyStatus", e.target.value as FormState["pregnancyStatus"])} data-testid="patient-pregnancy">
-                <option value="">Not recorded</option>
-                <option value="none">Not pregnant / not lactating</option>
-                <option value="pregnant">Pregnant</option>
-                <option value="lactating">Lactating</option>
-                <option value="both">Pregnant and lactating</option>
-              </select>
+              <label className="label" htmlFor="ga">Gestational age (weeks)</label>
+              <input id="ga" className="input" inputMode="numeric" value={f.gestationalAgeWeeks} onChange={(e) => set("gestationalAgeWeeks", e.target.value.replace(/\D/g, ""))} data-testid="patient-ga" />
             </div>
-          )}
-          {infant && (
-            <>
-              <div className={cell3}>
-                <label className="label" htmlFor="birth-wt">Birth weight (kg)</label>
-                <input id="birth-wt" className="input" inputMode="decimal" value={f.birthWeightKg} onChange={(e) => set("birthWeightKg", e.target.value.replace(/[^\d.]/g, ""))} data-testid="patient-birth-weight" />
-              </div>
-              <div className={cell3}>
-                <label className="label" htmlFor="ga">Gestational age (weeks)</label>
-                <input id="ga" className="input" inputMode="numeric" value={f.gestationalAgeWeeks} onChange={(e) => set("gestationalAgeWeeks", e.target.value.replace(/\D/g, ""))} data-testid="patient-ga" />
-              </div>
-            </>
-          )}
-        </div>
-      </Block>
+          </>
+        )}
+      </div>
 
       <details className="text-sm">
         <summary className="cursor-pointer font-medium text-slate-600">National IDs & notes (optional)</summary>
