@@ -17,6 +17,7 @@ import { useChambers, useDoctors, useMyProfile } from "@/lib/doctor/hooks";
 import { Link } from "@/lib/doctor/router";
 import { today } from "@/lib/doctor/util";
 import { useAppointments, useCheckIn } from "./bookings";
+import { ActiveChamberSelector } from "./active-chamber";
 
 /** Same rule as the patient list: a written prescription has medicines, or has been finalised. */
 const WRITTEN_RX = `EXISTS (
@@ -272,7 +273,7 @@ function StatCard({
 
 export function Today() {
   const session = useSession();
-  const { current: chamber, chambers, select } = useChambers();
+  const { current: chamber } = useChambers();
   const doctors = useDoctors();
   const profile = useMyProfile();
   const isDoctor = session.tenantRole === "doctor";
@@ -345,7 +346,7 @@ export function Today() {
     [fromMonth, date],
   );
 
-  const { data: appts } = useAppointments(date);
+  const { data: appts } = useAppointments(date, chamber?.id ?? null);
   const booked = appts.filter((a) => a.status === "booked" && (!isDoctor || a.doctor_user_id === session.userId));
   const checkIn = useCheckIn();
   const effectiveDoctor = isDoctor ? session.userId : doctorId || doctors[0]?.id || "";
@@ -404,26 +405,7 @@ export function Today() {
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <div
-            className="rounded-lg border border-brand-200/80 bg-gradient-to-br from-brand-50 to-white px-2 py-1.5 text-right shadow-sm ring-1 ring-brand-100/80"
-            data-testid="active-chamber"
-          >
-            <div className="text-[10px] font-semibold tracking-wide text-brand-700 uppercase">Active chamber</div>
-            {chambers.length > 1 ? (
-              <select
-                className="mt-0.5 h-7 w-auto max-w-64 bg-transparent text-right text-sm font-semibold text-slate-900 outline-none"
-                value={chamber?.id ?? ""}
-                onChange={(e) => select(e.target.value)}
-                aria-label="Active chamber"
-              >
-                {chambers.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name.replace(/\s*\n\s*/g, " ")}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="text-sm font-semibold whitespace-pre-line text-slate-900">{chamber?.name ?? "No chamber selected"}</div>
-            )}
-          </div>
+          <ActiveChamberSelector />
           {!isDoctor && doctors.length > 1 && (
             <select className="input h-8 w-auto rounded-lg" value={effectiveDoctor} onChange={(e) => setDoctorId(e.target.value)} aria-label="Doctor">
               {doctors.map((d) => (

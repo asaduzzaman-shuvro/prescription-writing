@@ -4,6 +4,7 @@ import { usePowerSync, useQuery } from "@powersync/react";
 import { ArrowLeft, CalendarPlus, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  bookAppointment,
   checkInAppointment,
   createPatient,
   startVisit,
@@ -15,7 +16,7 @@ import {
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
-import { ageParts, dobFromAge, normaliseMobile, parseJson } from "@/lib/doctor/util";
+import { ageParts, dobFromAge, normaliseMobile, parseJson, today } from "@/lib/doctor/util";
 import { SaveButton } from "@/components/save-button";
 
 interface FormState {
@@ -128,8 +129,9 @@ export function PatientEdit({
   const db = usePowerSync();
   const session = useSession();
   const doctors = useDoctors();
-  const { current: chamber } = useChambers();
+  const { chambers, current: chamber, select } = useChambers();
   const modal = !!onClose;
+  const [visitChamberId, setVisitChamberId] = useState("");
   // Arriving from a booking: #/patients/new?appt=<id>&name=..&mobile=..
   const qs = typeof window !== "undefined" ? new URLSearchParams(window.location.hash.split("?")[1] ?? "") : new URLSearchParams();
   const apptId = patientId || modal ? null : qs.get("appt");
@@ -174,6 +176,11 @@ export function PatientEdit({
     });
   }, [existing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (patientId) return;
+    setVisitChamberId(chamber?.id ?? chambers[0]?.id ?? "");
+  }, [patientId, chamber?.id, chambers]);
+
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF((p) => ({ ...p, [k]: v }));
   const sexBtn = (active: boolean, compact?: boolean) =>
     `${compact ? "px-2 py-1 text-xs" : "flex-1 px-2 py-1.5 text-xs"} rounded-md border font-semibold transition ${
@@ -187,11 +194,35 @@ export function PatientEdit({
   const infant = f.useDob ? (ageParts(f.dob)?.years ?? 99) < 2 : f.ageYears === "" ? f.ageMonths !== "" || f.ageDays !== "" : years < 2;
   const num = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 
+  const chamberField = !patientId && chambers.length > 0 && (
+    <div className={modal ? "md:col-span-6" : cell3}>
+      <label className="label" htmlFor={modal ? "visit-chamber-m" : "visit-chamber"}>
+        Chamber *
+      </label>
+      <select
+        id={modal ? "visit-chamber-m" : "visit-chamber"}
+        className="input"
+        value={visitChamberId}
+        onChange={(e) => setVisitChamberId(e.target.value)}
+        required
+        data-testid="patient-chamber"
+      >
+        {chambers.length > 1 && !visitChamberId && <option value="">Select chamber…</option>}
+        {chambers.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name.replace(/\s*\n\s*/g, " ")}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
   async function save(e: React.FormEvent, thenVisit: boolean) {
     e.preventDefault();
     setError(undefined);
     if (!f.name.trim()) return setError("Name is required");
     if (!f.consent) return setError("Record the patient's (or guardian's) consent to store their health data");
+    if (!patientId && chambers.length > 0 && !visitChamberId) return setError("Select a chamber for this appointment");
     const mobile = normaliseMobile(f.mobile);
     if (mobile && !/^01\d{9}$/.test(mobile)) return setError("Mobile should look like 01XXXXXXXXX");
     const input: PatientInput = {
@@ -214,6 +245,7 @@ export function PatientEdit({
       gestationalAgeWeeks: infant && num(f.gestationalAgeWeeks) !== null ? Math.round(num(f.gestationalAgeWeeks)!) : null,
     };
     setSaving(true);
+    const effectiveChamberId = visitChamberId || chamber?.id || null;
     try {
       if (patientId) {
         await updatePatient(db, patientId, input);
@@ -222,6 +254,7 @@ export function PatientEdit({
         return;
       }
       const id = await createPatient(db, session.userId, session.tenantId, input);
+      if (effectiveChamberId) select(effectiveChamberId);
       if (apptId) {
         const enc = await checkInAppointment(db, apptId, id, {
           userId: session.userId,
@@ -237,13 +270,31 @@ export function PatientEdit({
         const isDoctor = session.tenantRole === "doctor";
         const doctorId = isDoctor ? session.userId : doctors[0]?.id;
         if (doctorId) {
+          if (effectiveChamberId) select(effectiveChamberId);
           const enc = await startVisit(db, {
-            tenantId: session.tenantId, userId: session.userId, patientId: id, doctorUserId: doctorId, chamberId: chamber?.id ?? null,
+            tenantId: session.tenantId, userId: session.userId, patientId: id, doctorUserId: doctorId, chamberId: effectiveChamberId,
             specialtyCode: doctors.find((d) => d.id === doctorId)?.specialty_code ?? "general", asDoctor: isDoctor, visitType: f.visitNote,
           });
           onClose?.();
           navigate(`/visit/${enc}`);
           return;
+        }
+      }
+      {
+        const isDoctor = session.tenantRole === "doctor";
+        const doctorId = isDoctor ? session.userId : doctors[0]?.id;
+        if (effectiveChamberId && doctorId) {
+          await bookAppointment(db, {
+            tenantId: session.tenantId,
+            userId: session.userId,
+            doctorUserId: doctorId,
+            chamberId: effectiveChamberId,
+            name: input.name,
+            mobile,
+            date: today(),
+            note: f.visitNote,
+            patientId: id,
+          });
         }
       }
       onClose?.();
@@ -257,6 +308,7 @@ export function PatientEdit({
 
   const fieldsModal = (
     <div className="grid gap-2 md:grid-cols-6">
+      {chamberField}
       <div className="md:col-span-4"><label className="label">Name *</label><input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus data-testid="patient-name" /></div>
       <div className="md:col-span-2">
         <label className="label">Sex</label>
@@ -327,6 +379,11 @@ export function PatientEdit({
 
   const fieldsPage = (
     <div className="space-y-3">
+      {!patientId && chambers.length > 0 && (
+        <Block title="Chamber">
+          <div className={grid12}>{chamberField}</div>
+        </Block>
+      )}
       <Block title="Patient">
         <div className={grid12}>
           <div className={cell3}>

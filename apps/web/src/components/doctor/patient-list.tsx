@@ -4,33 +4,16 @@ import { usePowerSync, useQuery } from "@powersync/react";
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { startVisit } from "@/lib/doctor/data";
+import { groupCountParams, groupWhere, type PatientGroup } from "@/lib/doctor/chamber-filter";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
 import { ageLabel, normaliseMobile, today } from "@/lib/doctor/util";
 import { ListPager } from "@/components/list-pager";
+import { ActiveChamberSelector } from "./active-chamber";
 import type { PatientHit } from "./patient-search";
 
 /** Each tab is the whole group, not a shortened slice of the others. */
-type PatientGroup = "today" | "unseen" | "seen";
-
-/** A written prescription has medicines, or has been finalised. Opening a visit only creates an empty draft. */
-const WRITTEN_RX = `EXISTS (
-  SELECT 1 FROM prescription rx
-   WHERE rx.patient_id = p.id
-     AND (rx.status = 'final' OR rx.doc LIKE '%"items": [{%' OR rx.doc LIKE '%"items":[{%')
-)`;
-
-const TODAY_VISIT = `EXISTS (SELECT 1 FROM encounter e WHERE e.patient_id = p.id AND e.visit_date = ? AND e.status <> 'cancelled')`;
-/** Registration day is the local date stored at the start of created_at. */
-const REGISTERED_TODAY = `substr(p.created_at, 1, 10) = ?`;
-const ON_TODAY = `((${TODAY_VISIT}) OR (${REGISTERED_TODAY}))`;
-
-const GROUP_WHERE: Record<PatientGroup, string> = {
-  today: `(${ON_TODAY}) AND NOT (${WRITTEN_RX})`,
-  unseen: `NOT (${WRITTEN_RX}) AND NOT (${ON_TODAY})`,
-  seen: WRITTEN_RX,
-};
 
 const PAGE = 50;
 
@@ -57,8 +40,10 @@ export function PatientList() {
   const mobile = normaliseMobile(term);
   const searching = term.length >= 2;
   const isMobile = /^\d{4,}$/.test(mobile);
-  const params: (string | number)[] = [];
-  if (group === "today" || group === "unseen") params.push(date, date);
+  const chamberId = chamber?.id ?? null;
+  const groupSql = groupWhere(group, date, chamberId);
+  const baseParams = groupCountParams(group, date, chamberId);
+  const params: (string | number)[] = [...baseParams];
   const searchSql = !searching
     ? ""
     : isMobile
@@ -68,31 +53,37 @@ export function PatientList() {
     if (isMobile) params.push(`%${mobile}%`);
     else params.push(`%${term}%`, `%${term}%`);
   }
+  const todayWhere = groupWhere("today", date, chamberId);
+  const unseenWhere = groupWhere("unseen", date, chamberId);
+  const seenWhere = groupWhere("seen", date, chamberId);
+  const todayParams = groupCountParams("today", date, chamberId);
+  const unseenParams = groupCountParams("unseen", date, chamberId);
+  const seenParams = groupCountParams("seen", date, chamberId);
   const rows = useQuery<PatientHit>(
     `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code,
             (SELECT MAX(visit_date) FROM encounter e WHERE e.patient_id = p.id AND e.status <> 'cancelled') AS last_visit
        FROM patient p
-      WHERE p.deleted_at IS NULL AND ${GROUP_WHERE[group]} ${searchSql}
+      WHERE p.deleted_at IS NULL AND ${groupSql} ${searchSql}
       ORDER BY last_visit DESC, p.name
       LIMIT ? OFFSET ?`,
     [...params, PAGE, page * PAGE],
   );
   const { data: matched } = useQuery<{ n: number }>(
-    `SELECT count(*) AS n FROM patient p WHERE p.deleted_at IS NULL AND ${GROUP_WHERE[group]} ${searchSql}`,
+    `SELECT count(*) AS n FROM patient p WHERE p.deleted_at IS NULL AND ${groupSql} ${searchSql}`,
     params,
   );
   const { data: counts } = useQuery<{ today_n: number; unseen_n: number; seen_n: number; n: number }>(
     `SELECT
-        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${GROUP_WHERE.today}) AS today_n,
-        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${GROUP_WHERE.unseen}) AS unseen_n,
-        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${GROUP_WHERE.seen}) AS seen_n,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${todayWhere}) AS today_n,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${unseenWhere}) AS unseen_n,
+        (SELECT count(*) FROM patient p WHERE p.deleted_at IS NULL AND ${seenWhere}) AS seen_n,
         (SELECT count(*) FROM patient WHERE deleted_at IS NULL) AS n`,
-    [date, date, date, date],
+    [...todayParams, ...unseenParams, ...seenParams],
   );
   const tally = counts[0];
   const isDoctor = session.tenantRole === "doctor";
   const tabs: { id: PatientGroup; label: string; short: string; hint: string; n: number }[] = [
-    { id: "today", label: "Current date", short: "Today", hint: `Registered or visiting today (${date}), no prescription yet`, n: tally?.today_n ?? 0 },
+    { id: "today", label: "Current date", short: "Today", hint: chamber?.name ? `Today at this chamber (${date}), no prescription yet` : `Visiting today (${date}), no prescription yet`, n: tally?.today_n ?? 0 },
     { id: "unseen", label: "Unseen patients", short: "Unseen", hint: "Older patients without a prescription yet", n: tally?.unseen_n ?? 0 },
     { id: "seen", label: "Seen patients", short: "Seen", hint: "Patients with a prescription written", n: tally?.seen_n ?? 0 },
   ];
@@ -128,16 +119,19 @@ export function PatientList() {
 
   return (
     <div className="space-y-2">
-      <header className="flex flex-wrap items-center justify-between gap-2">
+      <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-base font-semibold text-slate-900">Patients</h1>
           <p className="text-xs text-slate-500">
             <span className="tabular-nums font-medium text-slate-700">{tally?.n ?? 0}</span> registered · offline on this device
           </p>
         </div>
-        <p className="text-xs tabular-nums text-slate-500">
-          Showing <span className="font-medium text-slate-700">{listTotal}</span> in {active.short.toLowerCase()}
-        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <ActiveChamberSelector />
+          <p className="text-xs tabular-nums text-slate-500">
+            Showing <span className="font-medium text-slate-700">{listTotal}</span> in {active.short.toLowerCase()}
+          </p>
+        </div>
       </header>
 
       <section className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">

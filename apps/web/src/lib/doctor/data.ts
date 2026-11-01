@@ -276,6 +276,12 @@ export async function startVisit(
     [opts.patientId, date],
   );
   if (existing) {
+    if (opts.chamberId) {
+      await db.execute(
+        `UPDATE encounter SET chamber_id = ?, updated_at = ? WHERE id = ? AND (chamber_id IS NULL OR chamber_id = '')`,
+        [opts.chamberId, nowIso(), existing.id],
+      );
+    }
     if (opts.asDoctor) await ensureDraft(db, existing.id, opts.userId);
     return existing.id;
   }
