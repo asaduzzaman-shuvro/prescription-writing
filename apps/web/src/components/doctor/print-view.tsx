@@ -126,22 +126,16 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
     navigate("/");
   }
 
-  const [pdfNote, setPdfNote] = useState<string>();
-  const [pdfBusy, setPdfBusy] = useState(false);
+  function leaveForPatients() {
+    const encounterId = meta[0]?.encounter_id;
+    if (encounterId) resumeEditAfterPrint.clear(encounterId);
+    navigate("/patients");
+  }
 
-  async function fetchPdf(): Promise<{ blob: Blob; name: string } | null> {
-    setPdfBusy(true);
-    setPdfNote("Preparing PDF…");
+  async function loadPdfFile(): Promise<{ blob: Blob; name: string } | null> {
     const res = await fetch(`/api/print/${prescriptionId}/pdf`).catch(() => null);
-    if (!res?.ok) {
-      const text = res ? (await res.text()).slice(0, 180) : "";
-      setPdfNote(res?.status === 404 ? "Not on the server yet. Wait for Synced, then try again." : text || "You are offline, or the PDF could not be made.");
-      setPdfBusy(false);
-      return null;
-    }
+    if (!res?.ok) return null;
     const blob = await res.blob();
-    setPdfBusy(false);
-    setPdfNote(undefined);
     const row = meta[0];
     return {
       blob,
@@ -149,16 +143,51 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
     };
   }
 
-  async function downloadPdf() {
-    const file = await fetchPdf();
-    if (!file) return;
+  const [pdfNote, setPdfNote] = useState<string>();
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  async function fetchPdf(): Promise<{ blob: Blob; name: string } | null> {
+    setPdfBusy(true);
+    setPdfNote("Preparing PDF…");
+    const file = await loadPdfFile();
+    if (!file) {
+      setPdfNote("Not on the server yet, or you are offline. Wait for Synced and try again.");
+      setPdfBusy(false);
+      return null;
+    }
+    setPdfBusy(false);
+    setPdfNote(undefined);
+    return file;
+  }
+
+  function triggerDownload(file: { blob: Blob; name: string }) {
     const url = URL.createObjectURL(file.blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = file.name;
     a.click();
     URL.revokeObjectURL(url);
-    void askDone();
+  }
+
+  /** Same-origin GET while the click gesture is still active — async fetch + blob breaks downloads after navigate. */
+  function downloadPdf() {
+    const row = meta[0];
+    const encounterId = row?.encounter_id;
+    if (encounterId) resumeEditAfterPrint.clear(encounterId);
+    const name = prescriptionFileName({
+      name: row?.name ?? "",
+      mobile: row?.mobile,
+      id: row?.code,
+      date: row?.visit_date,
+    });
+    const a = document.createElement("a");
+    a.href = `/api/print/${prescriptionId}/pdf?download=1`;
+    a.download = name;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => leaveForPatients(), 0);
   }
 
   async function sharePdf() {
@@ -176,23 +205,33 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
         if (err instanceof DOMException && err.name === "AbortError") return;
       }
     }
-    const url = URL.createObjectURL(file.blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = file.name;
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerDownload(file);
     setPdfNote("This browser cannot share a file. The PDF was downloaded instead.");
   }
 
-  async function print() {
+  function print() {
+    const html = bundle?.html;
+    if (!html) return;
+    const popup = window.open("", "_blank");
+    if (popup) {
+      popup.document.open();
+      popup.document.write(html);
+      popup.document.close();
+      leaveForPatients();
+      void popup.document.fonts.ready.then(() => {
+        popup.focus();
+        popup.print();
+      });
+      return;
+    }
     const w = frame.current?.contentWindow;
     if (!w) return;
-    await w.document.fonts.ready;
-    w.focus();
-    // Fires once the dialog closes; the browser can't tell printed from cancelled, so the doctor decides.
-    w.addEventListener("afterprint", () => void askDone(), { once: true });
-    w.print();
+    void (async () => {
+      await w.document.fonts.ready;
+      w.focus();
+      w.addEventListener("afterprint", () => leaveForPatients(), { once: true });
+      w.print();
+    })();
   }
 
   if (!bundle) return <PrescriptionLoading label="Preparing prescription" />;
