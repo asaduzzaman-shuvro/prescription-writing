@@ -47,6 +47,7 @@ test("serial booking → check-in keeps the serial; display and fee", async ({ b
   await asst.page.goto("/doctor#/bookings");
   await asst.page.getByTestId("book-name").fill(name);
   await asst.page.getByTestId("book-mobile").fill(mobile());
+  await asst.page.getByTestId("book-sex").selectOption("male");
   await asst.page.getByTestId("book-submit").click();
   const msg = await asst.page.getByTestId("book-msg").innerText();
   const serial = msg.match(/#(\d+)/)![1]!;
