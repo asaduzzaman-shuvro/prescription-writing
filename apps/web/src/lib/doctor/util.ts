@@ -62,6 +62,41 @@ export function normaliseMobile(input: string): string {
   return digits;
 }
 
+/** Bound parameters for patient search (place after group/chamber WHERE params, before LIMIT/OFFSET). */
+export function patientSearchClause(term: string): { sql: string; params: string[] } {
+  const raw = term.trim();
+  if (raw.length < 2) return { sql: "", params: [] };
+  const tokens = raw.split(/\s+/).filter((t) => t.length > 0);
+  const params: string[] = [];
+  const clauses = tokens.map((token) => {
+    const mobile = normaliseMobile(token);
+    const digits = token.replace(/\D/g, "");
+    const nameLike = `%${token}%`;
+    const codeLike = `%${token}%`;
+    const codeDigitsLike = digits ? `%${digits}%` : `%${token}%`;
+    const mobileDigits = mobile.replace(/\D/g, "");
+    const parts = [
+      "lower(p.name) LIKE lower(?)",
+      "p.code LIKE ?",
+      "REPLACE(COALESCE(p.code, ''), 'P-', '') LIKE ?",
+    ];
+    params.push(nameLike, codeLike, codeDigitsLike);
+    if (mobileDigits.length >= 3) {
+      const mobileLike = `%${mobileDigits}%`;
+      parts.push("p.mobile LIKE ?", "REPLACE(COALESCE(p.mobile, ''), ' ', '') LIKE ?");
+      params.push(mobileLike, mobileLike);
+    }
+    return `(${parts.join("\n      OR ")})`;
+  });
+  return { sql: `AND ${clauses.join(" AND ")}`, params };
+}
+
+/** @deprecated Prefer patientSearchClause — embedded literals break PowerSync watch updates. */
+export function patientSearchSql(term: string): string {
+  const { sql } = patientSearchClause(term);
+  return sql;
+}
+
 /**
  * Marks a visit whose prescription was just finalised, so the browser's Back from the print screen
  * opens it for editing. Kept for the tab only; without storage the visit simply opens locked.

@@ -397,7 +397,7 @@ export function Today() {
 
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-[10px] font-semibold tracking-wide text-brand-600 uppercase">Overview</p>
+          {/* <p className="text-[10px] font-semibold tracking-wide text-brand-600 uppercase">Overview</p> */}
           <h1 className="text-lg font-bold tracking-tight text-slate-900">Dashboard</h1>
           <p className="text-xs text-slate-500">
             {profile?.specialty_code ? `${profile.specialty_code.replace(/_/g, " ")} · ` : ""}

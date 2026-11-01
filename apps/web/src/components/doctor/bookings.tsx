@@ -2,12 +2,13 @@
 
 import { usePowerSync, useQuery } from "@powersync/react";
 import { CalendarDays, Search } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { bookAppointment, checkInAppointment, setAppointmentStatus, startVisit, type VisitType } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { navigate } from "@/lib/doctor/router";
-import { ageLabel, normaliseMobile, today } from "@/lib/doctor/util";
+import { ORDER_BY_PATIENT_ID_ASC, todaySerialSqlEmbedded } from "@/lib/doctor/chamber-filter";
+import { ageLabel, normaliseMobile, patientSearchClause, today } from "@/lib/doctor/util";
 import { ListPager } from "@/components/list-pager";
 import { SaveButton } from "@/components/save-button";
 import { ActiveChamberSelector } from "./active-chamber";
@@ -111,31 +112,31 @@ export function BookingsScreen() {
   const { data } = useAppointments(date, chamberId);
   const checkIn = useCheckIn();
   const isDoctor = session.tenantRole === "doctor";
+
+  useEffect(() => {
+    setPatientPage(0);
+  }, [chamberId]);
+
   const doctorId = isDoctor ? session.userId : form.doctorId || doctors[0]?.id || "";
   const term = q.trim();
-  const mobileQ = normaliseMobile(term);
-  const isMobile = /^\d{4,}$/.test(mobileQ);
-  const searching = term.length >= 1;
+  const { sql: patientSearch, params: searchParams } = patientSearchClause(term);
   const patientPageSize = 50;
-  const searchParams: string[] = [];
-  const patientSearch = !searching ? "" : isMobile ? "AND p.mobile LIKE ?" : "AND (p.name LIKE ? OR p.code LIKE ?)";
-  if (searching) {
-    searchParams.push(isMobile ? `%${mobileQ}%` : `%${term}%`);
-    if (!isMobile) searchParams.push(`%${term}%`);
-  }
+  const joinParams = chamberId != null ? [date, chamberId] : [date];
+  const patientQueryParams = [...joinParams, ...searchParams, patientPageSize, patientPage * patientPageSize];
+  const serialSql = todaySerialSqlEmbedded(date, chamberId);
   const apptJoin =
     chamberId != null
       ? "LEFT JOIN appointment a ON a.patient_id = p.id AND a.appt_date = ? AND a.status <> 'cancelled' AND a.chamber_id = ?"
       : "LEFT JOIN appointment a ON a.patient_id = p.id AND a.appt_date = ? AND a.status <> 'cancelled'";
-  const patientQueryParams = chamberId != null ? [date, chamberId, ...searchParams, patientPageSize, patientPage * patientPageSize] : [date, ...searchParams, patientPageSize, patientPage * patientPageSize];
   const { data: patients } = useQuery<{
     id: string; name: string; dob: string | null; sex: string | null; mobile: string | null; code: string | null; serial_no: number | null; appt_status: string | null;
   }>(
-    `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code, a.serial_no, a.status AS appt_status
+    `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code, a.status AS appt_status,
+            ${serialSql}
        FROM patient p
        ${apptJoin}
       WHERE p.deleted_at IS NULL ${patientSearch}
-      ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END, a.serial_no, p.name
+      ORDER BY ${ORDER_BY_PATIENT_ID_ASC}
       LIMIT ? OFFSET ?`,
     patientQueryParams,
   );
@@ -304,7 +305,7 @@ export function BookingsScreen() {
           <table className="table">
             <thead>
               <tr>
-                <th>#</th>
+                <th className="w-14">SI No</th>
                 <th>Name</th>
                 <th>Mobile</th>
                 <th>Note</th>
@@ -377,6 +378,7 @@ export function BookingsScreen() {
           <table className="table">
             <thead>
               <tr>
+                <th className="w-14">SI No</th>
                 <th>Name</th>
                 <th>Age / sex</th>
                 <th>Mobile</th>
@@ -387,6 +389,7 @@ export function BookingsScreen() {
             <tbody>
               {patients.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50/80">
+                  <td className="tabular-nums font-semibold text-slate-800">{p.serial_no ?? "—"}</td>
                   <td className="font-medium text-slate-900">{p.name}</td>
                   <td className="text-slate-700">
                     {ageLabel(p.dob)}
@@ -400,7 +403,7 @@ export function BookingsScreen() {
                         {isDoctor ? "Open Rx" : "Queue"}
                       </button>
                       {p.appt_status ? (
-                        <span className="text-xs tabular-nums text-slate-500">#{p.serial_no}</span>
+                        <span className="text-xs text-emerald-700">Booked</span>
                       ) : (
                         <SaveButton
                           type="button"
@@ -419,7 +422,7 @@ export function BookingsScreen() {
               ))}
               {!patients.length && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-sm text-slate-500">No patients match.</td>
+                  <td colSpan={6} className="py-6 text-center text-sm text-slate-500">No patients match.</td>
                 </tr>
               )}
             </tbody>

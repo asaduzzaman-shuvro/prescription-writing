@@ -4,7 +4,7 @@ import { useQuery } from "@powersync/react";
 import { Search } from "lucide-react";
 import { useState } from "react";
 import { Link } from "@/lib/doctor/router";
-import { ageLabel, normaliseMobile } from "@/lib/doctor/util";
+import { ageLabel, patientSearchClause } from "@/lib/doctor/util";
 
 export interface PatientHit {
   id: string;
@@ -16,19 +16,18 @@ export interface PatientHit {
   last_visit: string | null;
 }
 
-/** Search by mobile (one number often covers a whole family), name or patient code. */
+/** Search by mobile, name or patient code. */
 export function usePatientSearch(q: string, limit = 20) {
-  const term = q.trim();
-  const mobile = normaliseMobile(term);
-  const isMobile = /^\d{4,}$/.test(mobile);
+  const { sql, params } = patientSearchClause(q.trim());
+  const active = sql.length > 0;
   return useQuery<PatientHit>(
     `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code,
             (SELECT MAX(visit_date) FROM encounter e WHERE e.patient_id = p.id) AS last_visit
        FROM patient p
-      WHERE p.deleted_at IS NULL AND (${isMobile ? "p.mobile LIKE ?" : "p.name LIKE ? OR p.code LIKE ?"})
+      WHERE p.deleted_at IS NULL ${active ? sql : "AND 1=0"}
       ORDER BY last_visit DESC NULLS LAST, p.name
       LIMIT ?`,
-    term.length < 2 ? ["__none__", limit] : isMobile ? [`%${mobile}%`, limit] : [`%${term}%`, `%${term}%`, limit],
+    [...params, limit],
   );
 }
 

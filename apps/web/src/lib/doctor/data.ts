@@ -218,19 +218,49 @@ export interface PatientInput {
   gestationalAgeWeeks: number | null;
 }
 
+function formatPatientCode(seq: number) {
+  return `P-${String(seq).padStart(6, "0")}`;
+}
+
+async function nextPatientCode(tx: Db, tenantId: string): Promise<string> {
+  const row = await tx.get<{ n: number }>(
+    `SELECT COALESCE(MAX(CAST(REPLACE(code, 'P-', '') AS INTEGER)), 0) + 1 AS n
+       FROM patient WHERE tenant_id = ? AND code IS NOT NULL AND code GLOB 'P-[0-9]*'`,
+    [tenantId],
+  );
+  return formatPatientCode(row.n);
+}
+
+/** Assign IDs to patients that were saved before codes were allocated on-device. */
+export async function backfillMissingPatientCodes(db: Db, tenantId: string) {
+  const ids = await db.getAll<{ id: string }>(
+    `SELECT id FROM patient WHERE tenant_id = ? AND deleted_at IS NULL AND (code IS NULL OR code = '') ORDER BY created_at`,
+    [tenantId],
+  );
+  for (const { id } of ids) {
+    await db.writeTransaction(async (tx) => {
+      const code = await nextPatientCode(tx, tenantId);
+      await tx.execute(`UPDATE patient SET code = ?, updated_at = ? WHERE id = ? AND (code IS NULL OR code = '')`, [code, nowIso(), id]);
+    });
+  }
+}
+
 export async function createPatient(db: Db, userId: string, tenantId: string, p: PatientInput): Promise<string> {
   const id = uuid();
   const now = nowIso();
-  await db.execute(
-    `INSERT INTO patient (id, tenant_id, name, dob, dob_estimated, sex, mobile, address, allergies, pregnancy_status, guardian_name, referred_by, nid, brn,
-                          health_id, notes, consent_at, birth_weight_kg, gestational_age_weeks, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id, tenantId, p.name.trim(), p.dob, p.dobEstimated ? 1 : 0, p.sex, p.mobile || null, p.address || null,
-      JSON.stringify(p.allergies), p.pregnancyStatus, p.guardianName || null, p.referredBy.trim() || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null,
-      p.consent ? now : null, p.birthWeightKg, p.gestationalAgeWeeks, userId, localNowIso(), now,
-    ],
-  );
+  await db.writeTransaction(async (tx) => {
+    const code = await nextPatientCode(tx, tenantId);
+    await tx.execute(
+      `INSERT INTO patient (id, tenant_id, code, name, dob, dob_estimated, sex, mobile, address, allergies, pregnancy_status, guardian_name, referred_by, nid, brn,
+                            health_id, notes, consent_at, birth_weight_kg, gestational_age_weeks, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, tenantId, code, p.name.trim(), p.dob, p.dobEstimated ? 1 : 0, p.sex, p.mobile || null, p.address || null,
+        JSON.stringify(p.allergies), p.pregnancyStatus, p.guardianName || null, p.referredBy.trim() || null, p.nid || null, p.brn || null, p.healthId || null, p.notes || null,
+        p.consent ? now : null, p.birthWeightKg, p.gestationalAgeWeeks, userId, localNowIso(), now,
+      ],
+    );
+  });
   return id;
 }
 

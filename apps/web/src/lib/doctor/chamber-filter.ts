@@ -68,3 +68,35 @@ export function groupCountParams(group: PatientGroup, date: string, chamberId: s
   if (chamberId && group !== "today") parts.push(...chamberLinkedParams(chamberId));
   return parts;
 }
+
+function sqlLiteral(value: string) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/** Today's queue serial at this chamber (date/chamber inlined so WHERE placeholders stay in order). */
+export function todaySerialSqlEmbedded(date: string, chamberId: string | null) {
+  const d = sqlLiteral(date);
+  const apptCh = chamberId ? `AND a.chamber_id = ${sqlLiteral(chamberId)}` : "";
+  const encCh = chamberId ? `AND e.chamber_id = ${sqlLiteral(chamberId)}` : "";
+  return `COALESCE(
+    (SELECT MIN(a.serial_no) FROM appointment a WHERE a.patient_id = p.id AND a.appt_date = ${d} AND a.status <> 'cancelled' ${apptCh}),
+    (SELECT MIN(e.serial_no) FROM encounter e WHERE e.patient_id = p.id AND e.visit_date = ${d} AND e.status <> 'cancelled' ${encCh})
+  ) AS serial_no`;
+}
+
+/** @deprecated Use todaySerialSqlEmbedded — positional params break when combined with WHERE filters. */
+export function todaySerialSql(chamberId: string | null) {
+  const apptCh = chamberId ? "AND a.chamber_id = ?" : "";
+  const encCh = chamberId ? "AND e.chamber_id = ?" : "";
+  return `COALESCE(
+    (SELECT MIN(a.serial_no) FROM appointment a WHERE a.patient_id = p.id AND a.appt_date = ? AND a.status <> 'cancelled' ${apptCh}),
+    (SELECT MIN(e.serial_no) FROM encounter e WHERE e.patient_id = p.id AND e.visit_date = ? AND e.status <> 'cancelled' ${encCh})
+  ) AS serial_no`;
+}
+
+export function todaySerialParams(date: string, chamberId: string | null): string[] {
+  if (chamberId) return [date, chamberId, date, chamberId];
+  return [date, date];
+}
+
+export const ORDER_BY_PATIENT_ID_ASC = `CASE WHEN p.code IS NULL OR p.code = '' THEN 1 ELSE 0 END, p.code ASC, p.name ASC`;
