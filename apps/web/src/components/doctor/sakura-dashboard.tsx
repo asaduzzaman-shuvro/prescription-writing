@@ -74,7 +74,7 @@ function openSakuraWebDashboard() {
 }
 
 /** Statuses doctors set from the queue; Cancel uses Delete, booking intermediates stay off this list. */
-const STATUS_OPTIONS = ["scheduled", "running", "seen", "need_test", "absent"] as const;
+const STATUS_OPTIONS = ["scheduled", "running", "seen", "absent"] as const;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -1138,18 +1138,9 @@ export function SakuraDashboard() {
                     <Ms name="arrow_forward" className="text-base" />
                     <span>Next</span>
                   </button>
-                  <button type="button" onClick={() => void onTestNext()} className={styles.btnTest}>
-                    <Ms name="science" className="text-base" />
-                    <span>Test</span>
-                  </button>
                   <button type="button" onClick={() => setBreakModalOpen(true)} className={styles.btnBreak}>
                     <Ms name="schedule" className="text-base" />
                     <span>Break</span>
-                  </button>
-                  <button type="button" onClick={onLabReportToolbar} className={styles.btnLab}>
-                    <Ms name="science" className="text-base shrink-0" />
-                    <span className="truncate">Lab Report</span>
-                    <span className={styles.btnLabCount}>({currentStats.report})</span>
                   </button>
                   <button
                     type="button"
