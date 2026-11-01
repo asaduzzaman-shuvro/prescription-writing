@@ -308,6 +308,7 @@ export function SakuraDashboard() {
   );
 
   const sorted = useMemo(() => sortQueue(appointments), [appointments]);
+  const nextPreview = useMemo(() => pickNextPatientToCall(sorted), [sorted]);
 
   const waitingList = useMemo(
     () =>
@@ -745,11 +746,6 @@ export function SakuraDashboard() {
     }
   }
 
-  const tabBtn = (active: boolean) =>
-    active
-      ? "rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-[#2c2825] shadow-sm border border-[#e8e0d5]"
-      : "rounded-md px-3 py-1.5 text-xs font-medium text-[#6b6560] hover:text-[#2c2825] transition-colors";
-
   if (!authChecked) {
     return (
       <div className={`${styles.root} flex items-center justify-center py-16 text-slate-500`}>
@@ -777,46 +773,42 @@ export function SakuraDashboard() {
 
   return (
     <div
-      className={`${styles.root} mx-auto flex max-w-6xl min-w-0 flex-col gap-6 px-0 ${patientsCompactView ? styles.compact : ""}`}
+      className={`${styles.root} mx-auto flex max-w-7xl min-w-0 flex-col gap-3 px-0 ${patientsCompactView ? styles.compact : ""}`}
       data-testid="sakura-web-dashboard"
     >
       {!patientsCompactView && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-[#2c2825]">
-              <Ms name="prescriptions" className="text-[1.4rem] text-[#c9973f]" />
-              Sakura Web
-            </h1>
-            <div className="mt-2 inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-[#e8e0d5] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2c2825]">
-              <span className="text-[#6b6560]">Next:</span>
-              <label className="inline-flex cursor-pointer items-center gap-1.5">
-                <input
-                  type="radio"
-                  name="sakura-auto-rx-on-next"
-                  className="accent-[#c9973f]"
-                  checked={!autoRxOnNext}
-                  onChange={() => setAutoRxPreference(false)}
-                />
-                Call only
-              </label>
-              <label className="inline-flex cursor-pointer items-center gap-1.5">
-                <input
-                  type="radio"
-                  name="sakura-auto-rx-on-next"
-                  className="accent-[#c9973f]"
-                  checked={autoRxOnNext}
-                  onChange={() => setAutoRxPreference(true)}
-                />
-                Call + Rx
-              </label>
+        <div className={styles.heroCard}>
+          <div className={styles.heroNext}>
+            <span className={styles.heroNextIcon}>
+              <Ms name="calendar_month" className="text-[1.45rem]" />
+            </span>
+            <div className="min-w-0">
+              <p className={styles.heroNextLabel}>Next Appointment</p>
+              <p className={styles.heroNextTitle}>
+                {nextPreview
+                  ? `${formatSelectedDate(selectedDate)} · ${formatAppointmentTime(nextPreview)}`
+                  : `${formatSelectedDate(selectedDate)} · No one waiting`}
+              </p>
+              <p className={styles.heroNextPatient}>
+                <Ms name="person" className="text-base" />
+                {nextPreview
+                  ? `Patient: ${nextPreview.patient.fullName}`
+                  : "Queue is empty"}
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div>
+          <div className={styles.heroCenter}>
+            <div className={styles.heroCol}>
+              <span className={styles.filterLabelSpacer}>.</span>
+              <span className={styles.heroAvatar} title={session.name || "Doctor"}>
+                <Ms name="stethoscope" className="text-[1.35rem]" />
+              </span>
+            </div>
+            <div className={styles.heroCol}>
               <span className={styles.filterLabel}>Date</span>
-              <div className="flex items-center gap-2 rounded-lg border border-[#e8e0d5] bg-white px-3 py-2 shadow-sm transition-colors hover:border-[#c9973f]/50">
-                <Ms name="calendar_today" className="text-lg text-[#c9973f]" />
+              <div className={`${styles.filterField} ${styles.filterFieldDate}`}>
+                <Ms name="calendar_today" className="text-lg text-[var(--sg-green)]" />
                 <input
                   type="date"
                   value={selectedDate}
@@ -827,48 +819,56 @@ export function SakuraDashboard() {
                     setSelectedChamberId(chamberId);
                     void loadDashboard(chamberId, date);
                   }}
-                  className="cursor-pointer border-0 bg-transparent text-sm font-medium text-slate-700 outline-none"
                 />
               </div>
             </div>
-            <div>
+            <div className={styles.heroCol}>
               <span className={styles.filterLabel}>Chamber</span>
-              <select
-                value={selectedChamberId ?? ""}
-                onChange={(e) => {
-                  const id = e.target.value ? Number(e.target.value) : null;
-                  setSelectedChamberId(id);
-                  void loadDashboard(id, selectedDate);
-                }}
-                className="rounded-lg border border-[#e8e0d5] bg-white px-3 py-2 text-sm font-medium text-[#2c2825] shadow-sm outline-none transition-colors hover:border-[#c9973f]/50 focus:border-[#c9973f] focus:ring-2 focus:ring-[#c9973f]/40"
-              >
-                <option value="">All Chambers</option>
-                {chambers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div className={`${styles.filterField} ${styles.filterFieldSelect}`}>
+                <Ms name="apartment" className="text-lg text-[var(--sg-green)]" />
+                <select
+                  className={styles.filterSelect}
+                  value={selectedChamberId ?? ""}
+                  onChange={(e) => {
+                    const id = e.target.value ? Number(e.target.value) : null;
+                    setSelectedChamberId(id);
+                    void loadDashboard(id, selectedDate);
+                  }}
+                >
+                  <option value="">All Chambers</option>
+                  {chambers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={openSakuraWebDashboard}
-              className="inline-flex h-[42px] items-center gap-1.5 rounded-lg border border-[#325A46]/30 bg-white px-3 text-sm font-medium text-[#325A46] shadow-sm transition-colors hover:border-[#325A46] hover:bg-[#325A46] hover:text-white"
-              data-testid="sakura-web-external-dashboard"
-              title="Open Sakura Web dashboard in a new tab (auto sign-in)"
-            >
-              <Ms name="open_in_new" className="text-lg" />
-              <span className="whitespace-nowrap">Open dashboard</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setAppointmentModal({ mode: "create" })}
-              className="inline-flex h-[42px] items-center gap-1.5 rounded-lg bg-[#1a1512] px-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-              title="Book appointment"
-            >
-              <Ms name="add" className="text-lg" />
-              <span className="whitespace-nowrap">Appointment</span>
-            </button>
+          </div>
+
+          <div className={styles.heroActions}>
+            <span className={styles.filterLabelSpacer}>.</span>
+            <div className={styles.heroActionsRow}>
+              <button
+                type="button"
+                onClick={openSakuraWebDashboard}
+                className={styles.btnOpenDash}
+                data-testid="sakura-web-external-dashboard"
+                title="Open Sakura Web dashboard in a new tab (auto sign-in)"
+              >
+                <Ms name="open_in_new" className="text-lg" />
+                <span>Open dashboard</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAppointmentModal({ mode: "create" })}
+                className={styles.btnAppointment}
+                title="Book appointment"
+              >
+                <Ms name="add" className="text-lg" />
+                <span>Appointment</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -908,101 +908,132 @@ export function SakuraDashboard() {
       )}
 
       {!loading && (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-[#e8e0d5] bg-white shadow-sm">
-            <div className="space-y-2 border-b border-slate-200 px-4 py-3">
-              <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                  <h2 className="shrink-0 text-base font-semibold text-[#2c2825]">Sakura patients</h2>
-                  <p className="flex shrink-0 items-center gap-1 border-l border-[#e8e0d5] pl-3 text-xs font-medium text-[#6b6560]">
-                    <Ms name="event" className="text-sm text-[#c9973f]" />
-                    {formatSelectedDate(selectedDate)}
+        <div className="space-y-3">
+          <div className={styles.patientsCard}>
+            <div className={styles.patientsCardHead}>
+              <div className={styles.patientsTitleRow}>
+                <span className={styles.patientsTitleIcon}>
+                  <Ms name="groups" className="text-[1.25rem]" />
+                </span>
+                <div>
+                  <h2 className={styles.patientsTitle}>Sakura Patients</h2>
+                  <p className={styles.patientsSubtitle}>
+                    Manage your chamber patients and appointments.
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button type="button" onClick={onRefreshDashboard} className={styles.toolbarRefresh}>
-                    <Ms name="refresh" className="text-lg" />
-                    Refresh
+              </div>
+              <div className={styles.patientsHeadTools}>
+                <div className={styles.callModeGroup} role="group" aria-label="Next call mode">
+                  <button
+                    type="button"
+                    onClick={() => setAutoRxPreference(false)}
+                    className={!autoRxOnNext ? styles.callModeLogoActive : styles.callModeLogo}
+                    aria-pressed={!autoRxOnNext}
+                    title="Call only"
+                  >
+                    <Ms name="call" className="text-[1.05rem]" />
+                    <span>Call only</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPatientsCompactView((v) => !v)}
-                    className={`${styles.toolbarRefresh} lg:hidden`}
-                    aria-pressed={patientsCompactView}
+                    onClick={() => setAutoRxPreference(true)}
+                    className={autoRxOnNext ? styles.callModeLogoActive : styles.callModeLogo}
+                    aria-pressed={autoRxOnNext}
+                    title="Call + Rx"
                   >
-                    <Ms name={patientsCompactView ? "fullscreen_exit" : "fullscreen"} className="text-lg" />
-                    {patientsCompactView ? "Exit" : "Full"}
+                    <Ms name="prescriptions" className="text-[1.05rem]" />
+                    <span>Call + Rx</span>
+                  </button>
+                </div>
+                <button type="button" onClick={onRefreshDashboard} className={styles.toolbarRefresh}>
+                  <Ms name="refresh" className="text-lg" />
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPatientsCompactView((v) => !v)}
+                  className={`${styles.toolbarRefresh} lg:hidden`}
+                  aria-pressed={patientsCompactView}
+                >
+                  <Ms name={patientsCompactView ? "fullscreen_exit" : "fullscreen"} className="text-lg" />
+                  {patientsCompactView ? "Exit" : "Full"}
+                </button>
+                <select
+                  className={`${styles.viewSelect} hidden lg:inline-block`}
+                  value={patientsCompactView ? "compact" : "full"}
+                  onChange={(e) => setPatientsCompactView(e.target.value === "compact")}
+                  aria-label="View mode"
+                >
+                  <option value="full">View: Full</option>
+                  <option value="compact">View: Compact</option>
+                </select>
+              </div>
+            </div>
+
+            <div className={styles.actionsToolbar}>
+              <div className={styles.actionsToolbarButtons}>
+                <div className={styles.controlButtons}>
+                  <button type="button" onClick={onNextPatient} className={styles.btnNext}>
+                    <Ms name="arrow_forward" className="text-base" />
+                    <span>Next</span>
+                  </button>
+                  <button type="button" onClick={() => void onTestNext()} className={styles.btnTest}>
+                    <Ms name="science" className="text-base" />
+                    <span>Test</span>
+                  </button>
+                  <button type="button" onClick={() => setBreakModalOpen(true)} className={styles.btnBreak}>
+                    <Ms name="schedule" className="text-base" />
+                    <span>Break</span>
+                  </button>
+                  <button type="button" onClick={onLabReportToolbar} className={styles.btnLab}>
+                    <Ms name="science" className="text-base shrink-0" />
+                    <span className="truncate">Lab Report</span>
+                    <span className={styles.btnLabCount}>({currentStats.report})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPatientCaseFilter((f) => (f === "OT Case" ? null : "OT Case"))}
+                    className={patientCaseFilter === "OT Case" ? styles.btnOtActive : styles.btnOt}
+                  >
+                    <Ms name="medical_services" className="text-base" />
+                    <span>OT Case</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPatientCaseFilter((f) => (f === "Research Case" ? null : "Research Case"))
+                    }
+                    className={
+                      patientCaseFilter === "Research Case" ? styles.btnResearchActive : styles.btnResearch
+                    }
+                  >
+                    <Ms name="biotech" className="text-base" />
+                    <span>Research Case</span>
                   </button>
                 </div>
               </div>
 
-              <div className={styles.actionsToolbar}>
-                <div className={styles.actionsToolbarButtons}>
-                  <div className={styles.controlButtons}>
-                    <button type="button" onClick={onNextPatient} className={styles.btnNext}>
-                      <Ms name="arrow_forward" className="text-base" />
-                      <span>Next</span>
-                    </button>
-                    <button type="button" onClick={() => void onTestNext()} className={styles.btnTest}>
-                      <Ms name="science" className="text-base" />
-                      <span>Test</span>
-                    </button>
-                    <button type="button" onClick={() => setBreakModalOpen(true)} className={styles.btnBreak}>
-                      <Ms name="schedule" className="text-base" />
-                      <span>Break</span>
-                    </button>
-                    <button type="button" onClick={onLabReportToolbar} className={styles.btnLab}>
-                      <Ms name="science" className="text-base shrink-0" />
-                      <span className="truncate">Lab Report</span>
-                      <span className={styles.btnLabCount}>{currentStats.report}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPatientCaseFilter((f) => (f === "OT Case" ? null : "OT Case"))}
-                      className={patientCaseFilter === "OT Case" ? styles.btnOtActive : styles.btnOt}
-                    >
-                      <Ms name="medical_services" className="text-base" />
-                      <span>OT Case</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPatientCaseFilter((f) => (f === "Research Case" ? null : "Research Case"))
-                      }
-                      className={
-                        patientCaseFilter === "Research Case" ? styles.btnResearchActive : styles.btnResearch
-                      }
-                    >
-                      <Ms name="biotech" className="text-base" />
-                      <span>Research Case</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div
-                  className={`${styles.actionsToolbarTabs} inline-flex items-center gap-1 rounded-lg border border-[#e8e0d5] bg-[#f5f0e8] p-1`}
-                >
-                  {(
-                    [
-                      ["active", "Waiting", waitingList.length],
-                      ["seen", "Seen", seenList.length],
-                      ["absent", "Absent", absentList.length],
-                      ["auto", "Empty slots", autoList.length],
-                    ] as const
-                  ).map(([key, label, count]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setPatientListTab(key)}
-                      className={tabBtn(patientListTab === key)}
-                    >
-                      {label}
-                      {appointments.length > 0 && (
-                        <span className="ml-1 tabular-nums opacity-80">({count})</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+              <div className={styles.actionsToolbarTabs}>
+                {(
+                  [
+                    ["active", "Waiting", waitingList.length],
+                    ["seen", "Seen", seenList.length],
+                    ["absent", "Absent", absentList.length],
+                    ["auto", "Empty slots", autoList.length],
+                  ] as const
+                ).map(([key, label, count]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPatientListTab(key)}
+                    className={patientListTab === key ? styles.tabBtnActive : styles.tabBtn}
+                  >
+                    {label}
+                    {appointments.length > 0 && (
+                      <span className="ml-1 tabular-nums opacity-90">({count})</span>
+                    )}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -1045,39 +1076,37 @@ export function SakuraDashboard() {
                 className={styles.tableWrap}
                 style={patientsCompactView ? { maxHeight: undefined } : undefined}
               >
-                <table className="min-w-full divide-y divide-[#e8e0d5]">
+                <table className="min-w-full divide-y divide-[var(--sg-line)]">
                   <thead className={`${styles.thead} sticky top-0 z-10`}>
                     <tr>
-                      {["SL", "P.Serial", "Patient", "Type", "Time", "Present", "Status", "Prescription", ""].map(
-                        (h, hi) => (
-                          <th key={`${h}-${hi}`} className={styles.thCell}>
-                            {h || <span className="sr-only">Edit / Delete</span>}
+                      {["SL", "P.Serial", "Patient", "Type", "Time", "Present", "Status", "Prescription", "Action"].map(
+                        (h) => (
+                          <th key={h} className={styles.thCell}>
+                            {h}
                           </th>
                         ),
                       )}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#e8e0d5] bg-white">
+                  <tbody className="divide-y divide-[var(--sg-line)] bg-white">
                     {activeList.map((apt) => (
                       <tr
                         key={apt.id}
-                        className={`transition-colors hover:bg-[#faf7f2] ${
+                        className={`transition-colors hover:bg-[var(--sg-mint)] ${
                           apt.status === "running" ? styles.rowRunning : ""
                         }`}
                       >
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
-                          <div className="text-sm font-semibold tabular-nums text-slate-600">
+                          <div className="text-xs font-bold tabular-nums text-[var(--sg-ink)]">
                             {getDisplaySerial(apt, sorted)}
                           </div>
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
-                          <div className="inline-flex items-center rounded-md bg-[#f5f0e8] px-2 py-0.5 text-sm font-bold tabular-nums text-[#2c2825]">
-                            #{getDisplaySerial(apt, sorted)}
-                          </div>
+                          <div className={styles.serialChip}>#{getDisplaySerial(apt, sorted)}</div>
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
-                          <div className="text-sm font-semibold text-slate-900">{apt.patient.fullName}</div>
-                          <div className="text-[11px] text-slate-500">{apt.patient.phone}</div>
+                          <div className="text-xs font-bold text-[var(--sg-ink)]">{apt.patient.fullName}</div>
+                          <div className="text-[10px] text-[var(--sg-muted)]">{apt.patient.phone}</div>
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
                           {patientListTab === "auto" ? (
@@ -1093,7 +1122,8 @@ export function SakuraDashboard() {
                           )}
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
-                          <div className="text-sm font-semibold tabular-nums text-slate-800">
+                          <div className="inline-flex items-center gap-1 text-xs font-semibold tabular-nums text-[var(--sg-ink)]">
+                            <Ms name="schedule" className="text-sm text-[var(--sg-green)]" />
                             {formatAppointmentTime(apt)}
                           </div>
                         </td>
@@ -1162,7 +1192,7 @@ export function SakuraDashboard() {
                               <button
                                 type="button"
                                 title="Add patient under this serial"
-                                className={styles.editBtn}
+                                className={styles.addBtn}
                                 onClick={() => {
                                   if (isAutoBookedAppointment(apt)) {
                                     window.alert(
