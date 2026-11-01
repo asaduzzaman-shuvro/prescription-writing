@@ -6,13 +6,13 @@ import { useEffect, useState } from "react";
 import { backfillMissingPatientCodes, startVisit } from "@/lib/doctor/data";
 import {
   allPatientsFilterWhere,
-  ORDER_BY_LAST_VISIT_DESC,
-  todaySerialSqlEmbedded,
+  allPatientsSerialSqlEmbedded,
+  ORDER_BY_SERIAL_ASC,
 } from "@/lib/doctor/chamber-filter";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { Link, navigate } from "@/lib/doctor/router";
-import { ageLabel, patientSearchClause } from "@/lib/doctor/util";
+import { ageLabel, patientSearchClause, today } from "@/lib/doctor/util";
 import { ListPager } from "@/components/list-pager";
 import type { PatientHit } from "./patient-search";
 
@@ -37,9 +37,7 @@ function AllPatientsTable({ filterChamberId, filterDateFrom, filterDateTo, term,
   const searching = searchSql.length > 0;
   const from = filterDateFrom?.trim() || null;
   const to = filterDateTo?.trim() || null;
-  const serialDate = from ?? to;
-  const singleDay = Boolean(serialDate && (!from || !to || from === to));
-  const serialSql = singleDay && serialDate ? todaySerialSqlEmbedded(serialDate, filterChamberId) : "NULL AS serial_no";
+  const serialSql = allPatientsSerialSqlEmbedded(from, to, filterChamberId, today());
   const listParams = [...filterParams, ...searchParams, PAGE, page * PAGE];
   const queryKey = `${filterChamberId ?? ""}|${from ?? ""}|${to ?? ""}|${term}|${page}`;
 
@@ -58,7 +56,6 @@ function AllPatientsTable({ filterChamberId, filterDateFrom, filterDateTo, term,
       isDoctor={isDoctor}
       onPage={onPage}
       onVisit={onVisit}
-      showSerial={singleDay === true}
     />
   );
 }
@@ -76,7 +73,6 @@ function AllPatientsTableInner({
   isDoctor,
   onPage,
   onVisit,
-  showSerial,
 }: {
   filterSql: string;
   searchSql: string;
@@ -90,7 +86,6 @@ function AllPatientsTableInner({
   isDoctor: boolean;
   onPage: (page: number) => void;
   onVisit: (patientId: string) => void;
-  showSerial: boolean;
 }) {
   const { data: rows } = useQuery<Row>(
     `SELECT p.id, p.name, p.dob, p.sex, p.mobile, p.code,
@@ -99,7 +94,7 @@ function AllPatientsTableInner({
             ${serialSql}
        FROM patient p
       WHERE p.deleted_at IS NULL AND (${filterSql}) ${searchSql}
-      ORDER BY ${ORDER_BY_LAST_VISIT_DESC}
+      ORDER BY ${ORDER_BY_SERIAL_ASC}
       LIMIT ? OFFSET ?`,
     listParams,
   );
@@ -108,7 +103,6 @@ function AllPatientsTableInner({
     [...filterParams, ...searchParams],
   );
   const listTotal = Number(matched[0]?.n ?? 0);
-  const colSpan = showSerial ? 8 : 7;
 
   return (
     <>
@@ -126,7 +120,7 @@ function AllPatientsTableInner({
           <table className="table">
             <thead>
               <tr>
-                {showSerial && <th className="w-14">SI No</th>}
+                <th className="w-14">SI No</th>
                 <th>ID</th>
                 <th>Name</th>
                 <th>Age / sex</th>
@@ -139,7 +133,7 @@ function AllPatientsTableInner({
             <tbody>
               {rows.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50/80">
-                  {showSerial && <td className="tabular-nums font-semibold text-slate-800">{p.serial_no ?? "—"}</td>}
+                  <td className="tabular-nums font-semibold text-slate-800">{p.serial_no ?? "—"}</td>
                   <td className="text-xs tabular-nums text-slate-500">{p.code ?? "pending"}</td>
                   <td>
                     <Link to={`/patients/${p.id}`} className="font-medium text-brand-700 hover:underline">
@@ -162,7 +156,7 @@ function AllPatientsTableInner({
               ))}
               {!rows.length && (
                 <tr>
-                  <td colSpan={colSpan} className="py-6 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="py-6 text-center text-sm text-slate-500">
                     {searching ? "No patients match your search." : "No patients match these filters."}
                   </td>
                 </tr>
