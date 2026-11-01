@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { BookingRealtimeClient } from "@/lib/sakura/booking-realtime";
 import { sakuraApi, SakuraApiError } from "@/lib/sakura/client";
 import {
   formatTime12h,
@@ -71,6 +72,7 @@ type TimeCell = {
   parentSlotId: number;
   isBooked: boolean;
   isActive: boolean;
+  isPeerHeld?: boolean;
 };
 
 type FlatSlot = { sequence: number; timeSlot: TimeCell; parentSlot: SakuraParentSlot };
@@ -155,8 +157,54 @@ export function SakuraAppointmentModal({
   const [resultModal, setResultModal] = useState<"success" | "error" | null>(null);
   const [resultMessage, setResultMessage] = useState("");
   const [resultSerial, setResultSerial] = useState<number | null>(null);
+  const [holdsTick, setHoldsTick] = useState(0);
   const phoneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNextSlotReload = useRef(false);
+  const realtimeRef = useRef<BookingRealtimeClient | null>(null);
+  const selectedSlotRef = useRef<TimeCell | null>(null);
+  const isEditRef = useRef(isEdit);
+
+  useEffect(() => {
+    selectedSlotRef.current = selectedSlot;
+  }, [selectedSlot]);
+
+  useEffect(() => {
+    isEditRef.current = isEdit;
+  }, [isEdit]);
+
+  useEffect(() => {
+    const client = new BookingRealtimeClient(
+      () => setHoldsTick((t) => t + 1),
+      (data) => {
+        if (isEditRef.current) return;
+        const sel = selectedSlotRef.current;
+        if (!sel || sel.parentSlotId !== data.appointmentSlotId) return;
+        const k1 = BookingRealtimeClient.slotHoldKey(sel.parentSlotId, sel.time);
+        const k2 = BookingRealtimeClient.slotHoldKey(
+          data.appointmentSlotId,
+          data.appointmentTime,
+        );
+        if (k1 !== k2) return;
+        if (data.reason !== "expired" && data.reason !== "disconnect") return;
+        client.clearAfterServerRelease();
+        setSelectedSlot(null);
+        setSelectedSequence(null);
+        setForm((prev) => ({ ...prev, appointmentSlotId: "", appointmentTime: "" }));
+        if (data.reason === "expired") {
+          setError("Your slot reservation expired. Please choose a time again.");
+        }
+      },
+    );
+    realtimeRef.current = client;
+    return () => {
+      client.destroy();
+      realtimeRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    realtimeRef.current?.syncRoom(form.chamberId, form.appointmentDate);
+  }, [form.chamberId, form.appointmentDate]);
 
   const patch = useCallback((partial: Partial<FormState>, mark?: string[]) => {
     setForm((prev) => ({ ...prev, ...partial }));
@@ -228,11 +276,16 @@ export function SakuraAppointmentModal({
           reserved &&
           reserved.slotId === slot.id &&
           normalizeTimeStr(reserved.time) === timeString;
+        const rt = realtimeRef.current;
+        const socketBooked = !!rt?.isPeerBooked(slot.id, timeString);
+        const isBooked = !reservedHere && (baseBooked || socketBooked);
+        const isPeerHeld = !isBooked && !!rt?.isPeerHeld(slot.id, timeString);
         cells.push({
           time: timeString,
           parentSlotId: slot.id,
-          isBooked: !reservedHere && baseBooked,
+          isBooked,
           isActive: slot.isActive !== false,
+          isPeerHeld,
         });
       }
       return cells;
@@ -253,7 +306,16 @@ export function SakuraAppointmentModal({
       }
     }
     return items;
-  }, [availableSlots, form.appointmentSlotId, form.appointmentTime, form.chamberId, generateTimeSlots, isEdit]);
+    // holdsTick forces recompute when socket peer holds/booked change
+  }, [
+    availableSlots,
+    form.appointmentSlotId,
+    form.appointmentTime,
+    form.chamberId,
+    generateTimeSlots,
+    holdsTick,
+    isEdit,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -424,22 +486,70 @@ export function SakuraAppointmentModal({
     }
   }
 
-  function selectTimeSlot(timeSlot: TimeCell, parentSlot: SakuraParentSlot, sequence: number) {
+  async function selectTimeSlot(
+    timeSlot: TimeCell,
+    parentSlot: SakuraParentSlot,
+    sequence: number,
+  ) {
     if (timeSlot.isBooked || !timeSlot.isActive) return;
+    const rt = realtimeRef.current;
+    if (
+      rt?.isPeerBooked(timeSlot.parentSlotId, timeSlot.time) ||
+      rt?.isPeerHeld(timeSlot.parentSlotId, timeSlot.time)
+    ) {
+      return;
+    }
+
+    if (isEdit) {
+      const same =
+        selectedSlot?.time === timeSlot.time &&
+        selectedSlot?.parentSlotId === timeSlot.parentSlotId;
+      if (same) {
+        setSelectedSlot(null);
+        setSelectedSequence(null);
+        patch({ appointmentSlotId: "", appointmentTime: "" });
+      } else {
+        setSelectedSlot(timeSlot);
+        setSelectedSequence(sequence);
+        patch({
+          appointmentSlotId: String(parentSlot.id),
+          appointmentTime: timeSlot.time,
+        });
+      }
+      return;
+    }
+
+    const cid = Number(form.chamberId);
+    const dateStr = form.appointmentDate.split("T")[0] || form.appointmentDate;
+    if (!form.chamberId || !dateStr || Number.isNaN(cid)) return;
+
     const same =
       selectedSlot?.time === timeSlot.time && selectedSlot?.parentSlotId === timeSlot.parentSlotId;
     if (same) {
+      rt?.releaseCurrentHoldQuiet();
       setSelectedSlot(null);
       setSelectedSequence(null);
       patch({ appointmentSlotId: "", appointmentTime: "" });
       return;
     }
-    setSelectedSlot(timeSlot);
-    setSelectedSequence(sequence);
-    patch({
-      appointmentSlotId: String(parentSlot.id),
-      appointmentTime: timeSlot.time,
-    });
+
+    if (selectedSlot) rt?.releaseCurrentHoldQuiet();
+
+    const ok = rt?.isSocketConnected()
+      ? await rt.requestSlotHold(cid, dateStr, parentSlot, timeSlot)
+      : true;
+    if (ok) {
+      setSelectedSlot(timeSlot);
+      setSelectedSequence(sequence);
+      patch({
+        appointmentSlotId: String(parentSlot.id),
+        appointmentTime: timeSlot.time,
+      });
+      setError("");
+    } else {
+      setError("Could not reserve this time. It may be held or taken by someone else.");
+      setHoldsTick((t) => t + 1);
+    }
   }
 
   function slotBtnClass(timeSlot: TimeCell): string {
@@ -449,9 +559,13 @@ export function SakuraAppointmentModal({
       isEdit &&
       Number(form.appointmentSlotId) === timeSlot.parentSlotId &&
       normalizeTimeStr(form.appointmentTime) === timeSlot.time;
+    const peerHeld =
+      !!timeSlot.isPeerHeld ||
+      !!realtimeRef.current?.isPeerHeld(timeSlot.parentSlotId, timeSlot.time);
 
     if (!timeSlot.isActive) return "bg-slate-300 text-slate-500 cursor-not-allowed opacity-60";
     if (timeSlot.isBooked) return "bg-red-500 text-white cursor-not-allowed opacity-80 border-2 border-red-600";
+    if (peerHeld) return "bg-orange-500 text-white cursor-not-allowed opacity-95 border-2 border-orange-600";
     if (isSelected) return "bg-green-700 text-white border-2 border-green-800 ring-2 ring-green-400";
     if (isOurEdit)
       return "bg-green-500 text-white border-2 border-green-700 ring-2 ring-green-300 hover:bg-green-600 cursor-pointer shadow-sm";
@@ -507,6 +621,8 @@ export function SakuraAppointmentModal({
       body.appointmentSlotId = Number(form.appointmentSlotId);
       body.appointmentTime = normalizeTimeStr(selectedSlot.time);
     }
+    const holdToken = realtimeRef.current?.holdToken;
+    if (holdToken) body.holdToken = holdToken;
 
     try {
       if (isEdit && appointmentId) {
@@ -516,6 +632,7 @@ export function SakuraAppointmentModal({
         setResultModal("success");
       } else {
         const response = await sakuraApi.post<any>("/appointments", body);
+        realtimeRef.current?.clearAfterServerRelease();
         const raw = response?.serialNumber ?? selectedSequence ?? null;
         const n = raw != null && raw !== "" ? Number(raw) : NaN;
         setResultSerial(Number.isFinite(n) ? n : null);
@@ -778,6 +895,9 @@ export function SakuraAppointmentModal({
                           <span className="mr-1 inline-block h-3 w-3 rounded bg-green-500 align-middle" /> Available
                         </span>
                         <span>
+                          <span className="mr-1 inline-block h-3 w-3 rounded bg-orange-500 align-middle" /> Being booked
+                        </span>
+                        <span>
                           <span className="mr-1 inline-block h-3 w-3 rounded bg-red-500 align-middle" /> Booked
                         </span>
                       </p>
@@ -787,8 +907,14 @@ export function SakuraAppointmentModal({
                             <button
                               key={`${item.timeSlot.parentSlotId}-${item.timeSlot.time}`}
                               type="button"
-                              disabled={item.timeSlot.isBooked || !item.timeSlot.isActive}
-                              onClick={() => selectTimeSlot(item.timeSlot, item.parentSlot, item.sequence)}
+                              disabled={
+                                item.timeSlot.isBooked ||
+                                !item.timeSlot.isActive ||
+                                !!item.timeSlot.isPeerHeld
+                              }
+                              onClick={() =>
+                                void selectTimeSlot(item.timeSlot, item.parentSlot, item.sequence)
+                              }
                               className={`flex w-full flex-col items-center justify-center gap-px rounded-md px-1 py-1 text-[11px] font-semibold transition-all ${slotBtnClass(item.timeSlot)}`}
                             >
                               <span className="text-xs leading-none font-bold tabular-nums">{item.sequence}</span>
