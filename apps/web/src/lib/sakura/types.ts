@@ -53,6 +53,31 @@ export type SakuraPatient = {
   address?: string | null;
 };
 
+export type SakuraOtCaseForm = {
+  procedure?: string;
+  side?: string;
+  plannedDate?: string;
+  priority?: string;
+  anesthesia?: string;
+  diagnosis?: string;
+  notes?: string;
+};
+
+export type SakuraResearchCaseForm = {
+  studyTitle?: string;
+  studyCode?: string;
+  consentTaken?: string;
+  visitType?: string;
+  inclusionNotes?: string;
+  notes?: string;
+};
+
+export type SakuraCaseDetails = {
+  caseType: "OT Case" | "Research Case";
+  ot?: SakuraOtCaseForm;
+  research?: SakuraResearchCaseForm;
+};
+
 export type SakuraAppointment = {
   id: number;
   serialNumber: number;
@@ -66,6 +91,8 @@ export type SakuraAppointment = {
   status: string;
   isPresent: boolean;
   identifier?: string;
+  caseDetails?: SakuraCaseDetails | null;
+  notes?: string | null;
   isAutoBooked?: boolean;
   autoBookCategory?: "patient" | "doctor" | "clinic" | null;
   chamber?: { name: string; feeFirstTime?: number; feeFollowup?: number };
