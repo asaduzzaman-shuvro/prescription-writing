@@ -20,7 +20,7 @@ import { ListPager } from "@/components/list-pager";
 import { AllPatientsInsights } from "./all-patients-insights";
 import type { PatientHit } from "./patient-search";
 
-const PAGE = 50;
+const PAGE = 20;
 
 type Row = PatientHit & { serial_no: number | null; registered: string | null };
 
