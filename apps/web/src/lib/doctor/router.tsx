@@ -7,7 +7,8 @@ import { useCallback, useEffect, useState, type AnchorHTMLAttributes, type React
  * service worker can serve it offline; navigation never asks the server for anything.
  *   #/                 today
  *   #/sakura-web       Sakura queue dashboard (live Sakura Nest APIs)
- *   #/patients         patient list
+ *   #/patients         patient list (today / unseen / seen)
+ *   #/all-patients     full directory with filters
  *   #/patients/new
  *   #/patients/<id>
  *   #/visit/<encounterId>

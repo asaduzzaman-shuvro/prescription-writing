@@ -100,3 +100,45 @@ export function todaySerialParams(date: string, chamberId: string | null): strin
 }
 
 export const ORDER_BY_PATIENT_ID_ASC = `CASE WHEN p.code IS NULL OR p.code = '' THEN 1 ELSE 0 END, p.code ASC, p.name ASC`;
+
+export const ORDER_BY_LAST_VISIT_DESC = `last_visit DESC NULLS LAST, p.name ASC`;
+
+/** Optional chamber and/or activity date range for the all-patients directory. */
+export function allPatientsFilterWhere(
+  chamberId: string | null,
+  dateFrom: string | null,
+  dateTo: string | null,
+): { sql: string; params: string[] } {
+  const from = dateFrom?.trim() || null;
+  const to = dateTo?.trim() || null;
+  const hasRange = Boolean(from || to);
+  if (!hasRange && !chamberId) return { sql: "1=1", params: [] };
+  if (!hasRange && chamberId) {
+    return { sql: `(${chamberLinkedWhere(chamberId)})`, params: chamberLinkedParams(chamberId) };
+  }
+
+  let start = from ?? to!;
+  let end = to ?? from!;
+  if (start > end) [start, end] = [end, start];
+
+  const encCh = chamberId ? " AND e.chamber_id = ?" : "";
+  const apptCh = chamberId ? " AND a.chamber_id = ?" : "";
+  const params: string[] = [start, end];
+  if (chamberId) params.push(chamberId);
+  params.push(start, end);
+  if (chamberId) params.push(chamberId);
+
+  let sql = `(
+    EXISTS (SELECT 1 FROM encounter e WHERE e.patient_id = p.id AND e.visit_date >= ? AND e.visit_date <= ? AND e.status <> 'cancelled'${encCh})
+    OR EXISTS (SELECT 1 FROM appointment a WHERE a.patient_id = p.id AND a.appt_date >= ? AND a.appt_date <= ? AND a.status <> 'cancelled'${apptCh})`;
+
+  if (!chamberId) {
+    sql += `
+    OR (substr(p.created_at, 1, 10) >= ? AND substr(p.created_at, 1, 10) <= ?)`;
+    params.push(start, end);
+  }
+  sql += `
+  )`;
+
+  return { sql, params };
+}

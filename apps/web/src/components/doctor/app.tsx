@@ -19,6 +19,7 @@ const Today = dynamic(() => import("./today").then((m) => m.Today), { loading: l
 const PatientDetail = dynamic(() => import("./patient-detail").then((m) => m.PatientDetail), { loading: detail });
 const PatientEdit = dynamic(() => import("./patient-form").then((m) => m.PatientEdit), { loading: form });
 const PatientList = dynamic(() => import("./patient-list").then((m) => m.PatientList), { loading: list });
+const AllPatientsScreen = dynamic(() => import("./all-patients").then((m) => m.AllPatientsScreen), { loading: list });
 const VisitScreen = dynamic(() => import("./visit").then((m) => m.VisitScreen), { loading: rx });
 const PrintView = dynamic(() => import("./print-view").then((m) => m.PrintView), { loading: rx });
 const BookingsScreen = dynamic(() => import("./bookings").then((m) => m.BookingsScreen), { loading: list });
@@ -71,6 +72,8 @@ export function DoctorApp() {
       if (r[1] && r[2] === "edit") return <PatientEdit patientId={r[1]} />;
       if (r[1]) return <PatientDetail patientId={r[1]} />;
       return <PatientList />;
+    case "all-patients":
+      return <AllPatientsScreen />;
     case "visit":
       return r[1] ? <VisitScreen encounterId={r[1]} tab={r[2] === "reports" ? "reports" : "rx"} /> : null;
     case "rx":

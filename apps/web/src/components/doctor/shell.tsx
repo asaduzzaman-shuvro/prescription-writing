@@ -340,6 +340,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
       : []),
     { to: "/patients/new", label: "New prescription", match: route[0] === "patients" && route[1] === "new", icon: <ClipboardPlus className="h-4 w-4 shrink-0" /> },
     { to: "/patients", label: "Patients", match: route[0] === "patients" && route[1] !== "new", icon: <Users className="h-4 w-4 shrink-0" /> },
+    { to: "/all-patients", label: "All patients", match: route[0] === "all-patients", icon: <UserCheck className="h-4 w-4 shrink-0" /> },
     { to: "/bookings", label: "Bookings", match: route[0] === "bookings", icon: <CalendarDays className="h-4 w-4 shrink-0" /> },
   ];
   const clinical: NavItem[] = [
