@@ -294,3 +294,13 @@ export function displayTypeLabel(identifier: string | undefined): string {
   if (identifier === "Lab" || identifier === "Report") return "Lab Report";
   return identifier || "New";
 }
+
+export function getAppointmentCaseType(
+  apt: SakuraAppointment,
+): "OT Case" | "Research Case" | null {
+  const fromDetails = apt.caseDetails?.caseType;
+  if (fromDetails === "OT Case" || fromDetails === "Research Case") return fromDetails;
+  const id = normalizeCaseIdentifier(apt.identifier);
+  if (id === "OT Case" || id === "Research Case") return id;
+  return null;
+}

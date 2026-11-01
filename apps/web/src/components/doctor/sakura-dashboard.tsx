@@ -20,6 +20,7 @@ import {
   displayTypeLabel,
   formatAppointmentTime,
   formatSelectedDate,
+  getAppointmentCaseType,
   getAutoPatientLabel,
   getDisplaySerial,
   isAbsentAppointment,
@@ -33,6 +34,7 @@ import {
   statusLabel,
 } from "@/lib/sakura/utils";
 import { SakuraAppointmentModal } from "./sakura-appointment-modal";
+import { SakuraCaseModal } from "./sakura-case-modal";
 import { SakuraSubPatientModal } from "./sakura-sub-patient-modal";
 import styles from "./sakura-dashboard.module.css";
 
@@ -348,10 +350,47 @@ export function SakuraDashboard() {
   const [deleteTarget, setDeleteTarget] = useState<SakuraAppointment | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [subPatientParent, setSubPatientParent] = useState<SakuraAppointment | null>(null);
+  const [caseModal, setCaseModal] = useState<{
+    apt: SakuraAppointment;
+    type: "OT Case" | "Research Case";
+  } | null>(null);
   const [showNextIntro, setShowNextIntro] = useState(false);
   const [appointmentModal, setAppointmentModal] = useState<
     null | { mode: "create" } | { mode: "edit"; id: number }
   >(null);
+
+  function openCaseModal(apt: SakuraAppointment, type: "OT Case" | "Research Case") {
+    if (isAutoBookedAppointment(apt)) {
+      window.alert("Edit name and phone first before setting a case.");
+      return;
+    }
+    setCaseModal({ apt, type });
+  }
+
+  async function clearAppointmentCase(apt: SakuraAppointment) {
+    const prev = normalizeCaseIdentifier(apt.identifier);
+    const nextIdentifier =
+      prev === "OT Case" || prev === "Research Case" ? "New" : apt.identifier || "New";
+    try {
+      const updated = await sakuraApi.put<SakuraAppointment>(`/appointments/${apt.id}`, {
+        caseDetails: null,
+        identifier: nextIdentifier,
+      });
+      setAppointments((list) =>
+        list.map((a) =>
+          a.id === apt.id
+            ? {
+                ...a,
+                caseDetails: updated?.caseDetails ?? null,
+                identifier: updated?.identifier ?? nextIdentifier,
+              }
+            : a,
+        ),
+      );
+    } catch {
+      window.alert("Could not clear case. Please try again.");
+    }
+  }
 
   const checkAuth = useCallback(async () => {
     try {
@@ -463,6 +502,8 @@ export function SakuraDashboard() {
   const matchesCaseFilter = useCallback(
     (apt: SakuraAppointment) => {
       if (!patientCaseFilter) return true;
+      const caseType = getAppointmentCaseType(apt);
+      if (caseType) return caseType === patientCaseFilter;
       return normalizeCaseIdentifier(apt.identifier) === patientCaseFilter;
     },
     [patientCaseFilter],
@@ -1231,8 +1272,18 @@ export function SakuraDashboard() {
                 <table className="min-w-full divide-y divide-[var(--sg-line)]">
                   <thead className={`${styles.thead} sticky top-0 z-10`}>
                     <tr>
-                      {["SL", "P.Serial", "Patient", "Type", "Time", "Present", "Status", "Prescription", "Action"].map(
-                        (h) => (
+                      {[
+                        "SL",
+                        "P.Serial",
+                        "Patient",
+                        "Type",
+                        "Time",
+                        "Present",
+                        "Case name",
+                        "Status",
+                        "Prescription",
+                        "Action",
+                      ].map((h) => (
                           <th
                             key={h}
                             className={`${styles.thCell}${h === "Status" ? ` ${styles.statusCol}` : ""}${
@@ -1241,8 +1292,7 @@ export function SakuraDashboard() {
                           >
                             {h}
                           </th>
-                        ),
-                      )}
+                        ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--sg-line)] bg-white">
@@ -1301,6 +1351,46 @@ export function SakuraDashboard() {
                               />
                               {apt.isPresent ? "Yes" : "No"}
                             </button>
+                          )}
+                        </td>
+                        <td className={`${styles.tableCell} whitespace-nowrap`}>
+                          {patientListTab === "auto" ? (
+                            <span className="text-xs text-slate-400">—</span>
+                          ) : (
+                            <div className={styles.caseCell}>
+                              <button
+                                type="button"
+                                title="OT case details"
+                                className={`${styles.caseChip} ${styles.caseChipOt}${
+                                  getAppointmentCaseType(apt) === "OT Case" ? ` ${styles.caseChipOn}` : ""
+                                }`}
+                                onClick={() => openCaseModal(apt, "OT Case")}
+                              >
+                                OT
+                              </button>
+                              <button
+                                type="button"
+                                title="Research case details"
+                                className={`${styles.caseChip} ${styles.caseChipResearch}${
+                                  getAppointmentCaseType(apt) === "Research Case"
+                                    ? ` ${styles.caseChipOn}`
+                                    : ""
+                                }`}
+                                onClick={() => openCaseModal(apt, "Research Case")}
+                              >
+                                Research
+                              </button>
+                              {getAppointmentCaseType(apt) && (
+                                <button
+                                  type="button"
+                                  title="Clear case"
+                                  className={styles.caseClear}
+                                  onClick={() => void clearAppointmentCase(apt)}
+                                >
+                                  <Ms name="close" className="text-sm" />
+                                </button>
+                              )}
+                            </div>
                           )}
                         </td>
                         <td className={`${styles.tableCell} ${styles.statusCol} whitespace-nowrap`}>
@@ -1588,6 +1678,21 @@ export function SakuraDashboard() {
           onSaved={() => {
             setSubPatientParent(null);
             void loadDashboard();
+          }}
+        />
+      )}
+
+      {caseModal && (
+        <SakuraCaseModal
+          appointment={caseModal.apt}
+          caseType={caseModal.type}
+          allAppointments={appointments}
+          onClose={() => setCaseModal(null)}
+          onSaved={(patch) => {
+            setAppointments((list) =>
+              list.map((a) => (a.id === caseModal.apt.id ? { ...a, ...patch } : a)),
+            );
+            setCaseModal(null);
           }}
         />
       )}
