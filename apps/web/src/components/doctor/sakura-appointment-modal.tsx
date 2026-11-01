@@ -145,6 +145,7 @@ export function SakuraAppointmentModal({
   const [selectedSequence, setSelectedSequence] = useState<number | null>(null);
   const [foundPatients, setFoundPatients] = useState<SakuraPatientRecord[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<SakuraPatientRecord | null>(null);
+  const [patientListOpen, setPatientListOpen] = useState(false);
   const [searchingPatient, setSearchingPatient] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -366,6 +367,7 @@ export function SakuraAppointmentModal({
 
   function selectPatient(patient: SakuraPatientRecord) {
     setSelectedPatient(patient);
+    setPatientListOpen(false);
     setForm((prev) => ({
       ...prev,
       fullName: patient.fullName || "",
@@ -382,6 +384,7 @@ export function SakuraAppointmentModal({
     patch({ phone });
     setSelectedPatient(null);
     setFoundPatients([]);
+    setPatientListOpen(false);
     if (phoneTimer.current) clearTimeout(phoneTimer.current);
     phoneTimer.current = setTimeout(() => {
       if (phone.length === 11 && phoneOk(phone)) {
@@ -399,15 +402,22 @@ export function SakuraAppointmentModal({
       if (!Array.isArray(patients) || patients.length === 0) {
         setFoundPatients([]);
         setSelectedPatient(null);
+        setPatientListOpen(false);
         clearPatientInfo(true);
         return;
       }
       setFoundPatients(patients);
-      if (patients.length === 1) selectPatient(patients[0]!);
-      else setSelectedPatient(null);
+      if (patients.length === 1) {
+        selectPatient(patients[0]!);
+        setPatientListOpen(false);
+      } else {
+        setSelectedPatient(null);
+        setPatientListOpen(true);
+      }
     } catch {
       setFoundPatients([]);
       setSelectedPatient(null);
+      setPatientListOpen(false);
       clearPatientInfo(true);
     } finally {
       setSearchingPatient(false);
@@ -551,24 +561,21 @@ export function SakuraAppointmentModal({
   };
 
   const inputClass = (key: keyof FormState) =>
-    `w-full rounded-lg border bg-white px-2.5 py-1.5 text-sm outline-none transition focus:border-[#c9973f] focus:ring-2 focus:ring-[#c9973f]/40 ${
-      invalid(key) ? "border-red-300" : "border-slate-200"
-    }`;
+    `${styles.aptInput} ${invalid(key) ? styles.aptInputError : ""}`;
 
   return (
     <div className={styles.modalBackdrop} style={{ zIndex: 110 }} onClick={onClose} role="dialog">
-      <div
-        className="relative flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#e8e0d5] bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#e8e0d5] bg-[#1a1512] px-5 py-4 text-white">
+      <div className={styles.aptModal} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.aptModalHead}>
           <div className="flex items-center gap-2">
-            <Ms name={isEdit ? "edit_calendar" : "event_available"} className="text-2xl" />
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+              <Ms name={isEdit ? "edit_calendar" : "event_available"} className="text-xl" />
+            </span>
             <div>
-              <h2 className="text-lg font-bold leading-tight">
+              <h2 className={styles.aptModalHeadTitle}>
                 {isEdit ? "Change this visit" : "Book New Appointment"}
               </h2>
-              <p className="mt-0.5 text-xs text-white/80">
+              <p className={styles.aptModalHeadSub}>
                 {isEdit
                   ? "Change name, time, or chamber, then Save."
                   : "Patient name, chamber, date, and serial."}
@@ -585,22 +592,22 @@ export function SakuraAppointmentModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+        <div className={styles.aptModalBody}>
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-sm text-slate-500">
-              <span className="mr-2 inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#325A46] border-t-transparent" />
+            <div className="flex items-center justify-center py-14 text-sm text-[var(--sg-muted)]">
+              <span className="mr-2 inline-block h-6 w-6 animate-spin rounded-full border-2 border-[var(--sg-green)] border-t-transparent" />
               Loading…
             </div>
           ) : (
             <form id="sakura-apt-form" onSubmit={(e) => void onSubmit(e)} className="space-y-1">
               {error && (
-                <div className="mb-3 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="mb-3 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
                   <Ms name="error" className="text-red-600" />
                   {error}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-x-2 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-x-2 gap-y-px sm:grid-cols-2 lg:grid-cols-4">
                 <Field label="Chamber" icon="apartment" required error={invalid("chamberId") ? "Please select a chamber" : ""}>
                   <select
                     className={inputClass("chamberId")}
@@ -638,58 +645,56 @@ export function SakuraAppointmentModal({
                   spinning={searchingPatient}
                   error={invalid("phone") ? "Please enter a valid phone number (01XXXXXXXXX)" : ""}
                 >
-                  <input
-                    type="tel"
-                    className={inputClass("phone")}
-                    placeholder="01710000000"
-                    value={form.phone}
-                    onChange={(e) => onPhoneChange(e.target.value)}
-                    onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
-                  />
-                  {foundPatients.length > 1 && !selectedPatient && (
-                    <div className="mt-2 rounded-lg border border-[#e8e0d5] bg-[rgba(26,21,18,0.04)] p-3">
-                      <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-[#2c2825]">
-                        <Ms name="info" className="text-base" />
-                        Multiple patients found with this phone number:
-                      </p>
-                      <div className="max-h-40 space-y-2 overflow-y-auto">
-                        {foundPatients.map((p, i) => (
-                          <button
-                            key={p.id ?? i}
-                            type="button"
-                            onClick={() => selectPatient(p)}
-                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm transition-colors hover:border-[#c9973f]/40 hover:bg-[rgba(201,151,63,0.05)]"
-                          >
-                            <div className="font-semibold text-slate-800">{p.fullName}</div>
-                            <div className="text-xs text-slate-600">
-                              Age: {p.age}
-                              {p.months ? `.${p.months}` : ""} | Gender: {p.gender || "N/A"} | ID:{" "}
-                              {p.patientId}
-                            </div>
-                          </button>
-                        ))}
+                  <div className={styles.aptPhoneWrap}>
+                    <div className={styles.aptPhoneInputRow}>
+                      <input
+                        type="tel"
+                        className={`${inputClass("phone")} ${foundPatients.length > 1 && !selectedPatient ? styles.aptPhoneInputWithToggle : ""}`}
+                        placeholder="01710000000"
+                        value={form.phone}
+                        onChange={(e) => onPhoneChange(e.target.value)}
+                        onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
+                      />
+                      {foundPatients.length > 1 && !selectedPatient && (
+                        <button
+                          type="button"
+                          className={styles.aptPhoneToggle}
+                          aria-expanded={patientListOpen}
+                          aria-label={patientListOpen ? "Hide patient list" : "Show patient list"}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => setPatientListOpen((open) => !open)}
+                        >
+                          <Ms name={patientListOpen ? "expand_less" : "expand_more"} className="text-xl" />
+                        </button>
+                      )}
+                    </div>
+                    {foundPatients.length > 1 && !selectedPatient && patientListOpen && (
+                      <div className={styles.aptPatientDropdown} role="listbox">
+                        <p className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-[var(--sg-ink)]">
+                          <Ms name="info" className="text-base text-[var(--sg-green)]" />
+                          Multiple patients found with this phone number:
+                        </p>
+                        <div className={`${styles.aptPatientDropdownList} space-y-1.5`}>
+                          {foundPatients.map((p, i) => (
+                            <button
+                              key={p.id ?? i}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => selectPatient(p)}
+                              className="w-full rounded-lg border border-[var(--sg-line)] bg-white px-3 py-2 text-left text-sm transition-colors hover:border-[var(--sg-green)] hover:bg-[var(--sg-mint)]"
+                            >
+                              <div className="font-semibold text-[var(--sg-ink)]">{p.fullName}</div>
+                              <div className="text-xs text-[var(--sg-muted)]">
+                                Age: {p.age}
+                                {p.months ? `.${p.months}` : ""} | Gender: {p.gender || "N/A"} | ID:{" "}
+                                {p.patientId}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPatient(null);
-                          clearPatientInfo(true);
-                        }}
-                        className="mt-2 w-full rounded-lg bg-[#c9973f] px-3 py-2 text-sm font-bold text-[#1a1512] hover:opacity-90"
-                      >
-                        <Ms name="add" className="mr-1 align-middle text-base" />
-                        Create New Patient
-                      </button>
-                    </div>
-                  )}
-                  {selectedPatient && (
-                    <div className="mt-2 rounded-lg border border-[rgba(201,151,63,0.3)] bg-[rgba(201,151,63,0.1)] p-2">
-                      <p className="flex items-center gap-1 text-xs font-semibold text-[#2c2825]">
-                        <Ms name="check_circle" className="text-base text-[#9e7a3d]" />
-                        Selected: {selectedPatient.fullName}
-                      </p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </Field>
 
                 <Field
@@ -757,18 +762,18 @@ export function SakuraAppointmentModal({
                     value={form.months}
                     onChange={(e) => patch({ months: Number(e.target.value) || 0 })}
                   />
-                  <p className="mt-0.5 text-xs text-slate-500">Additional months (0-11)</p>
+                  <p className="text-[11px] leading-tight text-[var(--sg-muted)]">Additional months (0-11)</p>
                 </Field>
 
                 <div className="sm:col-span-2 lg:col-span-4">
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                    <Ms name="schedule" className="text-base text-[#2c2825]" />
+                  <label className={styles.aptFieldLabel}>
+                    <Ms name="schedule" className="text-base text-[var(--sg-green-deep)]" />
                     Appointment Slot (Optional)
-                    {loadingSlots && <span className="ml-2 text-xs text-slate-500">Loading...</span>}
+                    {loadingSlots && <span className="ml-2 text-[10px] font-medium text-[var(--sg-muted)]">Loading...</span>}
                   </label>
                   {availableSlots.length > 0 && (
                     <>
-                      <p className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <p className="mb-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
                         <span>
                           <span className="mr-1 inline-block h-3 w-3 rounded bg-green-500 align-middle" /> Available
                         </span>
@@ -776,21 +781,18 @@ export function SakuraAppointmentModal({
                           <span className="mr-1 inline-block h-3 w-3 rounded bg-red-500 align-middle" /> Booked
                         </span>
                       </p>
-                      <div
-                        className="overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/50 p-3"
-                        style={{ maxHeight: 260, minHeight: 140 }}
-                      >
-                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+                      <div className={styles.aptSlotPanel}>
+                        <div className="grid grid-cols-3 gap-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-9">
                           {flattened.map((item) => (
                             <button
                               key={`${item.timeSlot.parentSlotId}-${item.timeSlot.time}`}
                               type="button"
                               disabled={item.timeSlot.isBooked || !item.timeSlot.isActive}
                               onClick={() => selectTimeSlot(item.timeSlot, item.parentSlot, item.sequence)}
-                              className={`flex w-full flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1.5 text-xs font-semibold transition-all ${slotBtnClass(item.timeSlot)}`}
+                              className={`flex w-full flex-col items-center justify-center gap-px rounded-md px-1 py-1 text-[11px] font-semibold transition-all ${slotBtnClass(item.timeSlot)}`}
                             >
-                              <span className="text-sm leading-none font-bold tabular-nums">{item.sequence}</span>
-                              <span className="text-[12px] leading-tight font-medium opacity-95">
+                              <span className="text-xs leading-none font-bold tabular-nums">{item.sequence}</span>
+                              <span className="text-[11px] leading-tight font-medium opacity-95">
                                 {formatTime12h(item.timeSlot.time)}
                               </span>
                             </button>
@@ -800,13 +802,13 @@ export function SakuraAppointmentModal({
                     </>
                   )}
                   {selectedSlot && (
-                    <div className="mt-3 rounded-lg border border-[rgba(201,151,63,0.3)] bg-[rgba(201,151,63,0.1)] p-3">
-                      <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-[#2c2825]">
-                        <Ms name="check_circle" className="text-[#9e7a3d]" />
+                    <div className={styles.aptSelectedSlot}>
+                      <p className="flex flex-wrap items-center gap-2">
+                        <Ms name="check_circle" className="text-[var(--sg-green)]" />
                         <span>Selected Time:</span>
-                        <span className="font-bold">{formatTime12h(selectedSlot.time)}</span>
+                        <span className="font-bold text-[var(--sg-green-deep)]">{formatTime12h(selectedSlot.time)}</span>
                         {selectedSequence != null && (
-                          <span className="rounded-md bg-white/90 px-2 py-0.5 text-xs font-bold text-[#2c2825] ring-1 ring-[#e8e0d5]">
+                          <span className="rounded-md bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--sg-green-deep)] ring-1 ring-[var(--sg-line)]">
                             Slot #{selectedSequence}
                           </span>
                         )}
@@ -825,7 +827,7 @@ export function SakuraAppointmentModal({
                   {!loadingSlots &&
                     availableSlots.length === 0 &&
                     (!form.chamberId || !form.appointmentDate) && (
-                      <p className="text-sm text-slate-500 italic">
+                      <p className="text-sm italic text-[var(--sg-muted)]">
                         Select chamber and date to see available time slots
                       </p>
                     )}
@@ -871,12 +873,12 @@ export function SakuraAppointmentModal({
                   <input
                     type="number"
                     min={0}
-                    className={`${inputClass("fee")} ${form.identifier !== "Customize" ? "bg-slate-50" : ""}`}
+                    className={`${inputClass("fee")} ${form.identifier !== "Customize" ? styles.aptInputReadonly : ""}`}
                     readOnly={form.identifier !== "Customize"}
                     value={form.fee}
                     onChange={(e) => patch({ fee: Number(e.target.value) || 0 }, ["fee"])}
                   />
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="text-[11px] leading-tight text-[var(--sg-muted)]">
                     {form.identifier === "Customize"
                       ? "Enter the consultation fee for this visit."
                       : "Auto-calculated based on type"}
@@ -901,7 +903,7 @@ export function SakuraAppointmentModal({
                   />
                 </Field>
                 <div className="sm:col-span-2 lg:col-span-4">
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
+                  <label className={styles.aptFieldLabel}>Notes</label>
                   <textarea
                     rows={3}
                     className={`${inputClass("notes")} resize-none`}
@@ -915,19 +917,15 @@ export function SakuraAppointmentModal({
           )}
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-[#faf7f2] px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg bg-[#1a1512] px-5 py-2.5 text-sm font-medium text-white hover:opacity-90"
-          >
+        <div className={styles.aptModalFooter}>
+          <button type="button" onClick={onClose} className={styles.aptBtnGhost}>
             Cancel
           </button>
           <button
             type="submit"
             form="sakura-apt-form"
             disabled={submitting || loading}
-            className="flex items-center gap-2 rounded-lg bg-[#c9973f] px-6 py-2.5 text-sm font-bold text-[#1a1512] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className={styles.aptBtnPrimary}
           >
             {submitting ? (
               <>
@@ -951,13 +949,13 @@ export function SakuraAppointmentModal({
           onClick={(e) => e.stopPropagation()}
         >
           <div
-            className={`relative w-full max-w-md overflow-hidden rounded-2xl border bg-white shadow-xl ${
-              resultModal === "success" ? "border-[rgba(201,151,63,0.3)]" : "border-red-200"
+            className={`relative w-full max-w-md overflow-hidden rounded-2xl border bg-[var(--sg-paper)] shadow-xl ${
+              resultModal === "success" ? "border-[var(--sg-line)]" : "border-red-200"
             }`}
           >
             <div
               className={`flex items-start gap-3 px-5 py-4 text-white ${
-                resultModal === "success" ? "bg-[#1a1512]" : "bg-red-600"
+                resultModal === "success" ? "bg-[var(--sg-green-deep)]" : "bg-red-600"
               }`}
             >
               <Ms
@@ -978,22 +976,18 @@ export function SakuraAppointmentModal({
               </div>
             </div>
             {resultModal === "success" && !isEdit && resultSerial != null && (
-              <div className="border-t border-slate-100 px-5 py-4 text-center">
-                <p className="rounded-xl bg-[rgba(201,151,63,0.1)] px-4 py-3 font-mono text-lg font-bold text-[#2c2825]">
+              <div className="border-t border-[var(--sg-line)] px-5 py-4 text-center">
+                <p className="rounded-xl bg-[var(--sg-mint)] px-4 py-3 font-mono text-lg font-bold text-[var(--sg-green-deep)] ring-1 ring-[var(--sg-line)]">
                   Serial #{resultSerial}
                 </p>
-                <p className="mt-2 text-xs text-slate-500">Keep this serial for the waiting room.</p>
+                <p className="mt-2 text-xs text-[var(--sg-muted)]">Keep this serial for the waiting room.</p>
               </div>
             )}
-            <div className="flex justify-end border-t border-slate-100 bg-slate-50 px-5 py-4">
+            <div className="flex justify-end border-t border-[var(--sg-line)] bg-[var(--sg-mint)] px-5 py-3">
               <button
                 type="button"
                 onClick={closeResult}
-                className={
-                  resultModal === "success"
-                    ? "rounded-lg border border-[#e8e0d5] bg-[#c9973f] px-5 py-2.5 text-sm font-bold text-[#1a1512] hover:opacity-90"
-                    : "rounded-lg bg-[#1a1512] px-5 py-2.5 text-sm font-bold text-white hover:opacity-90"
-                }
+                className={resultModal === "success" ? styles.aptBtnPrimary : styles.aptBtnGhost}
               >
                 {resultModal === "success" ? (isEdit ? "Done" : "Close") : "OK"}
               </button>
@@ -1022,18 +1016,16 @@ function Field({
 }) {
   return (
     <div className="flex min-h-0 flex-col">
-      <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-        {icon ? <Ms name={icon} className="text-base text-[#2c2825]" /> : null}
+      <label className={styles.aptFieldLabel}>
+        {icon ? <Ms name={icon} className="text-base text-[var(--sg-green-deep)]" /> : null}
         {label}
         {required && <span className="text-red-500">*</span>}
         {spinning && (
-          <span className="ml-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-[#325A46] border-t-transparent" />
+          <span className="ml-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-[var(--sg-green)] border-t-transparent" />
         )}
       </label>
       {children}
-      <div className="mt-0.5 min-h-5">
-        {error ? <p className="text-xs text-red-600">{error}</p> : null}
-      </div>
+      {error ? <p className="mt-0.5 text-[10px] leading-tight text-red-600">{error}</p> : null}
     </div>
   );
 }
