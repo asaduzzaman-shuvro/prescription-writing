@@ -20,6 +20,7 @@ import {
   formatAppointmentTime,
   formatSelectedDate,
   getAutoPatientLabel,
+  getDisplaySerial,
   isAbsentAppointment,
   isAutoBookedAppointment,
   isSeenListStatus,
@@ -31,6 +32,7 @@ import {
   statusLabel,
 } from "@/lib/sakura/utils";
 import { SakuraAppointmentModal } from "./sakura-appointment-modal";
+import { SakuraSubPatientModal } from "./sakura-sub-patient-modal";
 import styles from "./sakura-dashboard.module.css";
 
 type ListTab = "active" | "seen" | "absent" | "auto";
@@ -193,6 +195,7 @@ export function SakuraDashboard() {
   const [breakDuration, setBreakDuration] = useState(15);
   const [deleteTarget, setDeleteTarget] = useState<SakuraAppointment | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [subPatientParent, setSubPatientParent] = useState<SakuraAppointment | null>(null);
   const [showNextIntro, setShowNextIntro] = useState(false);
   const [appointmentModal, setAppointmentModal] = useState<
     null | { mode: "create" } | { mode: "edit"; id: number }
@@ -564,7 +567,7 @@ export function SakuraDashboard() {
   async function assignTestSerial(appointment: SakuraAppointment) {
     if (
       !confirm(
-        `Call patient for lab test?\n\nSerial #${appointment.serialNumber}\n${appointment.patient.fullName}`,
+        `Call patient for lab test?\n\nSerial #${getDisplaySerial(appointment, sorted)}\n${appointment.patient.fullName}`,
       )
     ) {
       return;
@@ -1064,7 +1067,7 @@ export function SakuraDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#e8e0d5] bg-white">
-                    {activeList.map((apt, i) => (
+                    {activeList.map((apt) => (
                       <tr
                         key={apt.id}
                         className={`transition-colors hover:bg-[#faf7f2] ${
@@ -1072,11 +1075,13 @@ export function SakuraDashboard() {
                         }`}
                       >
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
-                          <div className="text-sm font-semibold tabular-nums text-slate-600">{i + 1}</div>
+                          <div className="text-sm font-semibold tabular-nums text-slate-600">
+                            {getDisplaySerial(apt, sorted)}
+                          </div>
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
                           <div className="inline-flex items-center rounded-md bg-[#f5f0e8] px-2 py-0.5 text-sm font-bold tabular-nums text-[#2c2825]">
-                            #{apt.serialNumber}
+                            #{getDisplaySerial(apt, sorted)}
                           </div>
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
@@ -1159,6 +1164,24 @@ export function SakuraDashboard() {
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
                           <div className={styles.rowTools}>
+                            {patientListTab !== "auto" && (
+                              <button
+                                type="button"
+                                title="Add patient under this serial"
+                                className={styles.editBtn}
+                                onClick={() => {
+                                  if (isAutoBookedAppointment(apt)) {
+                                    window.alert(
+                                      "Edit the auto patient placeholder first, then add linked patients.",
+                                    );
+                                    return;
+                                  }
+                                  setSubPatientParent(apt);
+                                }}
+                              >
+                                <Ms name="person_add" className="text-[1.05rem]" />
+                              </button>
+                            )}
                             <button
                               type="button"
                               title="Edit appointment"
@@ -1225,7 +1248,9 @@ export function SakuraDashboard() {
                         onClick={() => void assignTestSerial(apt)}
                       >
                         <td className="px-3 py-1.5 whitespace-nowrap">
-                          <div className="text-sm font-bold text-[#2c2825]">#{apt.serialNumber}</div>
+                          <div className="text-sm font-bold text-[#2c2825]">
+                            #{getDisplaySerial(apt, sorted)}
+                          </div>
                         </td>
                         <td className="px-3 py-1.5 whitespace-nowrap">
                           <div className="text-sm font-medium text-slate-900">{apt.patient.fullName}</div>
@@ -1384,6 +1409,19 @@ export function SakuraDashboard() {
         />
       )}
 
+      {subPatientParent && (
+        <SakuraSubPatientModal
+          parent={subPatientParent}
+          allAppointments={appointments}
+          chambers={chambers}
+          onClose={() => setSubPatientParent(null)}
+          onSaved={() => {
+            setSubPatientParent(null);
+            void loadDashboard();
+          }}
+        />
+      )}
+
       {deleteTarget && (
         <div
           className={styles.modalBackdrop}
@@ -1402,7 +1440,8 @@ export function SakuraDashboard() {
                 <p className="mt-2 text-sm leading-snug opacity-95">
                   This will remove{" "}
                   <strong className="font-semibold text-white">{deleteTarget.patient.fullName}</strong> (Serial #
-                  {deleteTarget.serialNumber}) from the queue. You can still see them in history if needed.
+                  {getDisplaySerial(deleteTarget, sorted)}) from the queue. You can still see them in history if
+                  needed.
                 </p>
               </div>
             </div>
