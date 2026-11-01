@@ -359,11 +359,15 @@ async function assignLabNo(tx: Tx, tenantId: string, reportId: string) {
 }
 
 async function assignPatientCode(tx: Tx, tenantId: string, patientId: string) {
-  const [t] = await tx
-    .update(s.tenant)
-    .set({ patientSeq: sql`${s.tenant.patientSeq} + 1` })
-    .where(eq(s.tenant.id, tenantId))
-    .returning({ seq: s.tenant.patientSeq });
+  // Keep tenant counter ahead of any codes already on devices (offline registration).
+  await tx.execute(sql`
+    UPDATE tenant SET patient_seq = GREATEST(
+      patient_seq,
+      COALESCE((SELECT MAX(CAST(REPLACE(code, 'P-', '') AS INTEGER)) FROM patient WHERE tenant_id = ${tenantId}::uuid AND code LIKE 'P-%'), 0)
+    ) + 1
+    WHERE id = ${tenantId}::uuid
+  `);
+  const [t] = await tx.select({ seq: s.tenant.patientSeq }).from(s.tenant).where(eq(s.tenant.id, tenantId));
   await tx.execute(sql`update patient set code = ${`P-${String(t!.seq).padStart(6, "0")}`} where id = ${patientId}::uuid and code is null`);
 }
 

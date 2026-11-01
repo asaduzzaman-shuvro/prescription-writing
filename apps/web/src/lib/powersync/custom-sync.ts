@@ -161,11 +161,30 @@ interface PartFetch {
   etag: string | null;
 }
 
+function isTransientFetchError(e: unknown): boolean {
+  if (e instanceof TypeError) return true;
+  if (e instanceof DOMException && e.name === "AbortError") return true;
+  return false;
+}
+
 async function fetchPart(part: "clinic" | "catalogue", etag: string | null, gen: number): Promise<PartFetch> {
-  const res = await fetch(`/api/sync/pull?part=${part}`, {
+  const url = `/api/sync/pull?part=${part}`;
+  const init: RequestInit = {
     cache: "no-store",
     headers: etag ? { "if-none-match": `"${etag}"` } : {},
-  });
+  };
+  let res: Response | undefined;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (gen !== generation) return { unchanged: true, etag };
+    try {
+      res = await fetch(url, init);
+      break;
+    } catch (e) {
+      if (!isTransientFetchError(e) || attempt === 3) throw e;
+      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+    }
+  }
+  if (!res) throw new TypeError("Failed to fetch");
   if (gen !== generation) return { unchanged: true, etag };
   if (res.status === 401) throw new SyncNotice("Sign in again to sync");
   if (res.status === 402 || res.status === 403) {
@@ -256,7 +275,12 @@ export function startCustomSync(db: PowerSyncDatabase, scope: string) {
     window.clearInterval(timer);
     window.removeEventListener("online", tick);
   };
-  tick();
+  // First pull can race Turbopack compiling /api/sync/pull on a cold dev load.
+  if (document.readyState === "complete") {
+    queueMicrotask(tick);
+  } else {
+    window.addEventListener("load", tick, { once: true });
+  }
 }
 
 export function stopCustomSync() {

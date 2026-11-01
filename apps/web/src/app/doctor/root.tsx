@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { DoctorShell } from "@/components/doctor/shell";
 import { SessionProvider, type ClientSession } from "@/lib/doctor/context";
+import { ChamberProvider } from "@/lib/doctor/hooks";
 import { PowerSyncProvider } from "@/lib/powersync/provider";
 
 export function DoctorRoot({ session, children }: { session: ClientSession; children: React.ReactNode }) {
@@ -22,7 +23,9 @@ export function DoctorRoot({ session, children }: { session: ClientSession; chil
   return (
     <SessionProvider value={session}>
       <PowerSyncProvider userId={session.userId} tenantId={session.tenantId}>
-        <DoctorShell>{children}</DoctorShell>
+        <ChamberProvider>
+          <DoctorShell>{children}</DoctorShell>
+        </ChamberProvider>
       </PowerSyncProvider>
     </SessionProvider>
   );
