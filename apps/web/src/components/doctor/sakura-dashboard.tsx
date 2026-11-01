@@ -1,7 +1,8 @@
 "use client";
 
 import { usePowerSync } from "@powersync/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { createPatient, startVisit, updatePatient, type VisitType } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
@@ -110,6 +111,166 @@ function Ms({ name, className = "" }: { name: string; className?: string }) {
     <span className={`material-symbols-outlined ${className}`} aria-hidden>
       {name}
     </span>
+  );
+}
+
+function StatusDropdown({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; openUp: boolean } | null>(
+    null,
+  );
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const options = useMemo(() => {
+    if ((STATUS_OPTIONS as readonly string[]).includes(value)) return [...STATUS_OPTIONS];
+    return [value, ...STATUS_OPTIONS];
+  }, [value]);
+
+  const stepStatus = useCallback(
+    (dir: -1 | 1) => {
+      const list = [...STATUS_OPTIONS];
+      const idx = list.indexOf(value as (typeof STATUS_OPTIONS)[number]);
+      const from = idx >= 0 ? idx : 0;
+      const next = list[(from + dir + list.length) % list.length]!;
+      if (next !== value) onChange(next);
+    },
+    [onChange, value],
+  );
+
+  const placeMenu = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const menuH = Math.min(200, options.length * 28 + 8);
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < menuH && r.top > spaceBelow;
+    setPos({
+      top: openUp ? r.top - 1 : r.bottom + 1,
+      left: r.left,
+      width: Math.max(r.width, 7.5 * 16),
+      openUp,
+    });
+  }, [options.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    placeMenu();
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        stepStatus(-1);
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        stepStatus(1);
+      }
+    };
+    const onReposition = () => placeMenu();
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+  }, [open, placeMenu, stepStatus]);
+
+  return (
+    <>
+      <div ref={rootRef} className={styles.statusDd}>
+        <button
+          ref={triggerRef}
+          type="button"
+          className={`${styles.statusDdTrigger} ${open ? styles.statusDdTriggerOpen : ""}`}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label="Appointment status"
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span className={styles.statusDdValue}>{statusLabel(value)}</span>
+        </button>
+        <div className={styles.statusDdSteppers}>
+          <button
+            type="button"
+            className={styles.statusDdStepBtn}
+            aria-label="Previous status"
+            title="Previous status"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+              stepStatus(-1);
+            }}
+          >
+            <Ms name="keyboard_arrow_up" className={styles.statusDdStepIcon} />
+          </button>
+          <button
+            type="button"
+            className={styles.statusDdStepBtn}
+            aria-label="Next status"
+            title="Next status"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+              stepStatus(1);
+            }}
+          >
+            <Ms name="keyboard_arrow_down" className={styles.statusDdStepIcon} />
+          </button>
+        </div>
+      </div>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className={styles.statusDdMenu}
+            role="listbox"
+            style={{
+              top: pos.openUp ? undefined : pos.top,
+              bottom: pos.openUp ? window.innerHeight - pos.top : undefined,
+              left: pos.left,
+              minWidth: pos.width,
+            }}
+          >
+            {options.map((s) => {
+              const active = s === value;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className={`${styles.statusDdOption} ${active ? styles.statusDdOptionActive : ""}`}
+                  onClick={() => {
+                    setOpen(false);
+                    if (s !== value) onChange(s);
+                  }}
+                >
+                  {statusLabel(s)}
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -1081,7 +1242,12 @@ export function SakuraDashboard() {
                     <tr>
                       {["SL", "P.Serial", "Patient", "Type", "Time", "Present", "Status", "Prescription", "Action"].map(
                         (h) => (
-                          <th key={h} className={styles.thCell}>
+                          <th
+                            key={h}
+                            className={`${styles.thCell}${h === "Status" ? ` ${styles.statusCol}` : ""}${
+                              h === "Prescription" || h === "Action" ? ` ${styles.colRight}` : ""
+                            }`}
+                          >
                             {h}
                           </th>
                         ),
@@ -1146,28 +1312,17 @@ export function SakuraDashboard() {
                             </button>
                           )}
                         </td>
-                        <td className={`${styles.tableCell} whitespace-nowrap`}>
+                        <td className={`${styles.tableCell} ${styles.statusCol} whitespace-nowrap`}>
                           {patientListTab !== "auto" ? (
-                            <select
+                            <StatusDropdown
                               value={apt.status}
-                              onChange={(e) => void changeStatus(apt.id, e.target.value)}
-                              className={styles.statusSelect}
-                              aria-label="Appointment status"
-                            >
-                              {!(STATUS_OPTIONS as readonly string[]).includes(apt.status) && (
-                                <option value={apt.status}>{statusLabel(apt.status)}</option>
-                              )}
-                              {STATUS_OPTIONS.map((s) => (
-                                <option key={s} value={s}>
-                                  {statusLabel(s)}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(next) => void changeStatus(apt.id, next)}
+                            />
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
                           )}
                         </td>
-                        <td className={`${styles.tableCell} whitespace-nowrap`}>
+                        <td className={`${styles.tableCell} ${styles.colRight} whitespace-nowrap`}>
                           {patientListTab === "auto" ? (
                             <span className="text-xs text-slate-400">—</span>
                           ) : (
@@ -1186,7 +1341,7 @@ export function SakuraDashboard() {
                             </button>
                           )}
                         </td>
-                        <td className={`${styles.tableCell} whitespace-nowrap`}>
+                        <td className={`${styles.tableCell} ${styles.colRight} whitespace-nowrap`}>
                           <div className={styles.rowTools}>
                             {patientListTab !== "auto" && (
                               <button
