@@ -36,6 +36,40 @@ import styles from "./sakura-dashboard.module.css";
 type ListTab = "active" | "seen" | "absent" | "auto";
 type CaseFilter = "OT Case" | "Research Case" | null;
 
+/** External Sakura Angular doctor dashboard (opens in a new tab after auto-login handoff). */
+const SAKURA_WEB_DASHBOARD_URL =
+  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_SAKURA_WEB_URL?.replace(/\/$/, "")) ||
+  "http://localhost:4200";
+
+function openSakuraWebDashboard() {
+  // Open synchronously so the browser does not treat the tab as a blocked popup.
+  const popup = window.open("about:blank", "_blank");
+  void (async () => {
+    try {
+      const handoff = await sakuraApi.externalHandoff();
+      const payload = btoa(
+        unescape(
+          encodeURIComponent(
+            JSON.stringify({
+              token: handoff.token,
+              refreshToken: handoff.refreshToken,
+              user: handoff.user,
+            }),
+          ),
+        ),
+      );
+      const base = (handoff.webBase || SAKURA_WEB_DASHBOARD_URL).replace(/\/$/, "");
+      const url = `${base}/auth/rxpad-sso#${payload}`;
+      if (popup) popup.location.href = url;
+      else window.location.assign(url);
+    } catch (err) {
+      popup?.close();
+      const message = err instanceof Error ? err.message : "Could not open Sakura dashboard";
+      window.alert(message);
+    }
+  })();
+}
+
 const STATUS_OPTIONS = [
   "scheduled",
   "confirmed",
@@ -784,7 +818,7 @@ export function SakuraDashboard() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div>
               <span className={styles.filterLabel}>Date</span>
               <div className="flex items-center gap-2 rounded-lg border border-[#e8e0d5] bg-white px-3 py-2 shadow-sm transition-colors hover:border-[#c9973f]/50">
@@ -822,6 +856,16 @@ export function SakuraDashboard() {
                 ))}
               </select>
             </div>
+            <button
+              type="button"
+              onClick={openSakuraWebDashboard}
+              className="inline-flex h-[42px] items-center gap-1.5 rounded-lg border border-[#325A46]/30 bg-white px-3 text-sm font-medium text-[#325A46] shadow-sm transition-colors hover:border-[#325A46] hover:bg-[#325A46] hover:text-white"
+              data-testid="sakura-web-external-dashboard"
+              title="Open Sakura Web dashboard in a new tab (auto sign-in)"
+            >
+              <Ms name="open_in_new" className="text-lg" />
+              <span className="whitespace-nowrap">Open dashboard</span>
+            </button>
           </div>
         </div>
       )}

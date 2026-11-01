@@ -86,13 +86,14 @@ export async function getSakuraDoctorCredentials(): Promise<Creds | null> {
   return null;
 }
 
-async function loginSakuraWithCreds(creds: Creds): Promise<string> {
-  const now = Date.now();
-  const cached = tokenCache.get(creds.userId);
-  if (cached && cached.phone === creds.phone && cached.expiresAt > now + 60_000) {
-    return cached.token;
-  }
+export type SakuraLoginSession = {
+  token: string;
+  refreshToken?: string;
+  user: unknown;
+};
 
+async function loginSakuraSessionWithCreds(creds: Creds): Promise<SakuraLoginSession> {
+  const now = Date.now();
   let upstream: Response;
   try {
     upstream = await fetch(`${sakuraApiBase()}/auth/login`, {
@@ -108,6 +109,8 @@ async function loginSakuraWithCreds(creds: Creds): Promise<string> {
 
   const data = (await upstream.json().catch(() => ({}))) as {
     token?: string;
+    refreshToken?: string;
+    user?: unknown;
     message?: string;
     error?: string;
   };
@@ -125,7 +128,21 @@ async function loginSakuraWithCreds(creds: Creds): Promise<string> {
     phone: creds.phone,
     expiresAt: now + 60 * 60 * 1000,
   });
-  return data.token;
+  return {
+    token: data.token,
+    refreshToken: data.refreshToken,
+    user: data.user ?? null,
+  };
+}
+
+async function loginSakuraWithCreds(creds: Creds): Promise<string> {
+  const now = Date.now();
+  const cached = tokenCache.get(creds.userId);
+  if (cached && cached.phone === creds.phone && cached.expiresAt > now + 60_000) {
+    return cached.token;
+  }
+  const session = await loginSakuraSessionWithCreds(creds);
+  return session.token;
 }
 
 /** Login using admin-configured credentials for the current doctor/chamber. */
@@ -137,6 +154,17 @@ export async function loginSakuraWithDoctor(): Promise<string> {
     );
   }
   return loginSakuraWithCreds(creds);
+}
+
+/** Full Sakura session (token + refresh + user) for opening the Angular doctor UI without a login form. */
+export async function loginSakuraSessionWithDoctor(): Promise<SakuraLoginSession> {
+  const creds = await getSakuraDoctorCredentials();
+  if (!creds) {
+    throw new Error(
+      "Sakura Web credentials are not set for this doctor. Ask a platform admin to add them under Doctors & chambers → Sakura Web.",
+    );
+  }
+  return loginSakuraSessionWithCreds(creds);
 }
 
 /** @deprecated use loginSakuraWithDoctor */
