@@ -72,17 +72,8 @@ function openSakuraWebDashboard() {
   })();
 }
 
-const STATUS_OPTIONS = [
-  "scheduled",
-  "confirmed",
-  "serialized",
-  "running",
-  "seen",
-  "need_test",
-  "completed",
-  "absent",
-  "cancelled",
-] as const;
+/** Statuses doctors set from the queue; Cancel uses Delete, booking intermediates stay off this list. */
+const STATUS_OPTIONS = ["scheduled", "running", "seen", "need_test", "absent"] as const;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -869,6 +860,15 @@ export function SakuraDashboard() {
               <Ms name="open_in_new" className="text-lg" />
               <span className="whitespace-nowrap">Open dashboard</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setAppointmentModal({ mode: "create" })}
+              className="inline-flex h-[42px] items-center gap-1.5 rounded-lg bg-[#1a1512] px-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+              title="Book appointment"
+            >
+              <Ms name="add" className="text-lg" />
+              <span className="whitespace-nowrap">Appointment</span>
+            </button>
           </div>
         </div>
       )}
@@ -939,15 +939,6 @@ export function SakuraDashboard() {
               <div className={styles.actionsToolbar}>
                 <div className={styles.actionsToolbarButtons}>
                   <div className={styles.controlButtons}>
-                    <button
-                      type="button"
-                      onClick={() => setAppointmentModal({ mode: "create" })}
-                      className={styles.btnLab}
-                      style={{ maxWidth: "none", flex: "0 1 auto" }}
-                    >
-                      <Ms name="add" className="text-base" />
-                      <span>Appointment</span>
-                    </button>
                     <button type="button" onClick={onNextPatient} className={styles.btnNext}>
                       <Ms name="arrow_forward" className="text-base" />
                       <span>Next</span>
@@ -1133,6 +1124,9 @@ export function SakuraDashboard() {
                               className={styles.statusSelect}
                               aria-label="Appointment status"
                             >
+                              {!(STATUS_OPTIONS as readonly string[]).includes(apt.status) && (
+                                <option value={apt.status}>{statusLabel(apt.status)}</option>
+                              )}
                               {STATUS_OPTIONS.map((s) => (
                                 <option key={s} value={s}>
                                   {statusLabel(s)}
