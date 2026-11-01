@@ -3,7 +3,7 @@
 import { usePowerSync, useQuery } from "@powersync/react";
 import { CalendarDays, Search } from "lucide-react";
 import { useState, useEffect } from "react";
-import { bookAppointment, checkInAppointment, createPatient, setAppointmentStatus, startVisit, type VisitType } from "@/lib/doctor/data";
+import { bookAppointment, checkInAppointment, setAppointmentStatus, startVisit, type VisitType } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { navigate } from "@/lib/doctor/router";
@@ -12,6 +12,7 @@ import { ageLabel, normaliseMobile, patientSearchClause, today } from "@/lib/doc
 import { ListPager } from "@/components/list-pager";
 import { SaveButton } from "@/components/save-button";
 import { ActiveChamberSelector } from "./active-chamber";
+import { NewBookingForm } from "./new-booking-form";
 import { SakuraBookingsPanel } from "./sakura-bookings-panel";
 
 export interface ApptRow {
@@ -93,25 +94,14 @@ export function BookingsScreen() {
   const db = usePowerSync();
   const session = useSession();
   const doctors = useDoctors();
-  const { chambers, current: chamber, select } = useChambers();
+  const { current: chamber } = useChambers();
   const chamberId = chamber?.id ?? null;
   const sakuraEnabled = session.sakuraWebEnabled;
   const [source, setSource] = useState<"rxpad" | "sakura">("rxpad");
   const [date, setDate] = useState(today());
-  const [form, setForm] = useState<{ name: string; mobile: string; sex: "" | "male" | "female" | "other"; chamberId: string; note: VisitType; doctorId: string }>({
-    name: "",
-    mobile: "",
-    sex: "",
-    chamberId: "",
-    note: "new",
-    doctorId: "",
-  });
   const [q, setQ] = useState("");
   const [patientPage, setPatientPage] = useState(0);
-  const [msg, setMsg] = useState<string>();
-  const [formError, setFormError] = useState<string>();
   const [bookingId, setBookingId] = useState<string | null>(null);
-  const [booking, setBooking] = useState(false);
   const { data } = useAppointments(date, chamberId);
   const checkIn = useCheckIn();
   const isDoctor = session.tenantRole === "doctor";
@@ -120,13 +110,7 @@ export function BookingsScreen() {
     setPatientPage(0);
   }, [chamberId]);
 
-  useEffect(() => {
-    if (chamber?.id && !form.chamberId) {
-      setForm((f) => ({ ...f, chamberId: chamber.id }));
-    }
-  }, [chamber?.id, form.chamberId]);
-
-  const doctorId = isDoctor ? session.userId : form.doctorId || doctors[0]?.id || "";
+  const doctorId = isDoctor ? session.userId : doctors[0]?.id || "";
   const term = q.trim();
   const { sql: patientSearch, params: searchParams } = patientSearchClause(term);
   const patientPageSize = 50;
@@ -154,77 +138,15 @@ export function BookingsScreen() {
     searchParams,
   );
 
-  async function resolvePatientId(name: string, mobile: string, sex: "male" | "female" | "other"): Promise<string> {
-    const matches = await db.getAll<{ id: string }>(
-      `SELECT id FROM patient WHERE mobile = ? AND lower(name) = lower(?) AND deleted_at IS NULL`,
-      [mobile, name],
-    );
-    if (matches.length === 1) return matches[0]!.id;
-    return createPatient(db, session.userId, session.tenantId, {
-      name,
-      dob: null,
-      dobEstimated: false,
-      sex,
-      mobile,
-      address: "",
-      allergies: [],
-      pregnancyStatus: null,
-      guardianName: "",
-      referredBy: "",
-      nid: "",
-      brn: "",
-      healthId: "",
-      notes: "",
-      consent: true,
-      birthWeightKg: null,
-      gestationalAgeWeeks: null,
-    });
-  }
-
-  async function book(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError(undefined);
-    setMsg(undefined);
-    if (booking || !doctorId) return;
-    const name = form.name.trim();
-    if (!name) return setFormError("Patient name is required");
-    if (!form.mobile.trim()) return setFormError("Mobile is required");
-    const mobile = normaliseMobile(form.mobile);
-    if (!/^01\d{9}$/.test(mobile)) return setFormError("Mobile should look like 01XXXXXXXXX");
-    if (!form.sex) return setFormError("Sex is required");
-    if (!form.chamberId) return setFormError("Chamber is required");
-    setBooking(true);
-    try {
-      const patientId = await resolvePatientId(name, mobile, form.sex);
-      select(form.chamberId);
-      const serial = await bookAppointment(db, {
-        tenantId: session.tenantId,
-        userId: session.userId,
-        doctorUserId: doctorId,
-        chamberId: form.chamberId,
-        name,
-        mobile,
-        date,
-        note: form.note,
-        patientId,
-      });
-      setMsg(`Booked serial #${serial} for ${name} on ${date}`);
-      setForm((f) => ({ ...f, name: "", mobile: "", sex: "", note: "new" }));
-    } finally {
-      setBooking(false);
-    }
-  }
-
   async function bookPatient(p: { id: string; name: string; mobile: string | null }) {
     if (!doctorId || bookingId) return;
     setBookingId(p.id);
-    setMsg(undefined);
     try {
       const serial = await bookAppointment(db, {
         tenantId: session.tenantId, userId: session.userId, doctorUserId: doctorId, chamberId: chamber?.id ?? null,
-        name: p.name, mobile: normaliseMobile(p.mobile ?? ""), date, note: form.note, patientId: p.id,
+        name: p.name, mobile: normaliseMobile(p.mobile ?? ""), date, note: "new", patientId: p.id,
       });
-      setMsg(`Booked serial #${serial} for ${p.name} on ${date}`);
+      void serial;
     } finally {
       setBookingId(null);
     }
@@ -246,8 +168,6 @@ export function BookingsScreen() {
 
   const active = data.filter((a) => a.status !== "cancelled");
   const arrived = data.filter((a) => a.status === "checked_in").length;
-  const grid12 = "grid grid-cols-12 gap-2";
-  const cell2 = "col-span-12 sm:col-span-6 lg:col-span-2 min-w-0";
   const isToday = date === today();
 
   return (
@@ -300,98 +220,7 @@ export function BookingsScreen() {
         <SakuraBookingsPanel date={date} onDateChange={setDate} />
       ) : (
         <>
-      <section className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
-        <h2 className="mb-2 text-[11px] font-semibold text-slate-500">New booking</h2>
-        <form onSubmit={book} className={grid12}>
-          <div className={cell2}>
-            <label className="label">Patient name *</label>
-            <input className="input h-8" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required data-testid="book-name" />
-          </div>
-          <div className={cell2}>
-            <label className="label">Mobile *</label>
-            <input
-              className="input h-8"
-              value={form.mobile}
-              onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-              placeholder="01XXXXXXXXX"
-              required
-              inputMode="tel"
-              data-testid="book-mobile"
-            />
-          </div>
-          <div className={cell2}>
-            <label className="label" htmlFor="book-sex">Sex *</label>
-            <select
-              id="book-sex"
-              className="input h-8"
-              value={form.sex}
-              onChange={(e) => setForm({ ...form, sex: e.target.value as "" | "male" | "female" | "other" })}
-              required
-              data-testid="book-sex"
-            >
-              <option value="">Select…</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          <div className={cell2}>
-            <label className="label" htmlFor="book-chamber">Chamber *</label>
-            <select
-              id="book-chamber"
-              className="input h-8"
-              value={form.chamberId}
-              onChange={(e) => setForm({ ...form, chamberId: e.target.value })}
-              required
-              data-testid="book-chamber"
-            >
-              {chambers.length > 1 && !form.chamberId && <option value="">Select chamber…</option>}
-              {chambers.map((c) => (
-                <option key={c.id} value={c.id}>{c.name.replace(/\s*\n\s*/g, " ")}</option>
-              ))}
-            </select>
-          </div>
-          <div className={cell2}>
-            <label className="label" htmlFor="book-note">Note</label>
-            <select
-              id="book-note"
-              className="input h-8"
-              value={form.note}
-              onChange={(e) => setForm({ ...form, note: e.target.value as VisitType })}
-              data-testid="book-note"
-            >
-              {BOOKING_NOTE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          {!isDoctor && doctors.length > 1 && (
-            <div className={cell2}>
-              <label className="label">Doctor</label>
-              <select className="input h-8" value={doctorId} onChange={(e) => setForm({ ...form, doctorId: e.target.value })}>
-                {doctors.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name_en}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className={`${cell2} flex items-end`}>
-            <SaveButton className="btn-primary h-8 w-full sm:w-auto" saving={booking} data-testid="book-submit">
-              Book serial
-            </SaveButton>
-          </div>
-        </form>
-        {formError && (
-          <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-800" data-testid="book-error">
-            {formError}
-          </p>
-        )}
-        {msg && (
-          <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-800" data-testid="book-msg">
-            {msg}
-          </p>
-        )}
-      </section>
+      <NewBookingForm apptDate={date} />
 
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-2.5 py-1.5">

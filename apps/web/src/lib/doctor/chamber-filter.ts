@@ -45,6 +45,15 @@ export function chamberLinkedParams(chamberId: string | null): string[] {
   return chamberId ? [chamberId, chamberId] : [];
 }
 
+export type AllPatientsListGroup = "all" | "seen" | "unseen";
+
+/** Seen/unseen split for the all-patients directory (among rows already matched by filter). */
+export function allPatientsListGroupSql(group: AllPatientsListGroup): string {
+  if (group === "seen") return `(${WRITTEN_RX})`;
+  if (group === "unseen") return `NOT (${WRITTEN_RX})`;
+  return "1=1";
+}
+
 export type PatientGroup = "today" | "unseen" | "seen";
 
 export function groupWhere(group: PatientGroup, date: string, chamberId: string | null) {

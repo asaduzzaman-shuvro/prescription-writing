@@ -335,13 +335,13 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
 
   const home: NavItem[] = [
     { to: "/", label: "Dashboard", match: route.length === 0, icon: <LayoutDashboard className="h-4 w-4 shrink-0" /> },
+    { to: "/bookings", label: "Bookings", match: route[0] === "bookings", icon: <CalendarDays className="h-4 w-4 shrink-0" /> },
+    { to: "/patients", label: "Patients", match: route[0] === "patients" && !route[1], icon: <Users className="h-4 w-4 shrink-0" /> },
+    { to: "/all-patients", label: "All patients", match: route[0] === "all-patients", icon: <UserCheck className="h-4 w-4 shrink-0" /> },
+    { to: "/patients/new", label: "New prescription", match: route[0] === "patients" && route[1] === "new", icon: <ClipboardPlus className="h-4 w-4 shrink-0" /> },
     ...(session.sakuraWebEnabled
       ? [{ to: "/sakura-web", label: "Sakura Web", match: route[0] === "sakura-web", icon: <Sparkles className="h-4 w-4 shrink-0" /> }]
       : []),
-    { to: "/patients/new", label: "New prescription", match: route[0] === "patients" && route[1] === "new", icon: <ClipboardPlus className="h-4 w-4 shrink-0" /> },
-    { to: "/patients", label: "Patients", match: route[0] === "patients" && route[1] !== "new", icon: <Users className="h-4 w-4 shrink-0" /> },
-    { to: "/all-patients", label: "All patients", match: route[0] === "all-patients", icon: <UserCheck className="h-4 w-4 shrink-0" /> },
-    { to: "/bookings", label: "Bookings", match: route[0] === "bookings", icon: <CalendarDays className="h-4 w-4 shrink-0" /> },
   ];
   const clinical: NavItem[] = [
     // { to: "/lab", label: "Lab", match: route[0] === "lab", icon: <FlaskConical className="h-4 w-4 shrink-0" /> },
@@ -351,6 +351,7 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
   const practice: NavItem[] = [
     ...(isDoctor ? [{ to: "/templates", label: "Templates", match: route[0] === "templates", icon: <LayoutTemplate className="h-4 w-4 shrink-0" /> }] : []),
     ...(session.tenantRole !== "assistant" ? [{ to: "/settings", label: "Settings", match: route[0] === "settings", icon: <Settings className="h-4 w-4 shrink-0" /> }] : []),
+    { to: "/display", label: "Display", match: route[0] === "display", icon: <Monitor className="h-4 w-4 shrink-0" /> },
   ];
 
   useEffect(() => {
@@ -444,20 +445,6 @@ export function DoctorShell({ children }: { children: React.ReactNode }) {
         <NavGroup title="Home" items={home} />
         <NavGroup title="Clinical" items={clinical} />
         <NavGroup title="Practice" items={practice} />
-        <div className="mt-0.5 space-y-0.5 border-t border-white/10 pt-1.5">
-          <p className="px-2 pb-0.5 text-[10px] font-medium tracking-wide text-slate-500 uppercase">Tools</p>
-          <a
-            href="#/display"
-            className={navLinkClass(route[0] === "display")}
-            onClick={() => setMobileOpen(false)}
-            aria-current={route[0] === "display" ? "page" : undefined}
-          >
-            <span className={navIconClass(route[0] === "display")}>
-              <Monitor className="h-4 w-4 shrink-0" />
-            </span>
-            <span className="truncate">Display</span>
-          </a>
-        </div>
       </nav>
       <div className="border-t border-white/10 p-2">
         <div className="rounded-lg bg-black/20 p-2 ring-1 ring-white/10">
