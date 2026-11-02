@@ -273,10 +273,7 @@ export function SakuraSubPatientModal({
                 min={0}
                 value={fee}
                 onChange={(e) => setFee(e.target.value)}
-                readOnly={!isCustomize}
-                className={`mt-1 w-full rounded-lg border border-[#e8e0d5] px-3 py-2 text-sm ${
-                  !isCustomize ? "bg-[#faf7f2]" : ""
-                }`}
+                className="mt-1 w-full rounded-lg border border-[#e8e0d5] px-3 py-2 text-sm"
                 placeholder="0"
               />
             </label>
