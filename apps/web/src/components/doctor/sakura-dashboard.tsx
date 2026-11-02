@@ -8,6 +8,7 @@ import { useSession } from "@/lib/doctor/context";
 import { useChambers, useDoctors } from "@/lib/doctor/hooks";
 import { navigate } from "@/lib/doctor/router";
 import { normaliseMobile, parseJson } from "@/lib/doctor/util";
+import { BookingRealtimeClient } from "@/lib/sakura/booking-realtime";
 import { sakuraApi, SakuraApiError } from "@/lib/sakura/client";
 import type {
   SakuraAppointment,
@@ -427,9 +428,16 @@ export function SakuraDashboard() {
   }, [applyDefaultChamber, selectedDate]);
 
   const loadDashboard = useCallback(
-    async (chamberId: number | null = selectedChamberId, date: string = selectedDate) => {
-      setLoading(true);
-      setError(null);
+    async (
+      chamberId: number | null = selectedChamberId,
+      date: string = selectedDate,
+      opts?: { silent?: boolean },
+    ) => {
+      const silent = !!opts?.silent;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
       try {
         const params = new URLSearchParams();
         if (chamberId) params.set("chamberId", String(chamberId));
@@ -466,9 +474,9 @@ export function SakuraDashboard() {
         }
       } catch (err) {
         if (err instanceof SakuraApiError && err.status === 401) setAuthenticated(false);
-        setError(err instanceof Error ? err.message : "Failed to load dashboard");
+        if (!silent) setError(err instanceof Error ? err.message : "Failed to load dashboard");
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     },
     [selectedChamberId, selectedDate],
@@ -496,6 +504,59 @@ export function SakuraDashboard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated]);
+
+  /** Live sync with Angular dashboard (4200) via Sakura booking socket + focus/poll fallback. */
+  const queueRealtimeRef = useRef<BookingRealtimeClient | null>(null);
+  const softReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!authenticated) return;
+
+    const scheduleSoftReload = () => {
+      if (softReloadTimerRef.current) clearTimeout(softReloadTimerRef.current);
+      softReloadTimerRef.current = setTimeout(() => {
+        void loadDashboard(selectedChamberId, selectedDate, { silent: true });
+      }, 250);
+    };
+
+    const client = new BookingRealtimeClient(
+      () => {},
+      undefined,
+      (evt) => {
+        if (
+          selectedChamberId != null &&
+          Number(evt.chamberId) === Number(selectedChamberId) &&
+          evt.date === selectedDate
+        ) {
+          scheduleSoftReload();
+        }
+      },
+    );
+    queueRealtimeRef.current = client;
+    client.syncRoom(selectedChamberId, selectedDate);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") scheduleSoftReload();
+    };
+    const onFocus = () => scheduleSoftReload();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
+    const poll = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadDashboard(selectedChamberId, selectedDate, { silent: true });
+      }
+    }, 8000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(poll);
+      if (softReloadTimerRef.current) clearTimeout(softReloadTimerRef.current);
+      client.destroy();
+      queueRealtimeRef.current = null;
+    };
+  }, [authenticated, selectedChamberId, selectedDate, loadDashboard]);
 
   const currentStats = stats ?? statsFromAppointments(appointments);
 
@@ -1296,7 +1357,7 @@ export function SakuraDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--sg-line)] bg-white">
-                    {activeList.map((apt) => (
+                    {activeList.map((apt, rowIndex) => (
                       <tr
                         key={apt.id}
                         className={`transition-colors hover:bg-[var(--sg-mint)] ${
@@ -1305,7 +1366,7 @@ export function SakuraDashboard() {
                       >
                         <td className={`${styles.tableCell} whitespace-nowrap`}>
                           <div className="text-xs font-bold tabular-nums text-[var(--sg-ink)]">
-                            {getDisplaySerial(apt, sorted)}
+                            {rowIndex + 1}
                           </div>
                         </td>
                         <td className={`${styles.tableCell} whitespace-nowrap`}>

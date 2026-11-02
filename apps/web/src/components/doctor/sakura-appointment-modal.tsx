@@ -999,15 +999,12 @@ export function SakuraAppointmentModal({
                   <input
                     type="number"
                     min={0}
-                    className={`${inputClass("fee")} ${form.identifier !== "Customize" ? styles.aptInputReadonly : ""}`}
-                    readOnly={form.identifier !== "Customize"}
+                    className={inputClass("fee")}
                     value={form.fee}
                     onChange={(e) => patch({ fee: Number(e.target.value) || 0 }, ["fee"])}
                   />
                   <p className="text-xs leading-tight text-[var(--sg-muted)]">
-                    {form.identifier === "Customize"
-                      ? "Enter the consultation fee for this visit."
-                      : "Auto-calculated based on type"}
+                    Prefills from chamber by type — you can edit anytime.
                   </p>
                 </Field>
                 <Field label="Referer by (Name)" icon="">

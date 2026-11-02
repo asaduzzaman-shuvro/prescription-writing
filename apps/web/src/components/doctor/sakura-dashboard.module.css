@@ -578,7 +578,8 @@
 .tableWrap {
   overflow-x: auto;
   overflow-y: auto;
-  max-height: 420px;
+  max-height: calc(100dvh - 10rem);
+  min-height: 70vh;
   border-top: 1px solid var(--sg-line);
 }
 

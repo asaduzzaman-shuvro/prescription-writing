@@ -188,81 +188,61 @@ export function isAbsentAppointment(apt: SakuraAppointment): boolean {
   return apt.status === "absent" || apt.status === "no_show" || !apt.isPresent;
 }
 
+/** Queue order: slot serial, then suffix so 4 → 4.a → 4.b → 6. */
+export function compareSerialOrder(a: SakuraAppointment, b: SakuraAppointment): number {
+  const sd = (a.serialNumber || 0) - (b.serialNumber || 0);
+  if (sd !== 0) return sd;
+  const sa = (a.serialSuffix || "").trim().toLowerCase();
+  const sb = (b.serialSuffix || "").trim().toLowerCase();
+  if (sa !== sb) {
+    if (!sa) return -1;
+    if (!sb) return 1;
+    return sa.localeCompare(sb);
+  }
+  return (a.id || 0) - (b.id || 0);
+}
+
 export function pickNextPatientToCall(appointments: SakuraAppointment[]): SakuraAppointment | null {
   const present = appointments.filter((a) => a.isPresent && !isAutoBookedAppointment(a));
   const designated = present.find((a) => a.status === "next");
-  if (designated) return designated;
-
   const running = present.find((a) => a.status === "running");
   const waiting = present
     .filter((a) => ["scheduled", "confirmed", "serialized", "next"].includes(a.status))
-    .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+    .sort(compareSerialOrder);
 
   if (waiting.length === 0) return null;
+
   if (running) {
-    const rs = running.serialNumber || 0;
-    return waiting.find((a) => (a.serialNumber || 0) > rs) ?? waiting[0]!;
+    const afterRunning =
+      waiting.find((a) => compareSerialOrder(a, running) > 0) ?? waiting[0]!;
+    if (designated) {
+      const skippedSomeone =
+        afterRunning && compareSerialOrder(afterRunning, designated) < 0;
+      if (!skippedSomeone && compareSerialOrder(designated, running) > 0) {
+        return designated;
+      }
+    }
+    return afterRunning;
   }
-  return waiting[0]!;
+
+  return designated ?? waiting[0]!;
 }
 
+/** Keep linked patients under parent (4, 4.a, 6…) — do not re-order by Running/Next status. */
 export function sortQueue(appointments: SakuraAppointment[]): SakuraAppointment[] {
-  const timeToMinutes = (timeStr: string | null | undefined): number => {
-    if (!timeStr) return Infinity;
-    let normalizedTime = timeStr.trim();
-    if (normalizedTime.length === 5) normalizedTime = `${normalizedTime}:00`;
-    const parts = normalizedTime.split(":");
-    if (parts.length < 2) return Infinity;
-    const hours = parseInt(parts[0]!, 10);
-    const minutes = parseInt(parts[1]!, 10);
-    if (Number.isNaN(hours) || Number.isNaN(minutes)) return Infinity;
-    return hours * 60 + minutes;
-  };
-
-  const queueRank = (s: string): number => {
-    if (s === "running") return 0;
-    if (s === "next") return 1;
-    return 2;
-  };
-
-  const suffixRank = (apt: SakuraAppointment): string =>
-    (apt.serialSuffix || "").trim().toLowerCase();
-
-  return [...appointments].sort((a, b) => {
-    const ra = queueRank(a.status);
-    const rb = queueRank(b.status);
-    if (ra !== rb) return ra - rb;
-    const sd = (a.serialNumber || 0) - (b.serialNumber || 0);
-    if (sd !== 0) return sd;
-    const sa = suffixRank(a);
-    const sb = suffixRank(b);
-    if (sa !== sb) {
-      if (!sa) return -1;
-      if (!sb) return 1;
-      return sa.localeCompare(sb);
-    }
-    const timeA = a.appointmentTime?.trim() || a.appointmentSlot?.startTime?.trim();
-    const timeB = b.appointmentTime?.trim() || b.appointmentSlot?.startTime?.trim();
-    return timeToMinutes(timeA) - timeToMinutes(timeB);
-  });
+  return [...appointments].sort(compareSerialOrder);
 }
 
 /**
- * Consecutive display serials for the queue: 1, 1.a, 1.b, 2, 2.a, 3…
- * (avoids slot-grid gaps like 1, 1.a, 3).
+ * P.Serial = booked slot number from API (+ .a/.b for linked patients under that slot).
+ * Example: slot 4 → "4"; add-on under same slot → "4.a".
+ * `sortedAppointments` kept for call-site compatibility (unused).
  */
 export function getDisplaySerial(
   apt: SakuraAppointment,
-  sortedAppointments: SakuraAppointment[],
+  _sortedAppointments?: SakuraAppointment[],
 ): string {
-  const rootIndex = new Map<number, number>();
-  let next = 1;
-  for (const a of sortedAppointments) {
-    if (a.parentAppointmentId) continue;
-    if (!rootIndex.has(a.id)) rootIndex.set(a.id, next++);
-  }
-  const rootId = apt.parentAppointmentId ?? apt.id;
-  const n = rootIndex.get(rootId) ?? apt.serialNumber ?? "";
+  const n = apt.serialNumber ?? "";
   const suffix = (apt.serialSuffix || "").trim().toLowerCase();
   return suffix ? `${n}.${suffix}` : String(n);
 }

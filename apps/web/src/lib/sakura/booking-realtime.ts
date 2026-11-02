@@ -38,6 +38,11 @@ export class BookingRealtimeClient {
   constructor(
     private readonly onDirty: () => void,
     private readonly onSlotReleasedByServer?: (data: SlotReleasePayload) => void,
+    private readonly onQueueUpdated?: (data: {
+      chamberId: number;
+      date: string;
+      reason?: string;
+    }) => void,
   ) {}
 
   static normalizeSlotTime(time: string | null | undefined): string {
@@ -192,6 +197,17 @@ export class BookingRealtimeClient {
         this.peerBookedKeys.delete(
           BookingRealtimeClient.slotHoldKey(data.appointmentSlotId, data.appointmentTime),
         );
+        this.notify();
+      },
+    );
+
+    this.socket.on(
+      "queueUpdated",
+      (data: { chamberId?: number; date?: string; reason?: string }) => {
+        const chamberId = data?.chamberId ?? this.joinedRoom?.chamberId;
+        const date = data?.date ?? this.joinedRoom?.date;
+        if (chamberId == null || !date) return;
+        this.onQueueUpdated?.({ chamberId, date, reason: data?.reason });
         this.notify();
       },
     );
