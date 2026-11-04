@@ -290,9 +290,9 @@ describe("exam pictures print under their own section", () => {
     ]);
   });
 
-  it("puts Ear, Nose, Throat and Audiology pictures right after their findings", () => {
+  it("puts Ear, Nose and Throat pictures right after their findings, and the audiogram inside Ix", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
-    const order = ["<h3>Ear</h3>", "Right TM</figcaption>", "<h3>Nose &amp; PNS</h3>", "Nose &amp; sinuses</figcaption>", "<h3>Throat &amp; neck</h3>", "Oropharynx</figcaption>", "<h3>Audiology</h3>", "Audiogram"];
+    const order = ["<h3>Ear</h3>", "Right TM</figcaption>", "<h3>Nose &amp; PNS</h3>", "Nose &amp; sinuses</figcaption>", "<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Ix</h3>", "Audiogram"];
     const idx = order.map((s) => at(html, s));
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
     expect(html).not.toContain(`<section class="diagrams">`);
@@ -310,10 +310,100 @@ describe("exam pictures print under their own section", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams.filter((d) => d.section !== "ear") }, {}, settings);
     expect(at(html, "<h3>Ear</h3>")).toBeLessThan(at(html, "Right TM</figcaption>"));
     expect(at(html, "Right TM</figcaption>")).toBeLessThan(at(html, "<h3>Nose &amp; PNS</h3>"));
-    expect(at(html, "<h3>Throat &amp; neck</h3>")).toBeLessThan(at(html, "Larynx (IDL)</figcaption>"));
-    expect(at(html, "Larynx (IDL)</figcaption>")).toBeLessThan(at(html, "<h3>Audiology</h3>"));
+    expect(at(html, "<h3>Throat</h3>")).toBeLessThan(at(html, "Larynx (IDL)</figcaption>"));
+    expect(at(html, "Larynx (IDL)</figcaption>")).toBeLessThan(at(html, "<h3>Ix</h3>"));
     const noEar = render({ specialtyFindings: exam.groups.filter((g) => g.id !== "ear"), diagrams: [] }, {}, settings);
     expect(at(noEar, `<section class="diagrams">`)).toBeLessThan(at(noEar, "Right TM</figcaption>"));
+  });
+
+  describe("Audiology prints inside Ix", () => {
+    it("after the advised tests, with its audiogram and no heading of its own", () => {
+      const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams, investigations: ["CBC", "X-ray PNS (OM view)"] });
+      const ix = html.slice(at(html, "<h3>Ix</h3>"));
+      const order = ["<li>CBC</li>", "<li>X-ray PNS (OM view)</li>", "<b>PTA:</b> R 47.5 dB", "Audiogram (O right, X left)</figcaption>"];
+      const idx = order.map((s) => at(ix, s));
+      expect(idx).toEqual([...idx].sort((a, b) => a - b));
+      expect(ix.indexOf("</section>")).toBeGreaterThan(at(ix, "Audiogram (O right, X left)</figcaption>")); // all in the Ix section
+      expect(html).not.toContain("<h3>Audiology</h3>");
+    });
+
+    it("prints Ix even when only audiology is filled in", () => {
+      const audio = exam.groups.filter((g) => g.id === "audiology");
+      const html = render({ specialtyFindings: audio, diagrams: exam.diagrams.filter((d) => d.section === "audiology"), investigations: [] });
+      expect(at(html, "<h3>Ix</h3>")).toBeLessThan(at(html, "<b>PTA:</b>"));
+    });
+
+    it("keeps its own heading with the examination when the doctor hides Ix", () => {
+      const settings = { ...DEFAULT_PRINT_SETTINGS, hiddenSections: ["ix" as const] };
+      const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams, investigations: ["CBC"] }, {}, settings);
+      expect(html).not.toContain("<h3>Ix</h3>");
+      expect(html).not.toContain("<li>CBC</li>");
+      expect(at(html, "<h3>Audiology</h3>")).toBeLessThan(at(html, "<b>PTA:</b>"));
+      expect(at(html, "<b>PTA:</b>")).toBeLessThan(at(html, "Audiogram (O right, X left)</figcaption>"));
+    });
+  });
+
+  describe("Neck is its own section, after Throat", () => {
+    const withNeck = flattenFindings(ENT_TEMPLATE, {
+      thr_tonsil_grade: { right: "Grade 3" },
+      thr_oro_map: { zones: { r_tonsil: "swollen" } },
+      thr_neck: "Thyroid swelling",
+      thr_neck_map: { zones: { thyroid: "enlarged" } },
+    });
+
+    it("groups the neck answers and picture under Neck, not Throat", () => {
+      expect(withNeck.groups.map((g) => [g.id, g.title])).toEqual([["throat", "Throat"], ["neck", "Neck"]]);
+      expect(withNeck.groups.find((g) => g.id === "throat")!.lines.map((l) => l.label)).not.toContain("Neck");
+      const neckPics = withNeck.diagrams.filter((d) => d.ref === "neck");
+      expect(neckPics.length).toBeGreaterThan(0);
+      expect(neckPics.every((d) => d.section === "neck")).toBe(true);
+    });
+
+    it("prints Throat then Neck, each with its own picture", () => {
+      const html = render({ specialtyFindings: withNeck.groups, diagrams: withNeck.diagrams });
+      const order = ["<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Neck</h3>", "<b>Neck:</b> Thyroid swelling", "Neck</figcaption>"];
+      const idx = order.map((s) => at(html, s));
+      expect(idx).toEqual([...idx].sort((a, b) => a - b));
+      expect(html).not.toContain(`<section class="diagrams">`);
+    });
+
+    it("puts a blank always-print neck under Neck, or after the findings when Neck has no answers", () => {
+      const settings = { ...DEFAULT_PRINT_SETTINGS, sketchesAlways: ["neck" as const] };
+      const linesOnly = { specialtyFindings: withNeck.groups, diagrams: withNeck.diagrams.filter((d) => d.ref !== "neck") };
+      const html = render(linesOnly, {}, settings);
+      expect(at(html, "<h3>Neck</h3>")).toBeLessThan(at(html, "Neck</figcaption>"));
+      expect(html).not.toContain(`<section class="diagrams">`);
+      const throatOnly = render({ ...linesOnly, specialtyFindings: withNeck.groups.filter((g) => g.id !== "neck") }, {}, settings);
+      expect(at(throatOnly, `<section class="diagrams">`)).toBeLessThan(at(throatOnly, "Neck</figcaption>"));
+    });
+  });
+});
+
+describe("long prescriptions flow onto the next page", () => {
+  it("lets a section break across pages, keeping only its pieces whole", () => {
+    // A section kept whole that is taller than the rest of page 1 moves to page 2, and at the top of a column it takes
+    // the whole column (and the body) with it: page 1 printed blank.
+    const html = render();
+    expect(html).toContain("section { margin-bottom: 2.5mm; }");
+    expect(html).not.toMatch(/section \{[^}]*break-inside: avoid/);
+    expect(html).toMatch(/h3 \{[^}]*break-after: avoid/);
+    expect(html).toContain("li, .oe, .pre { break-inside: avoid; }");
+    expect(html).toMatch(/\.ear-row \{[^}]*break-inside: avoid/);
+  });
+
+  it("lays the left column out as a grid, not a column flexbox, which Chrome moved wholly onto page 2", () => {
+    expect(render()).toMatch(/\.left \{[^}]*display: grid; grid-template-rows: 1fr auto; \}/);
+    expect(render()).not.toMatch(/\.left \{[^}]*display: flex/);
+  });
+
+  it("keeps the pad's QR as the last row of the left column, after the findings", () => {
+    const html = renderPrescriptionHtml({
+      doc: SAMPLE_DOC, patient: SAMPLE_PATIENT, doctor: SAMPLE_DOCTOR, chamber: SAMPLE_CHAMBER, date: "2026-11-05",
+      settings: { ...DEFAULT_PRINT_SETTINGS, mode: "pad" }, fonts: { bengali: "", latin: "" },
+      qrSvg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`,
+    });
+    const left = html.slice(html.indexOf(`<div class="left">`), html.indexOf(`<div class="right">`));
+    expect(left).toMatch(/^<div class="left"><div class="left-main">[\s\S]*<\/div><div class="qr"><svg/);
   });
 });
 

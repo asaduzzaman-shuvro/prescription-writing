@@ -14,7 +14,7 @@ export type SketchId = (typeof SKETCH_IDS)[number];
 
 type Shape =
   | "ulcer" | "patch" | "growth" | "pus" | "bulge" | "nodule" | "polyp" | "cyst" | "leukoplakia" | "node" | "mass" | "scar" | "sinus"
-  | "bowR" | "bowL" | "spurR" | "spurL" | "hole" | "diamond";
+  | "bowR" | "bowL" | "spurR" | "spurL" | "hole" | "diamond" | "drip" | "polypL";
 
 export interface SketchDef {
   id: SketchId;
@@ -25,42 +25,67 @@ export interface SketchDef {
   viewBox: [number, number];
   /** Static outline and labels (drawn above the zones, never tappable). */
   base: string;
-  /** Tappable regions in drawing order (later ones sit on top). Labels carry the side. */
-  zones: { id: string; label: string; path: string }[];
+  /**
+   * Tappable regions in drawing order (later ones sit on top). Labels carry the side. A zone with `sizes` can be
+   * drawn at one of those outlines instead of `path` (a tonsil at its grade); its size reads after the label.
+   */
+  zones: { id: string; label: string; path: string; sizes?: { label: string; path: string }[] }[];
   states: { id: string; label: string; fill: string }[];
   marks: { kind: string; label: string; shape: Shape }[];
 }
 
 export interface SketchValue {
   zones?: Record<string, string>;
+  /** Index into a zone's `sizes`; absent draws the zone at its usual outline. */
+  sizes?: Record<string, number>;
   marks?: PlacedMark[];
   strokes?: string[];
 }
-export type NormalizedSketch = { zones: Record<string, string>; marks: PlacedMark[]; strokes: string[] };
+/** `sizes` is present only when some zone has one, so older pictures keep their exact shape. */
+export type NormalizedSketch = { zones: Record<string, string>; sizes?: Record<string, number>; marks: PlacedMark[]; strokes: string[] };
 
 /** Mirror a polygon/path made of absolute "x,y" pairs across the vertical centre line. */
 const mirror = (path: string) => path.replace(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g, (_, x: string, y: string) => `${r1(100 - Number(x))},${y}`);
 const poly = (pts: string) => `M${pts.trim().split(/\s+/).join(" L")} Z`;
 const text = (x: number, y: number, t: string, size = 6, fill = "#111") => `<text x="${x}" y="${y}" font-size="${size}" text-anchor="middle" font-family="sans-serif" fill="${fill}">${t}</text>`;
 const sides = (y: number) => text(5, y, "R", 7) + text(95, y, "L", 7);
+/** A closed ellipse as a path (two arcs), for zones that need one. */
+const ellipse = (cx: number, cy: number, rx: number, ry: number) =>
+  `M${r1(cx - rx)},${cy} A${rx},${ry} 0 1 0 ${r1(cx + rx)},${cy} A${rx},${ry} 0 1 0 ${r1(cx - rx)},${cy} Z`;
 
 // ---------------------------------------------------------------------------
 // Oropharynx (open mouth)
 // ---------------------------------------------------------------------------
 
+// The arch is the edge of the anterior pillars (palatoglossal), lateral to each tonsil; the thin lines medial to the
+// tonsils are the posterior pillars (palatopharyngeal). The band outside the arch is the soft palate on top and an
+// anterior pillar down each side, split where the arch reaches y ≈ 40 (its cubic cut at t = 0.43).
 const ORO_ARCH = "M14,74 C14,40 30,24 50,24 C70,24 86,40 86,74";
+/**
+ * Tonsil outline per Brodsky grade 0–4 (radii). Each sits against the lateral wall (x = 17) and fills that grade's share
+ * of the 33 units to the midline (x = 50): 0 in the fossa (~12%), 1 25%, 2 50%, 3 75%, 4 all the way, so grade 4
+ * tonsils meet in the middle. Grade 2 is the outline drawn when no grade is given.
+ */
+const TONSIL_GRADES: [number, number][] = [[2, 6], [4.1, 8], [8.3, 10.5], [12.4, 12], [16.5, 13.5]];
+const tonsil = (s: "right" | "left", grade: number) => {
+  const [rx, ry] = TONSIL_GRADES[grade]!;
+  const cx = 17 + rx;
+  return ellipse(s === "right" ? cx : 100 - cx, 57, rx, ry);
+};
 const OROPHARYNX: SketchDef = {
   id: "oropharynx",
   section: "throat",
   title: "Oropharynx",
   viewBox: [100, 108],
   zones: [
-    { id: "palate", label: "Soft palate / pillars", path: "M10,72.7 A46,42 0 1 1 90,72.7 L86,74 C86,40 70,24 50,24 C30,24 14,40 14,74 Z" },
+    { id: "palate", label: "Soft palate", path: "M5.93,40 A46,42 0 0 1 94.07,40 L78.08,39.92 C71.5,29.19 61.4,24 50,24 C38.6,24 28.5,29.19 21.92,39.92 Z" },
+    { id: "r_ant_pillar", label: "R anterior pillar", path: "M10,72.7 A46,42 0 0 1 5.93,40 L21.92,39.92 C16.96,48.02 14,59.38 14,74 Z" },
+    { id: "l_ant_pillar", label: "L anterior pillar", path: "M90,72.7 A46,42 0 0 0 94.07,40 L78.08,39.92 C83.04,48.02 86,59.38 86,74 Z" },
     { id: "ppw", label: "Posterior pharyngeal wall", path: `${ORO_ARCH} Z` },
     { id: "tongue", label: "Tongue", path: "M10,72.7 Q50,60 90,72.7 A46,42 0 0 1 10,72.7 Z" },
     { id: "uvula", label: "Uvula", path: "M45.5,24 C45.5,34 44,41 50,45 C56,41 54.5,34 54.5,24 Z" },
-    { id: "r_tonsil", label: "R tonsil", path: "M17,57 A7,10 0 1 0 31,57 A7,10 0 1 0 17,57 Z" },
-    { id: "l_tonsil", label: "L tonsil", path: "M69,57 A7,10 0 1 0 83,57 A7,10 0 1 0 69,57 Z" },
+    { id: "r_tonsil", label: "R tonsil", path: tonsil("right", 2), sizes: TONSIL_GRADES.map((_, g) => ({ label: `grade ${g}`, path: tonsil("right", g) })) },
+    { id: "l_tonsil", label: "L tonsil", path: tonsil("left", 2), sizes: TONSIL_GRADES.map((_, g) => ({ label: `grade ${g}`, path: tonsil("left", g) })) },
   ],
   base:
     `<ellipse cx="50" cy="52" rx="46" ry="42" fill="none" stroke="#111" stroke-width="1.5"/>` +
@@ -70,6 +95,7 @@ const OROPHARYNX: SketchDef = {
   states: [
     { id: "congested", label: "Congested", fill: "url(#hatch)" },
     { id: "swollen", label: "Swollen", fill: "#bbb" },
+    { id: "granular", label: "Granular", fill: "url(#stipple)" },
   ],
   marks: [
     { kind: "ulcer", label: "Ulcer", shape: "ulcer" },
@@ -77,6 +103,7 @@ const OROPHARYNX: SketchDef = {
     { kind: "pus", label: "Pus / exudate", shape: "pus" },
     { kind: "growth", label: "Growth", shape: "growth" },
     { kind: "bulge", label: "Bulge (quinsy)", shape: "bulge" },
+    { kind: "pnd", label: "Post-nasal drip", shape: "drip" },
   ],
 };
 
@@ -116,6 +143,7 @@ const LARYNX: SketchDef = {
     { kind: "cyst", label: "Cyst", shape: "cyst" },
     { kind: "leukoplakia", label: "Leukoplakia", shape: "leukoplakia" },
     { kind: "growth", label: "Growth", shape: "growth" },
+    { kind: "ulcer", label: "Ulcer", shape: "ulcer" },
   ],
 };
 
@@ -133,7 +161,7 @@ const R_LEVELS = {
 };
 const NECK: SketchDef = {
   id: "neck",
-  section: "throat",
+  section: "neck",
   title: "Neck",
   viewBox: [100, 112],
   zones: [
@@ -257,6 +285,9 @@ function shapeSvg(shape: Shape, x: number, y: number, compact = false): string {
       return `<circle cx="${x}" cy="${y}" r="1.8" fill="#111"/>`;
     case "polyp":
       return `<line x1="${r1(x - 4.5)}" y1="${y}" x2="${r1(x - 2.6)}" y2="${y}" stroke="#111" stroke-width="0.8"/>` + c(0, 0, 2.6, "#fff", 0.9);
+    case "polypL":
+      // The same polyp with its stalk on the right: on the left vocal cord the stalk meets the cord, not the airway.
+      return `<line x1="${r1(x + 2.6)}" y1="${y}" x2="${r1(x + 4.5)}" y2="${y}" stroke="#111" stroke-width="0.8"/>` + c(0, 0, 2.6, "#fff", 0.9);
     case "cyst":
       return c(0, 0, 2.6, "none", 0.9) + c(0, 0, 1.2, "none", 0.5);
     case "leukoplakia":
@@ -286,12 +317,19 @@ function shapeSvg(shape: Shape, x: number, y: number, compact = false): string {
       return `<path d="M${x},${r1(y - 2.6)} L${r1(x + 2.2)},${y} L${x},${r1(y + 2.6)} L${r1(x - 2.2)},${y} Z" fill="#111"/>`;
     case "sinus":
       return c(0, 0, 2.2, "#fff", 0.9) + `<circle cx="${x}" cy="${y}" r="0.7" fill="#111"/>`;
+    case "drip":
+      // Two trickles, each ending in a drop.
+      return [-1.6, 1.6]
+        .map((dx) => `<line x1="${r1(x + dx)}" y1="${r1(y - 4)}" x2="${r1(x + dx)}" y2="${r1(y + 1.6)}" stroke="#111" stroke-width="0.7"/><circle cx="${r1(x + dx)}" cy="${r1(y + 2.8)}" r="0.9" fill="#111"/>`)
+        .join("");
   }
 }
 
 export function sketchMarkSvg(id: SketchId, kind: string, x: number, y: number): string {
   const m = SKETCHES[id].marks.find((k) => k.kind === kind);
-  return m ? shapeSvg(m.shape, x, y) : "";
+  if (!m) return "";
+  // A polyp on the left vocal cord (right half of the picture) takes its stalk from that cord.
+  return shapeSvg(id === "larynx" && m.shape === "polyp" && x > 50 ? "polypL" : m.shape, x, y);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,11 +347,38 @@ export function normalizeSketch(id: SketchId, value: unknown): NormalizedSketch 
     const st = (raw as Record<string, unknown>)[z.id];
     if (typeof st === "string" && def.states.some((s) => s.id === st)) zones[z.id] = st;
   }
-  return { zones, marks: normalizeMarks(o.marks, def.marks.map((m) => m.kind), w, h), strokes: normalizeStrokes(o.strokes, w, h) };
+  const rawSizes = o.sizes && typeof o.sizes === "object" ? (o.sizes as Record<string, unknown>) : {};
+  const sizes: Record<string, number> = {};
+  for (const z of def.zones) {
+    const n = rawSizes[z.id];
+    if (z.sizes && typeof n === "number" && Number.isInteger(n) && n >= 0 && n < z.sizes.length) sizes[z.id] = n;
+  }
+  return {
+    zones,
+    ...(Object.keys(sizes).length ? { sizes } : {}),
+    marks: normalizeMarks(o.marks, def.marks.map((m) => m.kind), w, h),
+    strokes: normalizeStrokes(o.strokes, w, h),
+  };
 }
 
 export function sketchIsEmpty(v: NormalizedSketch): boolean {
-  return !Object.keys(v.zones).length && !v.marks.length && !v.strokes.length;
+  return !Object.keys(v.zones).length && !Object.keys(v.sizes ?? {}).length && !v.marks.length && !v.strokes.length;
+}
+
+/**
+ * Stroke of one zone's outline: light grey for areas, dark for a zone that changes size (a tonsil), so its size
+ * reads clearly on screen and on paper even when it has no state.
+ */
+export function sketchZoneStroke(id: SketchId, zoneId: string): { stroke: string; width: number } {
+  return SKETCHES[id].zones.find((z) => z.id === zoneId)?.sizes ? { stroke: "#111", width: 0.9 } : { stroke: "#999", width: 0.5 };
+}
+
+/** Outline of one zone: the size it was given (a tonsil's grade), else its usual one. */
+export function sketchZonePath(id: SketchId, v: NormalizedSketch, zoneId: string): string {
+  const z = SKETCHES[id].zones.find((x) => x.id === zoneId);
+  if (!z) return "";
+  const n = v.sizes?.[zoneId];
+  return (n === undefined ? undefined : z.sizes?.[n]?.path) ?? z.path;
 }
 
 /** Fill of one zone for its current state (white when unmarked, so the whole zone is tappable). */
@@ -331,7 +396,12 @@ export function sketchOverlaySvg(id: SketchId, value: unknown): string {
 export function sketchSvg(id: SketchId, value?: unknown): string {
   const def = SKETCHES[id];
   const v = normalizeSketch(id, value);
-  const zones = def.zones.map((z) => `<path d="${z.path}" fill="${sketchZoneFill(id, v, z.id)}" stroke="#999" stroke-width="0.5"/>`).join("");
+  const zones = def.zones
+    .map((z) => {
+      const s = sketchZoneStroke(id, z.id);
+      return `<path d="${sketchZonePath(id, v, z.id)}" fill="${sketchZoneFill(id, v, z.id)}" stroke="${s.stroke}" stroke-width="${s.width}"/>`;
+    })
+    .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${def.viewBox[0]} ${def.viewBox[1]}"><defs>${DRAWING_DEFS}</defs>${zones}${def.base}${sketchOverlaySvg(id, v)}</svg>`;
 }
 
@@ -357,9 +427,14 @@ const legendText = (cy: number, label: string) => `<text x="17" y="${cy + 2.5}" 
 export function sketchText(id: SketchId, value: unknown): string {
   const def = SKETCHES[id];
   const v = normalizeSketch(id, value);
+  // A sized zone reads its size first: "R tonsil grade 3", "R tonsil grade 3 congested".
   const zones = def.zones
-    .filter((z) => v.zones[z.id])
-    .map((z) => `${z.label} ${def.states.find((s) => s.id === v.zones[z.id])!.label.toLowerCase()}`);
+    .filter((z) => v.zones[z.id] || v.sizes?.[z.id] !== undefined)
+    .map((z) => {
+      const size = v.sizes?.[z.id] === undefined ? "" : z.sizes![v.sizes[z.id]!]!.label;
+      const st = v.zones[z.id] ? def.states.find((s) => s.id === v.zones[z.id])!.label.toLowerCase() : "";
+      return [z.label, size, st].filter(Boolean).join(" ");
+    });
   const marks = def.marks.filter((m) => v.marks.some((x) => x.kind === m.kind)).map((m) => m.label.toLowerCase());
   return [zones.join(", "), marks.join(", "), v.strokes.length ? "drawing" : ""].filter(Boolean).join("; ");
 }

@@ -15,6 +15,7 @@ import {
   SKETCH_IDS,
   SKETCHES,
   sketchLegendSvg,
+  sketchMarkSvg,
   sketchSvg,
   sketchText,
   validateTemplateSchema,
@@ -27,6 +28,7 @@ function everything(id: SketchId) {
   const def = SKETCHES[id];
   return {
     zones: Object.fromEntries(def.zones.map((z, i) => [z.id, def.states[i % def.states.length]!.id])),
+    sizes: Object.fromEntries(def.zones.filter((z) => z.sizes).map((z) => [z.id, z.sizes!.length - 1])),
     marks: def.marks.map((m, i) => ({ kind: m.kind, x: 20 + i * 10, y: 50 })),
     strokes: ["10,10 20,20 30,15"],
   };
@@ -52,6 +54,8 @@ describe("sketch definitions", () => {
     const left = (p: string) => Number(/^M(-?[\d.]+)/.exec(p)![1]);
     const zone = (id: SketchId, z: string) => SKETCHES[id].zones.find((x) => x.id === z)!.path;
     expect(left(zone("oropharynx", "r_tonsil"))).toBeLessThan(left(zone("oropharynx", "l_tonsil")));
+    expect(left(zone("oropharynx", "r_ant_pillar"))).toBeLessThan(50);
+    expect(left(zone("oropharynx", "l_ant_pillar"))).toBeGreaterThan(50);
     expect(left(zone("neck", "r_iii"))).toBeLessThan(50);
     expect(left(zone("neck", "l_iii"))).toBeGreaterThan(50);
   });
@@ -71,10 +75,52 @@ describe("sketch values", () => {
     expect(many.marks).toHaveLength(DRAWING_LIMITS.marks);
   });
 
+  it("keeps a size only for a zone that has sizes, within range", () => {
+    const v = normalizeSketch("oropharynx", { sizes: { r_tonsil: 4, l_tonsil: 9, uvula: 1, ppw: "2", bogus: 1 } });
+    expect(v.sizes).toEqual({ r_tonsil: 4 });
+    expect(normalizeSketch("oropharynx", { sizes: { r_tonsil: 1.5 } })).toEqual({ zones: {}, marks: [], strokes: [] });
+  });
+
+  it("draws a tonsil at its grade's outline, and at the usual one without a grade", () => {
+    const paths = (v: unknown) => [...sketchSvg("oropharynx", v).matchAll(/<path d="([^"]+)" fill/g)].map((m) => m[1]);
+    const r = SKETCHES.oropharynx.zones.find((z) => z.id === "r_tonsil")!;
+    expect(r.sizes).toHaveLength(5);
+    expect(r.sizes![2]!.path).toBe(r.path); // grade 2 is the outline drawn without a grade
+    expect(paths({})).toContain(r.path);
+    expect(paths({ sizes: { r_tonsil: 4 } })).toContain(r.sizes![4]!.path);
+    expect(paths({ sizes: { r_tonsil: 4 } })).not.toContain(r.path);
+    // The tonsils are outlined dark so their size reads clearly; other areas stay light grey.
+    const svg = sketchSvg("oropharynx", { sizes: { r_tonsil: 0 } });
+    expect(svg).toContain(`<path d="${r.sizes![0]!.path}" fill="#fff" stroke="#111" stroke-width="0.9"/>`);
+    expect(svg).toMatch(/<path d="M10,72\.7 Q[^"]+" fill="#fff" stroke="#999" stroke-width="0.5"\/>/); // tongue
+    // Grade 4 reaches further towards the midline than grade 1.
+    const medial = (p: string) => Number(/ ([\d.]+),57 A/.exec(p)![1]);
+    // Each grade fills its Brodsky share of the way from the lateral wall (17) to the midline (50); grade 4 meets the
+    // other tonsil there.
+    expect(r.sizes!.map((s) => medial(s.path))).toEqual([21, 25.2, 33.6, 41.8, 50]);
+    const l = SKETCHES.oropharynx.zones.find((z) => z.id === "l_tonsil")!;
+    expect(Number(/^M([\d.]+),57/.exec(l.sizes![4]!.path)![1])).toBe(50);
+  });
+
+  it("gives a polyp on the left vocal cord its stalk on that cord", () => {
+    expect(sketchMarkSvg("larynx", "polyp", 48.6, 54)).toContain('<line x1="44.1" y1="54" x2="46"'); // right cord: stalk to its left
+    expect(sketchMarkSvg("larynx", "polyp", 51.4, 54)).toContain('<line x1="54" y1="54" x2="55.9"'); // left cord: stalk to its right
+    expect(sketchMarkSvg("nose", "polyp", 61.5, 62)).toContain('<line x1="57" y1="62"'); // other pictures unchanged
+    const svg = sketchSvg("larynx", { marks: [{ kind: "polyp", x: 51.4, y: 54 }] });
+    expect(sanitizeSvg(svg)).toBe(svg);
+  });
+
+  it("names a tonsil's grade, and the wall's granular state and post-nasal drip", () => {
+    expect(sketchText("oropharynx", { sizes: { r_tonsil: 3, l_tonsil: 1 }, zones: { r_tonsil: "congested" } })).toBe("R tonsil grade 3 congested, L tonsil grade 1");
+    expect(sketchText("oropharynx", { zones: { ppw: "granular" }, marks: [{ kind: "pnd", x: 40, y: 44 }] })).toBe("Posterior pharyngeal wall granular; post-nasal drip");
+  });
+
   it("words findings in drawing order, whatever the tap order", () => {
     expect(sketchText("oropharynx", { zones: { uvula: "swollen", r_tonsil: "congested" }, marks: [{ kind: "membrane", x: 1, y: 1 }, { kind: "ulcer", x: 2, y: 2 }], strokes: ["1,1 2,2"] }))
       .toBe("Uvula swollen, R tonsil congested; ulcer, membrane / slough; drawing");
     expect(sketchText("larynx", { zones: { l_cord: "fixed" } })).toBe("L vocal cord fixed (palsy)");
+    expect(sketchText("oropharynx", { zones: { l_ant_pillar: "congested", r_ant_pillar: "congested", palate: "swollen" } }))
+      .toBe("Soft palate swollen, R anterior pillar congested, L anterior pillar congested");
     expect(sketchText("neck", {})).toBe("");
   });
 
@@ -98,9 +144,10 @@ describe("sketches in the ENT exam", () => {
       thr_oro_map: { zones: { r_tonsil: "congested" }, marks: [{ kind: "ulcer", x: 60, y: 80 }] },
       thr_neck_map: { strokes: ["20,30 25,40"] },
     });
-    const throat = out.groups.find((g) => g.title === "Throat & neck")!.lines;
+    const throat = out.groups.find((g) => g.title === "Throat")!.lines;
+    const neck = out.groups.find((g) => g.title === "Neck")!.lines;
     expect(throat).toContainEqual({ label: "Oropharynx map", value: "R tonsil congested; ulcer" });
-    expect(throat).toContainEqual({ label: "Neck map", value: "drawing" });
+    expect(neck).toContainEqual({ label: "Neck map", value: "drawing" });
     expect(out.diagrams.map((d) => d.title)).toEqual(["Oropharynx", "Key", "Neck"]);
     expect(out.diagrams.map((d) => [d.kind, d.ref])).toEqual([["sketch", "oropharynx"], ["legend", "oropharynx"], ["sketch", "neck"]]);
     expect(out.diagrams[1]!.svg).toContain(">Congested</text>");

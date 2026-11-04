@@ -430,6 +430,8 @@ function RxEditor({
   const rx = rxRows[0];
   const [doc, setDoc] = useState<PrescriptionDoc | null>(null);
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
+  // Below the Ix list: where the exam's investigation sections (audiology) render.
+  const [ixSlot, setIxSlot] = useState<HTMLDivElement | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const finalizingRef = useRef(false);
@@ -875,26 +877,6 @@ function RxEditor({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</h3>
             <textarea className="input" rows={2} disabled={readOnly} value={doc.history ?? ""} onChange={(e) => update((d) => ({ ...d, history: e.target.value || undefined }))} placeholder="P/H, D/H, F/H…" />
           </section>
-          <KeyValueList title="O/E — Findings" values={doc.oeFindings ?? []} suggestions={OE_LABELS} readOnly={readOnly}
-            onChange={(v) => update((d) => ({ ...d, oeFindings: v }))} testId="oe" />
-          <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Examination notes
-            </h3>
-            <textarea
-              className="input"
-              rows={2}
-              disabled={readOnly}
-              value={doc.examination ?? ""}
-              onChange={(e) =>
-                update((d) => ({
-                  ...d,
-                  examination: e.target.value || undefined,
-                }))
-              }
-              placeholder="Anaemia –, Jaundice –, Heart: S1 S2 normal…"
-            />
-          </section>
           <SpecialtyExam
             encounterId={encounterId}
             specialtyCode={specialtyCode}
@@ -902,6 +884,14 @@ function RxEditor({
             onFlatten={(groups, diagrams) =>
               update((d) => ({ ...d, specialtyFindings: groups, diagrams }))
             }
+            ixSlot={ixSlot}
+            after={{
+              section: "neck",
+              node: (
+                <KeyValueList title="Other Findings" values={doc.oeFindings ?? []} suggestions={OE_LABELS} readOnly={readOnly}
+                  onChange={(v) => update((d) => ({ ...d, oeFindings: v }))} testId="oe" />
+              ),
+            }}
           />
           <ChipList
             title="Ix — Investigations"
@@ -911,6 +901,7 @@ function RxEditor({
             params={spec}
             testId="ix-input"
           />
+          <div ref={setIxSlot} className="empty:hidden" />
           <ChipList
             title="Dx — Diagnosis"
             values={doc.diagnoses}

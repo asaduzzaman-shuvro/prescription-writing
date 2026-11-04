@@ -7,6 +7,13 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await registerPatient(page, { name: `ENT Patient ${uniq()}`, age: "28", sex: "Female", mobile: mobile() });
   const exam = page.getByTestId("specialty-exam");
   await expect(exam).toBeVisible();
+  // Other Findings sit right after the Neck section, before Procedure done; Examination notes are gone.
+  const top = async (l: ReturnType<typeof page.getByTestId>) => (await l.boundingBox())!.y;
+  const neckAt = await top(exam.getByRole("button", { name: /^Neck/ })), findingsAt = await top(exam.getByTestId("oe-add"));
+  expect(neckAt).toBeLessThan(findingsAt);
+  expect(findingsAt).toBeLessThan(await top(exam.getByRole("button", { name: /^Procedure done/ })));
+  await expect(exam.getByText("Other Findings", { exact: true })).toBeVisible();
+  await expect(page.getByText("Examination notes")).toHaveCount(0);
 
   // Ear section is open by default. Right TM perforated, left intact.
   const tm = exam.getByLabel("TM", { exact: true });
@@ -37,13 +44,16 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await expect(exam.getByLabel("Weber")).toBeVisible();
   await expect(exam.getByLabel("ABC")).toHaveCount(2);
 
-  // Audiology section
-  await exam.getByRole("button", { name: /Audiology/ }).click();
-  for (const [f, db] of [[500, 40], [1000, 45], [2000, 50], [4000, 55]] as const) await exam.getByLabel(`right ac ${f}`).fill(String(db));
-  for (const [f, db] of [[500, 10], [1000, 15], [2000, 20]] as const) await exam.getByLabel(`right bc ${f}`).fill(String(db));
-  await expect(exam.getByText("PTA 47.5 dB (Moderate) · A-B gap 30 dB")).toBeVisible();
+  // Audiology is an investigation: its block sits below the Ix list, not with the exam sections.
+  const audiology = page.getByTestId("specialty-exam-ix");
+  await expect(exam.getByRole("button", { name: /Audiology/ })).toHaveCount(0);
+  expect((await audiology.boundingBox())!.y).toBeGreaterThan((await page.getByTestId("ix-input").boundingBox())!.y);
+  await audiology.getByRole("button", { name: /Audiology/ }).click();
+  for (const [f, db] of [[500, 40], [1000, 45], [2000, 50], [4000, 55]] as const) await audiology.getByLabel(`right ac ${f}`).fill(String(db));
+  for (const [f, db] of [[500, 10], [1000, 15], [2000, 20]] as const) await audiology.getByLabel(`right bc ${f}`).fill(String(db));
+  await expect(audiology.getByText("PTA 47.5 dB (Moderate) · A-B gap 30 dB")).toBeVisible();
 
-  // Throat & neck pictures: R tonsil congested and an ulcer on the oropharynx; a line drawn on the neck.
+  // Throat and neck pictures: R tonsil congested and an ulcer on the oropharynx; a line drawn on the neck.
   await exam.getByRole("button", { name: /Throat/ }).click();
   const oro = page.getByTestId("sketch-oropharynx");
   await oro.locator('[data-zone="r_tonsil"]').click(); // "Congested" is the first tool
@@ -53,6 +63,7 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   const ob = (await oro.boundingBox())!;
   await page.mouse.click(ob.x + ob.width * 0.6, ob.y + ob.height * (80 / 108));
   await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil congested; ulcer");
+  await exam.getByRole("button", { name: /^Neck/ }).click();
   await page.getByTestId("sketch-tools-neck").getByRole("button", { name: "Pen", exact: true }).click();
   await page.getByTestId("sketch-neck").scrollIntoViewIfNeeded();
   const nb = (await page.getByTestId("sketch-neck").boundingBox())!;
@@ -83,8 +94,12 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   // Each picture prints under its own findings, not in one block at the end.
   const examSection = (title: RegExp) => frame.locator("section", { has: frame.locator("h3", { hasText: title }) });
   await expect(examSection(/^Ear$/).locator("figcaption", { hasText: /^(Right|Left) TM$/ })).toHaveCount(2);
-  await expect(examSection(/^Throat & neck$/).locator("figcaption", { hasText: /^(Oropharynx|Neck)$/ })).toHaveCount(2);
-  await expect(examSection(/^Audiology$/).locator("figure.diagram")).toHaveCount(1);
+  await expect(examSection(/^Throat$/).locator("figcaption", { hasText: /^(Oropharynx|Neck)$/ })).toHaveCount(1);
+  await expect(examSection(/^Neck$/).locator("figcaption", { hasText: /^Neck$/ })).toHaveCount(1);
+  // Audiology prints inside Ix, with its audiogram; it has no heading of its own.
+  await expect(examSection(/^Ix$/).locator("figure.diagram")).toHaveCount(1);
+  await expect(examSection(/^Ix$/)).toContainText("R 47.5 dB (Moderate, A-B gap 30 dB)");
+  await expect(frame.locator("section h3", { hasText: /^Audiology$/ })).toHaveCount(0);
   await expect(frame.locator("section.diagrams")).toHaveCount(0);
   await expect(frame.locator(".instr")).toContainText("ডান কানে");
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/ent-print.png`, fullPage: true });
@@ -122,7 +137,7 @@ test("TM answer draws on the TM map; Reset sets both TMs back to normal after co
   await expect(exam.getByLabel("Perforation", { exact: true }).nth(0)).toHaveValue(""); // Perforation goes back to —
 });
 
-test("Throat & neck answers draw on the pictures; Reset clears a picture after confirming", async ({ page }) => {
+test("Throat and neck answers draw on the pictures; Reset clears a picture after confirming", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
   await registerPatient(page, { name: `ENT Throat ${uniq()}`, age: "30", sex: "Female", mobile: mobile() });
@@ -130,25 +145,132 @@ test("Throat & neck answers draw on the pictures; Reset clears a picture after c
   await exam.getByRole("button", { name: /Throat/ }).click();
   const oro = page.getByTestId("sketch-oropharynx"), larynx = page.getByTestId("sketch-larynx");
 
-  await exam.getByLabel("Tonsil (Brodsky)", { exact: true }).nth(0).selectOption("Grade 4");
-  await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#bbb");
+  // Oral cavity takes several findings; Other asks for the doctor's own words.
+  const field = (label: string) => exam.locator("span.text-slate-600", { hasText: new RegExp(`^${label}$`) }).locator("xpath=..");
+  const chip = (option: string) => field("Oral cavity").getByRole("button", { name: option, exact: true });
+  // Ulcer, Mass, Growth and Other each open their own description box when ticked.
+  const ulcer = field("Ulcer details").getByRole("textbox"), mass = field("Mass details").getByRole("textbox"), growth = field("Growth details").getByRole("textbox");
+  await expect(ulcer).toHaveCount(0);
+  await chip("Ulcer").click();
+  await ulcer.fill("Aphthous, 3 mm, lower lip");
+  await expect(mass).toHaveCount(0);
+  await chip("Mass").click();
+  await mass.fill("Hard palate, 1 cm");
+  await expect(growth).toHaveCount(0);
+  await chip("Growth").click();
+  await growth.fill("Lateral tongue");
+  await expect(chip("Ulcer")).toHaveClass(/bg-brand-50/);
+  await expect(ulcer).toHaveValue("Aphthous, 3 mm, lower lip");
+  await chip("Growth").click();
+  await expect(growth).toHaveCount(0);
+  const other = field("Other findings").getByRole("textbox");
+  await expect(other).toHaveCount(0);
+  await chip("Other").click();
+  await other.fill("Leukoplakia on buccal mucosa");
+  await expect(other).toHaveValue("Leukoplakia on buccal mucosa");
+
+  // Every tonsil grade redraws that tonsil at its size (no grey fill); the summary names the grade.
+  const grade = exam.getByLabel("Tonsil (Brodsky)", { exact: true }).nth(0), rTonsil = oro.locator('[data-zone="r_tonsil"]');
+  const usual = (await rTonsil.getAttribute("d"))!;
+  await expect(rTonsil).toHaveAttribute("stroke", "#111"); // outlined dark, so its size is easy to see
+  await grade.selectOption("Grade 1");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil grade 1");
+  await expect(rTonsil).not.toHaveAttribute("d", usual);
+  const g1 = (await rTonsil.getAttribute("d"))!;
+  await grade.selectOption("Grade 4");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil grade 4");
+  await expect(rTonsil).not.toHaveAttribute("d", g1);
+  await expect(rTonsil).toHaveAttribute("fill", "#fff");
+  const g4 = (await rTonsil.getAttribute("d"))!;
   await exam.getByRole("button", { name: "Pus in crypts", exact: true }).click();
-  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil swollen; pus / exudate");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil grade 4; pus / exudate");
+  // Congested anterior pillars hatch on both sides; unticking takes them away again.
+  const pillar = exam.getByRole("button", { name: "Anterior tonsillar pillar congested", exact: true });
+  await pillar.click();
+  for (const z of ["r_ant_pillar", "l_ant_pillar"]) await expect(oro.locator(`[data-zone="${z}"]`)).toHaveAttribute("fill", "url(#hatch)");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R anterior pillar congested, L anterior pillar congested, R tonsil grade 4; pus / exudate");
+  await pillar.click();
+  await expect(oro.locator('[data-zone="r_ant_pillar"]')).not.toHaveAttribute("fill", "url(#hatch)");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil grade 4; pus / exudate");
+  // Posterior pharyngeal wall takes several findings; Growth/Mass asks for a description.
+  const ppw = (option: string) => field("Posterior pharyngeal wall").getByRole("button", { name: option, exact: true });
+  await ppw("Congested").click();
+  await ppw("Bulge").click();
+  await expect(oro.locator('[data-zone="ppw"]')).toHaveAttribute("fill", "url(#hatch)");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall congested, R tonsil grade 4; pus / exudate, bulge (quinsy)");
+  // Every wall answer draws: Granular is dotted (and wins over Congested), post-nasal drip and a growth are marked.
+  await ppw("Granular").click();
+  await expect(oro.locator('[data-zone="ppw"]')).toHaveAttribute("fill", "url(#stipple)");
+  await ppw("Post-nasal drip").click();
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall granular, R tonsil grade 4; pus / exudate, bulge (quinsy), post-nasal drip");
+  const ppwGrowth = field("Growth/Mass details").getByRole("textbox");
+  await expect(ppwGrowth).toHaveCount(0);
+  await ppw("Growth/Mass").click();
+  await ppwGrowth.fill("Left lateral wall, 1.5 cm");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall granular, R tonsil grade 4; pus / exudate, growth, bulge (quinsy), post-nasal drip");
+  await expect(ppw("Congested")).toHaveClass(/bg-brand-50/);
+  // Uvula / palate: Cleft palate and Ulcer/Growth/Mass each ask for a description; changing the answer swaps the box.
+  const uvula = exam.getByLabel("Uvula / palate", { exact: true });
+  const cleft = field("Cleft palate details").getByRole("textbox"), lesion = field("Ulcer/Growth/Mass details").getByRole("textbox");
+  await expect(cleft).toHaveCount(0);
+  await uvula.selectOption("Cleft palate");
+  await cleft.fill("Incomplete, soft palate only");
+  await expect(lesion).toHaveCount(0);
+  await uvula.selectOption("Ulcer/Growth/Mass");
+  await expect(cleft).toHaveCount(0);
+  await lesion.fill("Ulcer on uvula tip, 4 mm");
+  await expect(lesion).toHaveValue("Ulcer on uvula tip, 4 mm");
+  // A vocal cord polyp is drawn on the cord its answer names: stalk on the R cord (left of the picture) or the L cord.
+  const cords = exam.getByLabel("Vocal cords", { exact: true });
+  await cords.selectOption("Polyp (right)");
+  await expect(page.getByTestId("sketch-summary-larynx")).toHaveText("polyp");
+  await expect(larynx.locator('line[x1="44.1"]')).toHaveCount(1);
+  await cords.selectOption("Polyp (left)");
+  await expect(larynx.locator('line[x1="44.1"]')).toHaveCount(0);
+  await expect(larynx.locator('line[x1="54"]')).toHaveCount(1);
+  // So are a growth and an ulcer, on the body of the cord.
+  await cords.selectOption("Growth (left)");
+  await expect(page.getByTestId("sketch-summary-larynx")).toHaveText("growth");
+  await expect(larynx.locator('circle[cx="58"][cy="62"]')).toHaveCount(1);
+  await cords.selectOption("Ulcer (right)");
+  await expect(page.getByTestId("sketch-summary-larynx")).toHaveText("ulcer");
+  await expect(larynx.locator('circle[cx="44"][cy="61"]')).toHaveCount(2);
+  await expect(larynx.locator('circle[cx="58"][cy="62"]')).toHaveCount(0);
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Right cord palsy");
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Left cord palsy");
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#fff");
   await expect(larynx.locator('[data-zone="l_cord"]')).toHaveAttribute("fill", "#bbb");
-  await exam.getByLabel("Neck", { exact: true }).selectOption("Thyroid swelling");
+  await exam.getByRole("button", { name: /^Neck/ }).click();
+  // Neck takes several findings, each drawn and each with its own description box.
+  const neckChip = (option: string) => field("Neck").getByRole("button", { name: option, exact: true });
+  const thyroid = field("Thyroid swelling details").getByRole("textbox"), lnRight = field("LN enlarged right details").getByRole("textbox");
+  await expect(thyroid).toHaveCount(0);
+  await neckChip("Thyroid swelling").click();
+  await expect(page.getByTestId("sketch-summary-neck")).toHaveText("Thyroid enlarged");
+  await thyroid.fill("Diffuse, moves with swallowing");
+  // Other swelling has no fixed place on the picture: it asks for a description and draws nothing.
+  const otherSwelling = field("Other swelling details").getByRole("textbox");
+  await expect(otherSwelling).toHaveCount(0);
+  await neckChip("Other swelling").click();
+  await otherSwelling.fill("Sebaceous cyst, left posterior triangle");
+  await expect(page.getByTestId("sketch-summary-neck")).toHaveText("Thyroid enlarged");
+  await neckChip("LN enlarged right").click();
+  await expect(page.getByTestId("sketch-summary-neck")).toHaveText("R level II enlarged, Thyroid enlarged");
+  await lnRight.fill("Level II, 2 cm, firm");
+  await expect(thyroid).toHaveValue("Diffuse, moves with swallowing");
+  await neckChip("LN enlarged right").click();
+  await expect(lnRight).toHaveCount(0);
   await expect(page.getByTestId("sketch-summary-neck")).toHaveText("Thyroid enlarged");
 
   const reset = page.getByTestId("sketch-tools-oropharynx").getByRole("button", { name: "Reset", exact: true });
   page.once("dialog", (d) => void d.dismiss());
   await reset.click();
-  await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#bbb");
+  await expect(rTonsil).toHaveAttribute("d", g4);
   page.once("dialog", (d) => void d.accept());
   await reset.click();
-  await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#fff");
+  await expect(rTonsil).toHaveAttribute("d", usual);
+  await expect(oro.locator('[data-zone="ppw"]')).toHaveAttribute("fill", "#fff");
   await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveCount(0);
   await expect(larynx.locator('[data-zone="l_cord"]')).toHaveAttribute("fill", "#bbb"); // other pictures untouched
 });

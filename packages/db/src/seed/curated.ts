@@ -37,6 +37,16 @@ export async function seedLibraries(db: Db) {
   console.log("libraries: seeded");
 }
 
+/** An ENT template from before Neck became its own section: one section still holds both throat and neck fields. */
+function throatHoldsNeck(schema: string) {
+  try {
+    const parsed = JSON.parse(schema) as SpecialtyTemplateSchema;
+    return parsed.sections.some((sec) => sec.fields.some((f) => f.id === "thr_neck") && sec.fields.some((f) => f.id === "thr_tonsil"));
+  } catch {
+    return false;
+  }
+}
+
 /** ENT, eye, and vascular exam templates. Does not copy medicine products or demo logins. */
 export async function seedExamTemplates(db: Db) {
   const name = "ENT examination";
@@ -57,6 +67,8 @@ export async function seedExamTemplates(db: Db) {
     console.log(`ENT exam template: published v${latest.version + 1}`);
   } else if (latest.source !== "rx-curated" && !latest.schema.includes('"sketch"')) {
     console.log("ENT exam template was edited by an admin: add the oropharynx/larynx/neck picture fields in Admin → Specialty templates.");
+  } else if (latest.source !== "rx-curated" && throatHoldsNeck(latest.schema)) {
+    console.log("ENT exam template was edited by an admin: move the neck fields into their own Neck section in Admin → Specialty templates.");
   }
 
   const templates: [string, string, SpecialtyTemplateSchema][] = [

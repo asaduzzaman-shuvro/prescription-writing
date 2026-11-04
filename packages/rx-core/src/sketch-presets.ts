@@ -3,7 +3,7 @@ import { normalizeSketch, type NormalizedSketch, type SketchId } from "./sketche
 import type { Findings, LateralValue, SpecialtyTemplateSchema } from "./specialty";
 
 /**
- * Nose, throat & neck answers → the nose, throat and neck pictures. Like the TM map, an answer draws a starting
+ * Nose, throat and neck answers → the nose, throat and neck pictures. Like the TM map, an answer draws a starting
  * picture the doctor can still edit; changing the answer swaps only what the old answer drew.
  * Option text is matched as written in the ENT template, so a renamed option simply draws nothing.
  * Findings with no side in the answer (a single laryngeal polyp, growth, quinsy) and findings the
@@ -11,9 +11,10 @@ import type { Findings, LateralValue, SpecialtyTemplateSchema } from "./specialt
  * since guessing a side would put a wrong mark on the prescription.
  */
 
-/** What the answers draw on one picture: zone states and symbols. */
+/** What the answers draw on one picture: zone states, zone sizes (a tonsil's grade) and symbols. */
 export interface SketchPreset {
   zones: Record<string, string>;
+  sizes?: Record<string, number>;
   marks: PlacedMark[];
 }
 
@@ -61,14 +62,21 @@ const AT = {
   crust: { right: [42, 74], left: [58, 74] }, // on the inferior turbinates
   tonsil: { right: { pus: [24, 52], membrane: [24, 62] }, left: { pus: [76, 52], membrane: [76, 62] } },
   ppwBulge: [50, 56],
+  // Post-nasal drip runs down the upper wall either side of the uvula; a wall growth sits below a bulge.
+  pnd: [[40, 44], [60, 44]],
+  ppwGrowth: [50, 62],
   // Junction of the anterior and middle thirds of each cord: the usual site of vocal nodules.
   nodule: { right: [46.6, 49.7], left: [53.4, 49.7] },
+  // A cord polyp hangs from the free edge into the airway, a little behind the nodule site.
+  cordPolyp: { right: [48.6, 54], left: [51.4, 54] },
+  // A growth or ulcer sits on the body of the cord, below the polyp site.
+  cordLesion: { right: [44, 61], left: [56, 61] },
   midline: [50, 58],
 } as const;
 const mark = (kind: string, [x, y]: readonly [number, number]): PlacedMark => ({ kind, x, y });
 
 /**
- * Every picture's preset for these answers. Later rules win a zone (e.g. "Congested" over a grade's "Swollen"); within a
+ * Every picture's preset for these answers. Later rules win a zone (e.g. wall "Granular" over "Congested"); within a
  * multi-select field, the answer later in its option list wins (turbinate "Congested" over "Hypertrophied").
  */
 export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
@@ -109,21 +117,27 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
     if (k) nose.zones[`r_${k}`] = nose.zones[`l_${k}`] = "tender";
   }
 
+  // Each grade draws the tonsil at its size (Grade 0 in the fossa … Grade 4 nearly meeting at the midline).
   for (const s of ["right", "left"] as const) {
-    const grade = side(f, L.tonsilGrade, s);
-    if (grade === "Grade 3" || grade === "Grade 4") oro.zones[s === "right" ? "r_tonsil" : "l_tonsil"] = "swollen";
+    const grade = /^Grade ([0-4])$/.exec(side(f, L.tonsilGrade, s) ?? "")?.[1];
+    if (grade !== undefined) (oro.sizes ??= {})[s === "right" ? "r_tonsil" : "l_tonsil"] = Number(grade);
   }
   const surface = many(f, L.tonsil);
   if (surface.includes("Congested")) oro.zones.r_tonsil = oro.zones.l_tonsil = "congested";
+  if (surface.includes("Anterior tonsillar pillar congested")) oro.zones.r_ant_pillar = oro.zones.l_ant_pillar = "congested";
   for (const s of ["right", "left"] as const) {
     if (surface.includes("Pus in crypts")) oro.marks.push(mark("pus", AT.tonsil[s].pus));
     if (surface.includes("Membrane")) oro.marks.push(mark("membrane", AT.tonsil[s].membrane));
   }
   if (surface.includes("Jugulodigastric LN enlarged")) neck.zones.r_ii = neck.zones.l_ii = "enlarged";
 
-  const ppw = one(f, L.ppw);
-  if (ppw === "Congested" || ppw === "Granular") oro.zones.ppw = "congested";
-  if (ppw === "Bulge") oro.marks.push(mark("bulge", AT.ppwBulge));
+  // Several findings since it became a multi-select; an older single answer still reads.
+  const ppw = list(f[L.ppw]);
+  if (ppw.includes("Congested")) oro.zones.ppw = "congested";
+  if (ppw.includes("Granular")) oro.zones.ppw = "granular";
+  if (ppw.includes("Post-nasal drip")) oro.marks.push(...AT.pnd.map((at) => mark("pnd", at)));
+  if (ppw.includes("Bulge")) oro.marks.push(mark("bulge", AT.ppwBulge));
+  if (ppw.includes("Growth/Mass")) oro.marks.push(mark("growth", AT.ppwGrowth));
 
   switch (one(f, L.cords)) {
     case "Congested":
@@ -138,26 +152,34 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
     case "Nodule":
       lar.marks.push(mark("nodule", AT.nodule.right), mark("nodule", AT.nodule.left));
       break;
+    case "Polyp (right)":
+      lar.marks.push(mark("polyp", AT.cordPolyp.right));
+      break;
+    case "Polyp (left)":
+      lar.marks.push(mark("polyp", AT.cordPolyp.left));
+      break;
+    case "Growth (right)":
+      lar.marks.push(mark("growth", AT.cordLesion.right));
+      break;
+    case "Growth (left)":
+      lar.marks.push(mark("growth", AT.cordLesion.left));
+      break;
+    case "Ulcer (right)":
+      lar.marks.push(mark("ulcer", AT.cordLesion.right));
+      break;
+    case "Ulcer (left)":
+      lar.marks.push(mark("ulcer", AT.cordLesion.left));
+      break;
   }
 
-  // Level II (jugulodigastric) is the usual first-echelon node.
-  switch (one(f, L.neck)) {
-    case "LN enlarged right":
-      neck.zones.r_ii = "enlarged";
-      break;
-    case "LN enlarged left":
-      neck.zones.l_ii = "enlarged";
-      break;
-    case "Bilateral LN":
-      neck.zones.r_ii = neck.zones.l_ii = "enlarged";
-      break;
-    case "Thyroid swelling":
-      neck.zones.thyroid = "enlarged";
-      break;
-    case "Midline swelling":
-      neck.marks.push(mark("mass", AT.midline));
-      break;
-  }
+  // Level II (jugulodigastric) is the usual first-echelon node. Several findings since Neck became a multi-select; an
+  // older single answer still reads.
+  const neckFindings = list(f[L.neck]);
+  if (neckFindings.includes("LN enlarged right") || neckFindings.includes("Bilateral LN")) neck.zones.r_ii = "enlarged";
+  if (neckFindings.includes("LN enlarged left") || neckFindings.includes("Bilateral LN")) neck.zones.l_ii = "enlarged";
+  if (neckFindings.includes("Thyroid swelling")) neck.zones.thyroid = "enlarged";
+  // "Other swelling" has no fixed place, so the doctor marks it. "Midline swelling" is no longer offered; a visit that saved it still draws it.
+  if (neckFindings.includes("Midline swelling")) neck.marks.push(mark("mass", AT.midline));
 
   return { nose, oropharynx: oro, larynx: lar, neck };
 }
@@ -170,13 +192,16 @@ export function applySketchPreset(id: SketchId, value: unknown, prev: SketchPres
   const zones = { ...v.zones };
   for (const [z, st] of Object.entries(prev.zones)) if (zones[z] === st) delete zones[z];
   Object.assign(zones, next.zones);
+  const sizes = { ...v.sizes };
+  for (const [z, n] of Object.entries(prev.sizes ?? {})) if (sizes[z] === n) delete sizes[z];
+  Object.assign(sizes, next.sizes);
   const marks = [...v.marks];
   for (const m of prev.marks) {
     const i = marks.findIndex((x) => sameMark(x, m));
     if (i >= 0) marks.splice(i, 1);
   }
   for (const m of next.marks) if (marks.length < DRAWING_LIMITS.marks && !marks.some((x) => sameMark(x, m))) marks.push(m);
-  return normalizeSketch(id, { zones, marks, strokes: v.strokes });
+  return normalizeSketch(id, { zones, sizes, marks, strokes: v.strokes });
 }
 
 /** Redraw each nose/throat/neck picture in the template whose answers changed between `prev` and `next`. */

@@ -116,8 +116,11 @@ export interface PrescriptionDoc {
   /** General O/E findings as "Label : value" lines (Pulse : Normal, Fundus : NAD). */
   oeFindings?: ExamFindingLine[];
   examination?: string;
-  /** Structured specialty exam (e.g. ENT) already flattened to printable lines. `id` is the template section id. */
-  specialtyFindings?: { id?: string; title: string; lines: ExamFindingLine[] }[];
+  /**
+   * Structured specialty exam (e.g. ENT) already flattened to printable lines. `id` is the template section id;
+   * `placement` "ix" prints the group inside Investigations (audiology results) instead of with the examination.
+   */
+  specialtyFindings?: { id?: string; title: string; lines: ExamFindingLine[]; placement?: "ix" }[];
   investigations: string[];
   /** Lab report findings, one line per report. Drafts print the live reports; finalising fixes them here. */
   labFindings?: { title: string; date: string; text: string }[];

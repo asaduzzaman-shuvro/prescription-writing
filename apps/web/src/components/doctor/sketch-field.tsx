@@ -9,6 +9,8 @@ import {
   sketchOverlaySvg,
   sketchText,
   sketchZoneFill,
+  sketchZonePath,
+  sketchZoneStroke,
   type NormalizedSketch,
   type SketchId,
   type SketchValue,
@@ -90,7 +92,7 @@ export function SketchField({ sketch, value, onChange, disabled }: { sketch: Ske
         <defs dangerouslySetInnerHTML={{ __html: DRAWING_DEFS }} />
         <g ref={surface.groupRef}>
           {def.zones.map((z) => (
-            <path key={z.id} d={z.path} data-zone={z.id} fill={sketchZoneFill(sketch, v, z.id)} stroke="#999" strokeWidth="0.5"
+            <path key={z.id} d={sketchZonePath(sketch, v, z.id)} data-zone={z.id} fill={sketchZoneFill(sketch, v, z.id)} stroke={sketchZoneStroke(sketch, z.id).stroke} strokeWidth={sketchZoneStroke(sketch, z.id).width}
               className={!disabled && tool.startsWith("state:") ? "cursor-pointer hover:opacity-70" : ""}>
               <title>{z.label}</title>
             </path>
