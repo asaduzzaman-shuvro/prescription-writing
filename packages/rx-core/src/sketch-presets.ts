@@ -69,6 +69,8 @@ const AT = {
   nodule: { right: [46.6, 49.7], left: [53.4, 49.7] },
   // A cord polyp hangs from the free edge into the airway, a little behind the nodule site.
   cordPolyp: { right: [48.6, 54], left: [51.4, 54] },
+  // A growth or ulcer sits on the body of the cord, below the polyp site.
+  cordLesion: { right: [44, 61], left: [56, 61] },
   midline: [50, 58],
 } as const;
 const mark = (kind: string, [x, y]: readonly [number, number]): PlacedMark => ({ kind, x, y });
@@ -155,6 +157,18 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
       break;
     case "Polyp (left)":
       lar.marks.push(mark("polyp", AT.cordPolyp.left));
+      break;
+    case "Growth (right)":
+      lar.marks.push(mark("growth", AT.cordLesion.right));
+      break;
+    case "Growth (left)":
+      lar.marks.push(mark("growth", AT.cordLesion.left));
+      break;
+    case "Ulcer (right)":
+      lar.marks.push(mark("ulcer", AT.cordLesion.right));
+      break;
+    case "Ulcer (left)":
+      lar.marks.push(mark("ulcer", AT.cordLesion.left));
       break;
   }
 

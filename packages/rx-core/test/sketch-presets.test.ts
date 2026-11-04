@@ -66,6 +66,15 @@ describe("throat & neck answers draw on the pictures", () => {
     expect(applySketchPreset("larynx", applySketchPreset("larynx", undefined, { zones: {}, marks: [] }, r), r, l).marks).toEqual(l.marks);
   });
 
+  it("a vocal cord growth or ulcer is drawn on the cord its answer names", () => {
+    const at = (cords: string) => sketchPresets({ thr_cords: cords }).larynx.marks;
+    expect(at("Growth (right)")).toEqual([{ kind: "growth", x: 44, y: 61 }]);
+    expect(at("Growth (left)")).toEqual([{ kind: "growth", x: 56, y: 61 }]);
+    expect(at("Ulcer (right)")).toEqual([{ kind: "ulcer", x: 44, y: 61 }]);
+    expect(at("Ulcer (left)")).toEqual([{ kind: "ulcer", x: 56, y: 61 }]);
+    expect(at("Growth")).toEqual([]); // an old answer with no side draws nothing
+  });
+
   it("draws nothing for normal answers, sideless lesions or renamed options", () => {
     const p = sketchPresets({ thr_tonsil: ["Normal"], thr_ppw: "Normal", thr_cords: "Polyp", thr_neck: "No lymphadenopathy", thr_uvula: "Pushed (quinsy)" });
     for (const s of Object.values(p)) expect(s).toEqual({ zones: {}, marks: [] });

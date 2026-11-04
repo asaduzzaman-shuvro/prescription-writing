@@ -215,6 +215,14 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await cords.selectOption("Polyp (left)");
   await expect(larynx.locator('line[x1="44.1"]')).toHaveCount(0);
   await expect(larynx.locator('line[x1="54"]')).toHaveCount(1);
+  // So are a growth and an ulcer, on the body of the cord.
+  await cords.selectOption("Growth (left)");
+  await expect(page.getByTestId("sketch-summary-larynx")).toHaveText("growth");
+  await expect(larynx.locator('circle[cx="58"][cy="62"]')).toHaveCount(1);
+  await cords.selectOption("Ulcer (right)");
+  await expect(page.getByTestId("sketch-summary-larynx")).toHaveText("ulcer");
+  await expect(larynx.locator('circle[cx="44"][cy="61"]')).toHaveCount(2);
+  await expect(larynx.locator('circle[cx="58"][cy="62"]')).toHaveCount(0);
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Right cord palsy");
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Left cord palsy");

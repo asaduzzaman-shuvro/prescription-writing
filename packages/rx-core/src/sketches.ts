@@ -142,6 +142,7 @@ const LARYNX: SketchDef = {
     { kind: "cyst", label: "Cyst", shape: "cyst" },
     { kind: "leukoplakia", label: "Leukoplakia", shape: "leukoplakia" },
     { kind: "growth", label: "Growth", shape: "growth" },
+    { kind: "ulcer", label: "Ulcer", shape: "ulcer" },
   ],
 };
 
