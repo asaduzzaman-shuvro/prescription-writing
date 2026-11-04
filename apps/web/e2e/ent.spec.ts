@@ -207,6 +207,14 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await expect(cleft).toHaveCount(0);
   await lesion.fill("Ulcer on uvula tip, 4 mm");
   await expect(lesion).toHaveValue("Ulcer on uvula tip, 4 mm");
+  // A vocal cord polyp is drawn on the cord its answer names: stalk on the R cord (left of the picture) or the L cord.
+  const cords = exam.getByLabel("Vocal cords", { exact: true });
+  await cords.selectOption("Polyp (right)");
+  await expect(page.getByTestId("sketch-summary-larynx")).toHaveText("polyp");
+  await expect(larynx.locator('line[x1="44.1"]')).toHaveCount(1);
+  await cords.selectOption("Polyp (left)");
+  await expect(larynx.locator('line[x1="44.1"]')).toHaveCount(0);
+  await expect(larynx.locator('line[x1="54"]')).toHaveCount(1);
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Right cord palsy");
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Left cord palsy");

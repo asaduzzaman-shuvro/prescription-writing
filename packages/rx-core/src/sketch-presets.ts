@@ -67,6 +67,8 @@ const AT = {
   ppwGrowth: [50, 62],
   // Junction of the anterior and middle thirds of each cord: the usual site of vocal nodules.
   nodule: { right: [46.6, 49.7], left: [53.4, 49.7] },
+  // A cord polyp hangs from the free edge into the airway, a little behind the nodule site.
+  cordPolyp: { right: [48.6, 54], left: [51.4, 54] },
   midline: [50, 58],
 } as const;
 const mark = (kind: string, [x, y]: readonly [number, number]): PlacedMark => ({ kind, x, y });
@@ -147,6 +149,12 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
       break;
     case "Nodule":
       lar.marks.push(mark("nodule", AT.nodule.right), mark("nodule", AT.nodule.left));
+      break;
+    case "Polyp (right)":
+      lar.marks.push(mark("polyp", AT.cordPolyp.right));
+      break;
+    case "Polyp (left)":
+      lar.marks.push(mark("polyp", AT.cordPolyp.left));
       break;
   }
 

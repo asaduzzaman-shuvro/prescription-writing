@@ -14,7 +14,7 @@ export type SketchId = (typeof SKETCH_IDS)[number];
 
 type Shape =
   | "ulcer" | "patch" | "growth" | "pus" | "bulge" | "nodule" | "polyp" | "cyst" | "leukoplakia" | "node" | "mass" | "scar" | "sinus"
-  | "bowR" | "bowL" | "spurR" | "spurL" | "hole" | "diamond" | "drip";
+  | "bowR" | "bowL" | "spurR" | "spurL" | "hole" | "diamond" | "drip" | "polypL";
 
 export interface SketchDef {
   id: SketchId;
@@ -283,6 +283,9 @@ function shapeSvg(shape: Shape, x: number, y: number, compact = false): string {
       return `<circle cx="${x}" cy="${y}" r="1.8" fill="#111"/>`;
     case "polyp":
       return `<line x1="${r1(x - 4.5)}" y1="${y}" x2="${r1(x - 2.6)}" y2="${y}" stroke="#111" stroke-width="0.8"/>` + c(0, 0, 2.6, "#fff", 0.9);
+    case "polypL":
+      // The same polyp with its stalk on the right: on the left vocal cord the stalk meets the cord, not the airway.
+      return `<line x1="${r1(x + 2.6)}" y1="${y}" x2="${r1(x + 4.5)}" y2="${y}" stroke="#111" stroke-width="0.8"/>` + c(0, 0, 2.6, "#fff", 0.9);
     case "cyst":
       return c(0, 0, 2.6, "none", 0.9) + c(0, 0, 1.2, "none", 0.5);
     case "leukoplakia":
@@ -322,7 +325,9 @@ function shapeSvg(shape: Shape, x: number, y: number, compact = false): string {
 
 export function sketchMarkSvg(id: SketchId, kind: string, x: number, y: number): string {
   const m = SKETCHES[id].marks.find((k) => k.kind === kind);
-  return m ? shapeSvg(m.shape, x, y) : "";
+  if (!m) return "";
+  // A polyp on the left vocal cord (right half of the picture) takes its stalk from that cord.
+  return shapeSvg(id === "larynx" && m.shape === "polyp" && x > 50 ? "polypL" : m.shape, x, y);
 }
 
 // ---------------------------------------------------------------------------

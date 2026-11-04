@@ -15,6 +15,7 @@ import {
   SKETCH_IDS,
   SKETCHES,
   sketchLegendSvg,
+  sketchMarkSvg,
   sketchSvg,
   sketchText,
   validateTemplateSchema,
@@ -95,6 +96,14 @@ describe("sketch values", () => {
     // Grade 4 reaches further towards the midline than grade 1.
     const medial = (p: string) => Number(/ ([\d.]+),57 A/.exec(p)![1]);
     expect(medial(r.sizes![4]!.path)).toBeGreaterThan(medial(r.sizes![1]!.path));
+  });
+
+  it("gives a polyp on the left vocal cord its stalk on that cord", () => {
+    expect(sketchMarkSvg("larynx", "polyp", 48.6, 54)).toContain('<line x1="44.1" y1="54" x2="46"'); // right cord: stalk to its left
+    expect(sketchMarkSvg("larynx", "polyp", 51.4, 54)).toContain('<line x1="54" y1="54" x2="55.9"'); // left cord: stalk to its right
+    expect(sketchMarkSvg("nose", "polyp", 61.5, 62)).toContain('<line x1="57" y1="62"'); // other pictures unchanged
+    const svg = sketchSvg("larynx", { marks: [{ kind: "polyp", x: 51.4, y: 54 }] });
+    expect(sanitizeSvg(svg)).toBe(svg);
   });
 
   it("names a tonsil's grade, and the wall's granular state and post-nasal drip", () => {

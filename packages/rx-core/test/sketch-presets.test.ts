@@ -58,6 +58,14 @@ describe("throat & neck answers draw on the pictures", () => {
     expect(at(["Normal"])).toEqual({ zones: {}, marks: [] });
   });
 
+  it("a vocal cord polyp is drawn on the cord its answer names", () => {
+    expect(sketchPresets({ thr_cords: "Polyp (right)" }).larynx).toEqual({ zones: {}, marks: [{ kind: "polyp", x: 48.6, y: 54 }] });
+    expect(sketchPresets({ thr_cords: "Polyp (left)" }).larynx).toEqual({ zones: {}, marks: [{ kind: "polyp", x: 51.4, y: 54 }] });
+    // Changing the side moves the polyp.
+    const r = sketchPresets({ thr_cords: "Polyp (right)" }).larynx, l = sketchPresets({ thr_cords: "Polyp (left)" }).larynx;
+    expect(applySketchPreset("larynx", applySketchPreset("larynx", undefined, { zones: {}, marks: [] }, r), r, l).marks).toEqual(l.marks);
+  });
+
   it("draws nothing for normal answers, sideless lesions or renamed options", () => {
     const p = sketchPresets({ thr_tonsil: ["Normal"], thr_ppw: "Normal", thr_cords: "Polyp", thr_neck: "No lymphadenopathy", thr_uvula: "Pushed (quinsy)" });
     for (const s of Object.values(p)) expect(s).toEqual({ zones: {}, marks: [] });
@@ -87,7 +95,7 @@ describe("throat & neck answers draw on the pictures", () => {
   });
 
   it("drawn pictures survive the print sanitiser", () => {
-    const p = sketchPresets({ thr_tonsil_grade: { right: "Grade 4", left: "Grade 0" }, thr_tonsil: ["Congested", "Anterior tonsillar pillar congested", "Pus in crypts", "Membrane"], thr_ppw: ["Granular", "Post-nasal drip", "Bulge", "Growth/Mass"], thr_cords: "Nodule", thr_neck: "Midline swelling" });
+    const p = sketchPresets({ thr_tonsil_grade: { right: "Grade 4", left: "Grade 0" }, thr_tonsil: ["Congested", "Anterior tonsillar pillar congested", "Pus in crypts", "Membrane"], thr_ppw: ["Granular", "Post-nasal drip", "Bulge", "Growth/Mass"], thr_cords: "Polyp (left)", thr_neck: "Midline swelling" });
     for (const id of ["oropharynx", "larynx", "neck"] as const) {
       const svg = sketchSvg(id, applySketchPreset(id, undefined, { zones: {}, marks: [] }, p[id]));
       expect(sanitizeSvg(svg)).toBe(svg);
