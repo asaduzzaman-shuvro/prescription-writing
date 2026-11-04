@@ -27,6 +27,7 @@ function everything(id: SketchId) {
   const def = SKETCHES[id];
   return {
     zones: Object.fromEntries(def.zones.map((z, i) => [z.id, def.states[i % def.states.length]!.id])),
+    sizes: Object.fromEntries(def.zones.filter((z) => z.sizes).map((z) => [z.id, z.sizes!.length - 1])),
     marks: def.marks.map((m, i) => ({ kind: m.kind, x: 20 + i * 10, y: 50 })),
     strokes: ["10,10 20,20 30,15"],
   };
@@ -71,6 +72,33 @@ describe("sketch values", () => {
     expect(normalizeSketch("neck", { marks: [{ kind: "scar", x: 50, y: 106 }] }).marks[0]!.y).toBe(106);
     const many = normalizeSketch("larynx", { marks: Array.from({ length: 60 }, () => ({ kind: "nodule", x: 1, y: 1 })) });
     expect(many.marks).toHaveLength(DRAWING_LIMITS.marks);
+  });
+
+  it("keeps a size only for a zone that has sizes, within range", () => {
+    const v = normalizeSketch("oropharynx", { sizes: { r_tonsil: 4, l_tonsil: 9, uvula: 1, ppw: "2", bogus: 1 } });
+    expect(v.sizes).toEqual({ r_tonsil: 4 });
+    expect(normalizeSketch("oropharynx", { sizes: { r_tonsil: 1.5 } })).toEqual({ zones: {}, marks: [], strokes: [] });
+  });
+
+  it("draws a tonsil at its grade's outline, and at the usual one without a grade", () => {
+    const paths = (v: unknown) => [...sketchSvg("oropharynx", v).matchAll(/<path d="([^"]+)" fill/g)].map((m) => m[1]);
+    const r = SKETCHES.oropharynx.zones.find((z) => z.id === "r_tonsil")!;
+    expect(r.sizes).toHaveLength(5);
+    expect(r.sizes![2]!.path).toBe(r.path); // grade 2 is the outline drawn without a grade
+    expect(paths({})).toContain(r.path);
+    expect(paths({ sizes: { r_tonsil: 4 } })).toContain(r.sizes![4]!.path);
+    expect(paths({ sizes: { r_tonsil: 4 } })).not.toContain(r.path);
+    // The tonsils are outlined dark so their size reads clearly; other areas stay light grey.
+    const svg = sketchSvg("oropharynx", { sizes: { r_tonsil: 0 } });
+    expect(svg).toContain(`<path d="${r.sizes![0]!.path}" fill="#fff" stroke="#111" stroke-width="0.9"/>`);
+    expect(svg).toMatch(/<path d="M10,72\.7 Q[^"]+" fill="#fff" stroke="#999" stroke-width="0.5"\/>/); // tongue
+    // Grade 4 reaches further towards the midline than grade 1.
+    const medial = (p: string) => Number(/ ([\d.]+),57 A/.exec(p)![1]);
+    expect(medial(r.sizes![4]!.path)).toBeGreaterThan(medial(r.sizes![1]!.path));
+  });
+
+  it("names a tonsil's grade", () => {
+    expect(sketchText("oropharynx", { sizes: { r_tonsil: 3, l_tonsil: 1 }, zones: { r_tonsil: "congested" } })).toBe("R tonsil grade 3 congested, L tonsil grade 1");
   });
 
   it("words findings in drawing order, whatever the tap order", () => {

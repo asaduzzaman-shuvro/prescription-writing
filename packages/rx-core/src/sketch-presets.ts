@@ -11,9 +11,10 @@ import type { Findings, LateralValue, SpecialtyTemplateSchema } from "./specialt
  * since guessing a side would put a wrong mark on the prescription.
  */
 
-/** What the answers draw on one picture: zone states and symbols. */
+/** What the answers draw on one picture: zone states, zone sizes (a tonsil's grade) and symbols. */
 export interface SketchPreset {
   zones: Record<string, string>;
+  sizes?: Record<string, number>;
   marks: PlacedMark[];
 }
 
@@ -109,9 +110,10 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
     if (k) nose.zones[`r_${k}`] = nose.zones[`l_${k}`] = "tender";
   }
 
+  // Each grade draws the tonsil at its size (Grade 0 in the fossa … Grade 4 nearly meeting at the midline).
   for (const s of ["right", "left"] as const) {
-    const grade = side(f, L.tonsilGrade, s);
-    if (grade === "Grade 3" || grade === "Grade 4") oro.zones[s === "right" ? "r_tonsil" : "l_tonsil"] = "swollen";
+    const grade = /^Grade ([0-4])$/.exec(side(f, L.tonsilGrade, s) ?? "")?.[1];
+    if (grade !== undefined) (oro.sizes ??= {})[s === "right" ? "r_tonsil" : "l_tonsil"] = Number(grade);
   }
   const surface = many(f, L.tonsil);
   if (surface.includes("Congested")) oro.zones.r_tonsil = oro.zones.l_tonsil = "congested";
@@ -172,13 +174,16 @@ export function applySketchPreset(id: SketchId, value: unknown, prev: SketchPres
   const zones = { ...v.zones };
   for (const [z, st] of Object.entries(prev.zones)) if (zones[z] === st) delete zones[z];
   Object.assign(zones, next.zones);
+  const sizes = { ...v.sizes };
+  for (const [z, n] of Object.entries(prev.sizes ?? {})) if (sizes[z] === n) delete sizes[z];
+  Object.assign(sizes, next.sizes);
   const marks = [...v.marks];
   for (const m of prev.marks) {
     const i = marks.findIndex((x) => sameMark(x, m));
     if (i >= 0) marks.splice(i, 1);
   }
   for (const m of next.marks) if (marks.length < DRAWING_LIMITS.marks && !marks.some((x) => sameMark(x, m))) marks.push(m);
-  return normalizeSketch(id, { zones, marks, strokes: v.strokes });
+  return normalizeSketch(id, { zones, sizes, marks, strokes: v.strokes });
 }
 
 /** Redraw each nose/throat/neck picture in the template whose answers changed between `prev` and `next`. */

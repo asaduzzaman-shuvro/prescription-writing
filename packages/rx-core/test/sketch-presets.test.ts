@@ -10,15 +10,17 @@ describe("throat & neck answers draw on the pictures", () => {
       thr_cords: "Nodule",
       thr_neck: "Thyroid swelling",
     });
-    expect(p.oropharynx.zones).toEqual({ r_tonsil: "swollen" });
+    expect(p.oropharynx.zones).toEqual({});
+    expect(p.oropharynx.sizes).toEqual({ r_tonsil: 4, l_tonsil: 2 });
     expect(p.oropharynx.marks.map((m) => m.kind)).toEqual(["pus", "pus", "bulge"]);
     expect(p.larynx.marks).toEqual([{ kind: "nodule", x: 46.6, y: 49.7 }, { kind: "nodule", x: 53.4, y: 49.7 }]);
     expect(p.neck.zones).toEqual({ r_ii: "enlarged", l_ii: "enlarged", thyroid: "enlarged" });
   });
 
-  it("congested tonsils win over a grade's swelling; a palsy marks that cord fixed", () => {
+  it("congested tonsils hatch at their grade's size; a palsy marks that cord fixed", () => {
     const p = sketchPresets({ thr_tonsil_grade: { right: "Grade 3" }, thr_tonsil: ["Congested"], thr_cords: "Left cord palsy", thr_neck: "Midline swelling" });
     expect(p.oropharynx.zones).toEqual({ r_tonsil: "congested", l_tonsil: "congested" });
+    expect(p.oropharynx.sizes).toEqual({ r_tonsil: 3 });
     expect(p.larynx.zones).toEqual({ l_cord: "fixed" });
     expect(p.neck.marks).toEqual([{ kind: "mass", x: 50, y: 58 }]);
   });
@@ -31,6 +33,18 @@ describe("throat & neck answers draw on the pictures", () => {
     const drawn = applySketchPreset("oropharynx", undefined, { zones: {}, marks: [] }, all);
     const next = sketchPresets({ thr_tonsil: ["Congested"] }).oropharynx;
     expect(applySketchPreset("oropharynx", drawn, all, next).zones).toEqual({ r_tonsil: "congested", l_tonsil: "congested" });
+  });
+
+  it("every tonsil grade draws the tonsil at its size, per side; changing the grade swaps it", () => {
+    for (const g of [0, 1, 2, 3, 4]) expect(sketchPresets({ thr_tonsil_grade: { right: `Grade ${g}`, left: `Grade ${g}` } }).oropharynx).toEqual({ zones: {}, sizes: { r_tonsil: g, l_tonsil: g }, marks: [] });
+    expect(sketchPresets({ thr_tonsil_grade: { left: "Grade 1" } }).oropharynx.sizes).toEqual({ l_tonsil: 1 });
+    const g3 = sketchPresets({ thr_tonsil_grade: { right: "Grade 3", left: "Grade 3" } }).oropharynx;
+    const drawn = applySketchPreset("oropharynx", { zones: { uvula: "swollen" } }, { zones: {}, marks: [] }, g3);
+    expect(drawn.sizes).toEqual({ r_tonsil: 3, l_tonsil: 3 });
+    const g1 = sketchPresets({ thr_tonsil_grade: { right: "Grade 1", left: "Grade 3" } }).oropharynx;
+    expect(applySketchPreset("oropharynx", drawn, g3, g1)).toEqual({ zones: { uvula: "swollen" }, sizes: { r_tonsil: 1, l_tonsil: 3 }, marks: [], strokes: [] });
+    // Clearing the grade puts the usual outline back.
+    expect(applySketchPreset("oropharynx", drawn, g3, { zones: {}, marks: [] }).sizes).toBeUndefined();
   });
 
   it("posterior pharyngeal wall takes several findings, and still reads an old single answer", () => {
@@ -70,7 +84,7 @@ describe("throat & neck answers draw on the pictures", () => {
   });
 
   it("drawn pictures survive the print sanitiser", () => {
-    const p = sketchPresets({ thr_tonsil: ["Congested", "Anterior tonsillar pillar congested", "Pus in crypts", "Membrane"], thr_ppw: "Bulge", thr_cords: "Nodule", thr_neck: "Midline swelling" });
+    const p = sketchPresets({ thr_tonsil_grade: { right: "Grade 4", left: "Grade 0" }, thr_tonsil: ["Congested", "Anterior tonsillar pillar congested", "Pus in crypts", "Membrane"], thr_ppw: "Bulge", thr_cords: "Nodule", thr_neck: "Midline swelling" });
     for (const id of ["oropharynx", "larynx", "neck"] as const) {
       const svg = sketchSvg(id, applySketchPreset(id, undefined, { zones: {}, marks: [] }, p[id]));
       expect(sanitizeSvg(svg)).toBe(svg);

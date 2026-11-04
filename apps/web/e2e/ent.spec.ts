@@ -156,24 +156,35 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await other.fill("Leukoplakia on buccal mucosa");
   await expect(other).toHaveValue("Leukoplakia on buccal mucosa");
 
-  await exam.getByLabel("Tonsil (Brodsky)", { exact: true }).nth(0).selectOption("Grade 4");
-  await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#bbb");
+  // Every tonsil grade redraws that tonsil at its size (no grey fill); the summary names the grade.
+  const grade = exam.getByLabel("Tonsil (Brodsky)", { exact: true }).nth(0), rTonsil = oro.locator('[data-zone="r_tonsil"]');
+  const usual = (await rTonsil.getAttribute("d"))!;
+  await expect(rTonsil).toHaveAttribute("stroke", "#111"); // outlined dark, so its size is easy to see
+  await grade.selectOption("Grade 1");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil grade 1");
+  await expect(rTonsil).not.toHaveAttribute("d", usual);
+  const g1 = (await rTonsil.getAttribute("d"))!;
+  await grade.selectOption("Grade 4");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil grade 4");
+  await expect(rTonsil).not.toHaveAttribute("d", g1);
+  await expect(rTonsil).toHaveAttribute("fill", "#fff");
+  const g4 = (await rTonsil.getAttribute("d"))!;
   await exam.getByRole("button", { name: "Pus in crypts", exact: true }).click();
-  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil swollen; pus / exudate");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil grade 4; pus / exudate");
   // Congested anterior pillars hatch on both sides; unticking takes them away again.
   const pillar = exam.getByRole("button", { name: "Anterior tonsillar pillar congested", exact: true });
   await pillar.click();
   for (const z of ["r_ant_pillar", "l_ant_pillar"]) await expect(oro.locator(`[data-zone="${z}"]`)).toHaveAttribute("fill", "url(#hatch)");
-  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R anterior pillar congested, L anterior pillar congested, R tonsil swollen; pus / exudate");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R anterior pillar congested, L anterior pillar congested, R tonsil grade 4; pus / exudate");
   await pillar.click();
   await expect(oro.locator('[data-zone="r_ant_pillar"]')).not.toHaveAttribute("fill", "url(#hatch)");
-  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil swollen; pus / exudate");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil grade 4; pus / exudate");
   // Posterior pharyngeal wall takes several findings; Growth/Mass asks for a description.
   const ppw = (option: string) => field("Posterior pharyngeal wall").getByRole("button", { name: option, exact: true });
   await ppw("Congested").click();
   await ppw("Bulge").click();
   await expect(oro.locator('[data-zone="ppw"]')).toHaveAttribute("fill", "url(#hatch)");
-  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall congested, R tonsil swollen; pus / exudate, bulge (quinsy)");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall congested, R tonsil grade 4; pus / exudate, bulge (quinsy)");
   const ppwGrowth = field("Growth/Mass details").getByRole("textbox");
   await expect(ppwGrowth).toHaveCount(0);
   await ppw("Growth/Mass").click();
@@ -202,10 +213,11 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   const reset = page.getByTestId("sketch-tools-oropharynx").getByRole("button", { name: "Reset", exact: true });
   page.once("dialog", (d) => void d.dismiss());
   await reset.click();
-  await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#bbb");
+  await expect(rTonsil).toHaveAttribute("d", g4);
   page.once("dialog", (d) => void d.accept());
   await reset.click();
-  await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#fff");
+  await expect(rTonsil).toHaveAttribute("d", usual);
+  await expect(oro.locator('[data-zone="ppw"]')).toHaveAttribute("fill", "#fff");
   await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveCount(0);
   await expect(larynx.locator('[data-zone="l_cord"]')).toHaveAttribute("fill", "#bbb"); // other pictures untouched
 });
