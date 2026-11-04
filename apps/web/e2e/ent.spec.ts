@@ -7,6 +7,13 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await registerPatient(page, { name: `ENT Patient ${uniq()}`, age: "28", sex: "Female", mobile: mobile() });
   const exam = page.getByTestId("specialty-exam");
   await expect(exam).toBeVisible();
+  // Other Findings sit right after the Neck section, before Procedure done; Examination notes are gone.
+  const top = async (l: ReturnType<typeof page.getByTestId>) => (await l.boundingBox())!.y;
+  const neckAt = await top(exam.getByRole("button", { name: /^Neck/ })), findingsAt = await top(exam.getByTestId("oe-add"));
+  expect(neckAt).toBeLessThan(findingsAt);
+  expect(findingsAt).toBeLessThan(await top(exam.getByRole("button", { name: /^Procedure done/ })));
+  await expect(exam.getByText("Other Findings", { exact: true })).toBeVisible();
+  await expect(page.getByText("Examination notes")).toHaveCount(0);
 
   // Ear section is open by default. Right TM perforated, left intact.
   const tm = exam.getByLabel("TM", { exact: true });

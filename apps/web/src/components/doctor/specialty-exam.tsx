@@ -44,7 +44,7 @@ import {
   type TemplateSection,
   withSubFieldParents,
 } from "@rx/core";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { SketchField } from "./sketch-field";
 
@@ -570,6 +570,7 @@ export function SpecialtyExam({
   readOnly,
   onFlatten,
   ixSlot,
+  after,
 }: {
   encounterId: string;
   specialtyCode: string;
@@ -580,6 +581,11 @@ export function SpecialtyExam({
    * this one form, so there is one set of answers and one autosave. Without a slot they render with the exam.
    */
   ixSlot?: HTMLElement | null;
+  /**
+   * Something of the visit's to show right after one exam section (Other Findings after Neck). Without that section,
+   * or without an exam, it shows after the exam.
+   */
+  after?: { section: string; node: ReactNode };
 }) {
   const db = usePowerSync();
   const { data: tpls } = useQuery<{ id: string; name: string; schema: string }>(
@@ -621,7 +627,7 @@ export function SpecialtyExam({
       setFindings(withSubFieldParents(schema, parseJson<Findings>(encs[0].exam_findings, {})));
   }, [encs, findings, tpl?.schema]);
 
-  if (!schema || findings === null) return null;
+  if (!schema || findings === null) return after ? <>{after.node}</> : null;
 
   function update(id: string, v: unknown) {
     // A TM / perforation answer redraws that ear's TM map; a nose, throat or neck answer redraws its picture.
@@ -833,7 +839,13 @@ export function SpecialtyExam({
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           {tpl!.name}
         </h3>
-        {inExam.map(sectionBlock)}
+        {inExam.map((s, si) => (
+          <Fragment key={s.id}>
+            {sectionBlock(s, si)}
+            {after?.section === s.id && after.node}
+          </Fragment>
+        ))}
+        {after && !inExam.some((s) => s.id === after.section) && after.node}
         {!ixSlot && ixBlock}
       </section>
       {ixSlot && ixBlock && createPortal(ixBlock, ixSlot)}
