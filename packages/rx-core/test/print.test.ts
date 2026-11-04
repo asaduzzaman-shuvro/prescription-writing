@@ -379,6 +379,34 @@ describe("exam pictures print under their own section", () => {
   });
 });
 
+describe("long prescriptions flow onto the next page", () => {
+  it("lets a section break across pages, keeping only its pieces whole", () => {
+    // A section kept whole that is taller than the rest of page 1 moves to page 2, and at the top of a column it takes
+    // the whole column (and the body) with it: page 1 printed blank.
+    const html = render();
+    expect(html).toContain("section { margin-bottom: 2.5mm; }");
+    expect(html).not.toMatch(/section \{[^}]*break-inside: avoid/);
+    expect(html).toMatch(/h3 \{[^}]*break-after: avoid/);
+    expect(html).toContain("li, .oe, .pre { break-inside: avoid; }");
+    expect(html).toMatch(/\.ear-row \{[^}]*break-inside: avoid/);
+  });
+
+  it("lays the left column out as a grid, not a column flexbox, which Chrome moved wholly onto page 2", () => {
+    expect(render()).toMatch(/\.left \{[^}]*display: grid; grid-template-rows: 1fr auto; \}/);
+    expect(render()).not.toMatch(/\.left \{[^}]*display: flex/);
+  });
+
+  it("keeps the pad's QR as the last row of the left column, after the findings", () => {
+    const html = renderPrescriptionHtml({
+      doc: SAMPLE_DOC, patient: SAMPLE_PATIENT, doctor: SAMPLE_DOCTOR, chamber: SAMPLE_CHAMBER, date: "2026-11-05",
+      settings: { ...DEFAULT_PRINT_SETTINGS, mode: "pad" }, fonts: { bengali: "", latin: "" },
+      qrSvg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`,
+    });
+    const left = html.slice(html.indexOf(`<div class="left">`), html.indexOf(`<div class="right">`));
+    expect(left).toMatch(/^<div class="left"><div class="left-main">[\s\S]*<\/div><div class="qr"><svg/);
+  });
+});
+
 describe("page margins", () => {
   it("leaves no @page margin for the browser's header/footer and pads every page instead", () => {
     const html = render({}, {}, { ...DEFAULT_PRINT_SETTINGS, mode: "pad" });

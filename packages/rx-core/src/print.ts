@@ -395,9 +395,9 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     sec("dx", list(doc.diagnoses)),
     sec("plan", list(doc.plan ?? [])),
     sec("notes", list([...birthNotes(patient), ...(doc.notes ?? [])])),
-    // Pinned to the bottom of the column, so nothing sits under the body to cut the divider short.
-    pad ? qr : "",
   ].join("");
+  // Pad: the QR is pinned to the bottom of the left column, so nothing sits under the body to cut the divider short.
+  const leftQr = pad ? qr : "";
 
   const items = doc.items
     .map((it, i) => {
@@ -476,10 +476,16 @@ header .bn-right { text-align: right; }
 header .bmdc, header .bmdc-bn { font-weight: 600; }
 .patient { display: flex; flex-wrap: wrap; gap: 1mm 6mm; padding: 2mm 0; border-bottom: 0.75pt solid #000; }
 .body { flex: 1; display: grid; grid-template-columns: ${s.leftColumnPct}% 1fr; }
-.left { border-right: 0.75pt solid #000; padding: 2mm 3mm 2mm 0; display: flex; flex-direction: column; }
+/* A two-row grid, not a column flexbox: the findings fill the column and the pad's QR takes the bottom row. Chrome
+   moves a flexbox column that runs past page 1 wholly onto page 2, which printed page 1 blank. */
+.left { border-right: 0.75pt solid #000; padding: 2mm 3mm 2mm 0; display: grid; grid-template-rows: 1fr auto; }
 .right { padding: 2mm 0 2mm 4mm; }
-section { margin-bottom: 2.5mm; break-inside: avoid; }
-h3 { font-size: 0.95em; margin: 0 0 1mm; text-decoration: underline; }
+/* A section may run onto the next page; only its pieces stay whole. A section kept whole that is too tall for the
+   rest of the page moves to the next one, and at the top of a column it takes the whole column with it, leaving
+   page 1 blank. A heading stays with its first line. */
+section { margin-bottom: 2.5mm; }
+h3 { font-size: 0.95em; margin: 0 0 1mm; text-decoration: underline; break-after: avoid; }
+li, .oe, .pre { break-inside: avoid; }
 ul { margin: 0; padding-left: 4mm; }
 .pre { white-space: pre-wrap; margin: 0; }
 .rx-symbol { font-size: 2em; font-weight: 700; line-height: 1; margin-bottom: 1mm; }
@@ -499,13 +505,13 @@ ul + .diagrams { margin-top: 1.5mm; }
 .diagram.legend { vertical-align: top; text-align: left; }
 .diagram.legend figcaption { margin-bottom: 0.5mm; }
 .diagram.legend .svg svg { width: 32mm; }
-.ear-row { display: flex; align-items: flex-start; gap: 2mm; margin-bottom: 2mm; }
+.ear-row { display: flex; align-items: flex-start; gap: 2mm; margin-bottom: 2mm; break-inside: avoid; }
 .ear-row .diagram { margin: 0; }
 .ear-row .diagram.tm { flex: 0 1 20mm; min-width: 14mm; }
 .ear-row .diagram.tm .svg svg, .ear-row .diagram.legend .svg svg { width: 100%; }
 .ear-row .diagram.legend { flex: 0 0 auto; }
 .diagram.neck .svg svg { width: 30mm; }
-.qr { margin-top: auto; padding-top: 2mm; break-inside: avoid; }
+.qr { padding-top: 2mm; break-inside: avoid; }
 .qr svg { width: 18mm; height: 18mm; }
 .sign { text-align: center; min-width: 45mm; width: fit-content; margin: calc(15mm + 40px) 0 0 auto; break-inside: avoid; }
 .sign img { max-height: 14mm; max-width: 45mm; }
@@ -533,7 +539,7 @@ header .logo img { max-height: 18mm; max-width: 30mm; }
   ${header}
   ${patientStrip}
   <div class="body">
-    <div class="left">${left}</div>
+    <div class="left"><div class="left-main">${left}</div>${leftQr}</div>
     <div class="right">${right}</div>
   </div>
   ${footer}
