@@ -142,6 +142,14 @@ describe("flattenFindings", () => {
     expect(line({ thr_ppw: ["Normal"] })).toBeUndefined();
     expect(pruneSubFields(ENT_TEMPLATE, { ...f, thr_ppw: ["Granular"] }).thr_ppw_growth).toBeUndefined();
   });
+  it("prints the Uvula / palate description after Cleft palate or Ulcer/Growth/Mass, and drops it when the answer changes", () => {
+    const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Uvula / palate");
+    expect(line({ thr_uvula: "Cleft palate", thr_uvula_cleft: "Incomplete, soft palate only" })).toEqual({ label: "Uvula / palate", value: "Cleft palate (Incomplete, soft palate only)" });
+    const lesion = { thr_uvula: "Ulcer/Growth/Mass", thr_uvula_lesion: "Ulcer on uvula tip, 4 mm" };
+    expect(line(lesion)).toEqual({ label: "Uvula / palate", value: "Ulcer/Growth/Mass (Ulcer on uvula tip, 4 mm)" });
+    expect(line({ ...lesion, thr_uvula: "Bifid" })).toEqual({ label: "Uvula / palate", value: "Bifid" });
+    expect(pruneSubFields(ENT_TEMPLATE, { ...lesion, thr_uvula: "Bifid" }).thr_uvula_lesion).toBeUndefined();
+  });
   it("prints Mass and Growth descriptions after their options, in tick order", () => {
     const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Oral cavity");
     const f = { thr_oral: ["Growth", "Mass"], thr_oral_mass: "Hard palate, 1 cm", thr_oral_growth: "Lateral tongue, ulcero-proliferative" };

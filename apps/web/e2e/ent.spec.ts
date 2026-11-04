@@ -179,6 +179,17 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await ppw("Growth/Mass").click();
   await ppwGrowth.fill("Left lateral wall, 1.5 cm");
   await expect(ppw("Congested")).toHaveClass(/bg-brand-50/);
+  // Uvula / palate: Cleft palate and Ulcer/Growth/Mass each ask for a description; changing the answer swaps the box.
+  const uvula = exam.getByLabel("Uvula / palate", { exact: true });
+  const cleft = field("Cleft palate details").getByRole("textbox"), lesion = field("Ulcer/Growth/Mass details").getByRole("textbox");
+  await expect(cleft).toHaveCount(0);
+  await uvula.selectOption("Cleft palate");
+  await cleft.fill("Incomplete, soft palate only");
+  await expect(lesion).toHaveCount(0);
+  await uvula.selectOption("Ulcer/Growth/Mass");
+  await expect(cleft).toHaveCount(0);
+  await lesion.fill("Ulcer on uvula tip, 4 mm");
+  await expect(lesion).toHaveValue("Ulcer on uvula tip, 4 mm");
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Right cord palsy");
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Left cord palsy");
