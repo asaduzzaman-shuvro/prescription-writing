@@ -150,6 +150,10 @@ describe("flattenFindings", () => {
     expect(line({ ...lesion, thr_uvula: "Bifid" })).toEqual({ label: "Uvula / palate", value: "Bifid" });
     expect(pruneSubFields(ENT_TEMPLATE, { ...lesion, thr_uvula: "Bifid" }).thr_uvula_lesion).toBeUndefined();
   });
+  it("prints the laryngoscopy text as FOL or I/L findings", () => {
+    const throat = flattenFindings(ENT_TEMPLATE, { thr_idl: "Bilateral vocal cords mobile" }).groups.find((g) => g.id === "throat");
+    expect(throat?.lines).toEqual([{ label: "FOL or I/L findings", value: "Bilateral vocal cords mobile" }]);
+  });
   it("prints Mass and Growth descriptions after their options, in tick order", () => {
     const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Oral cavity");
     const f = { thr_oral: ["Growth", "Mass"], thr_oral_mass: "Hard palate, 1 cm", thr_oral_growth: "Lateral tongue, ulcero-proliferative" };
