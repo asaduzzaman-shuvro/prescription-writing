@@ -134,6 +134,14 @@ describe("flattenFindings", () => {
     expect(line({ ...f, thr_oral: ["Dental caries"] })).toEqual({ label: "Oral cavity", value: "Dental caries" });
     expect(pruneSubFields(ENT_TEMPLATE, { ...f, thr_oral: ["Dental caries"] }).thr_oral_ulcer).toBeUndefined();
   });
+  it("prints several Posterior pharyngeal wall findings with the Growth/Mass description, and drops it with the option", () => {
+    const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Posterior pharyngeal wall");
+    const f = { thr_ppw: ["Granular", "Growth/Mass"], thr_ppw_growth: "Left lateral wall, 1.5 cm, friable" };
+    expect(line(f)).toEqual({ label: "Posterior pharyngeal wall", value: "Granular, Growth/Mass (Left lateral wall, 1.5 cm, friable)" });
+    expect(line({ thr_ppw: "Post-nasal drip" })).toEqual({ label: "Posterior pharyngeal wall", value: "Post-nasal drip" });
+    expect(line({ thr_ppw: ["Normal"] })).toBeUndefined();
+    expect(pruneSubFields(ENT_TEMPLATE, { ...f, thr_ppw: ["Granular"] }).thr_ppw_growth).toBeUndefined();
+  });
   it("prints Mass and Growth descriptions after their options, in tick order", () => {
     const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Oral cavity");
     const f = { thr_oral: ["Growth", "Mass"], thr_oral_mass: "Hard palate, 1 cm", thr_oral_growth: "Lateral tongue, ulcero-proliferative" };

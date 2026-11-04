@@ -168,6 +168,17 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await pillar.click();
   await expect(oro.locator('[data-zone="r_ant_pillar"]')).not.toHaveAttribute("fill", "url(#hatch)");
   await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil swollen; pus / exudate");
+  // Posterior pharyngeal wall takes several findings; Growth/Mass asks for a description.
+  const ppw = (option: string) => field("Posterior pharyngeal wall").getByRole("button", { name: option, exact: true });
+  await ppw("Congested").click();
+  await ppw("Bulge").click();
+  await expect(oro.locator('[data-zone="ppw"]')).toHaveAttribute("fill", "url(#hatch)");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall congested, R tonsil swollen; pus / exudate, bulge (quinsy)");
+  const ppwGrowth = field("Growth/Mass details").getByRole("textbox");
+  await expect(ppwGrowth).toHaveCount(0);
+  await ppw("Growth/Mass").click();
+  await ppwGrowth.fill("Left lateral wall, 1.5 cm");
+  await expect(ppw("Congested")).toHaveClass(/bg-brand-50/);
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Right cord palsy");
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Left cord palsy");

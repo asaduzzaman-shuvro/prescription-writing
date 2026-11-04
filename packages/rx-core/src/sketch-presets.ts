@@ -122,9 +122,10 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
   }
   if (surface.includes("Jugulodigastric LN enlarged")) neck.zones.r_ii = neck.zones.l_ii = "enlarged";
 
-  const ppw = one(f, L.ppw);
-  if (ppw === "Congested" || ppw === "Granular") oro.zones.ppw = "congested";
-  if (ppw === "Bulge") oro.marks.push(mark("bulge", AT.ppwBulge));
+  // Several findings since it became a multi-select; an older single answer still reads.
+  const ppw = list(f[L.ppw]);
+  if (ppw.includes("Congested") || ppw.includes("Granular")) oro.zones.ppw = "congested";
+  if (ppw.includes("Bulge")) oro.marks.push(mark("bulge", AT.ppwBulge));
 
   switch (one(f, L.cords)) {
     case "Congested":

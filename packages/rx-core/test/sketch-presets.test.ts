@@ -33,6 +33,14 @@ describe("throat & neck answers draw on the pictures", () => {
     expect(applySketchPreset("oropharynx", drawn, all, next).zones).toEqual({ r_tonsil: "congested", l_tonsil: "congested" });
   });
 
+  it("posterior pharyngeal wall takes several findings, and still reads an old single answer", () => {
+    const p = sketchPresets({ thr_ppw: ["Granular", "Bulge", "Growth/Mass"] }).oropharynx;
+    expect(p.zones).toEqual({ ppw: "congested" });
+    expect(p.marks).toEqual([{ kind: "bulge", x: 50, y: 56 }]);
+    expect(sketchPresets({ thr_ppw: "Bulge" }).oropharynx.marks).toEqual([{ kind: "bulge", x: 50, y: 56 }]);
+    expect(sketchPresets({ thr_ppw: ["Normal"] }).oropharynx).toEqual({ zones: {}, marks: [] });
+  });
+
   it("draws nothing for normal answers, sideless lesions or renamed options", () => {
     const p = sketchPresets({ thr_tonsil: ["Normal"], thr_ppw: "Normal", thr_cords: "Polyp", thr_neck: "No lymphadenopathy", thr_uvula: "Pushed (quinsy)" });
     for (const s of Object.values(p)) expect(s).toEqual({ zones: {}, marks: [] });
