@@ -160,6 +160,14 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByRole("button", { name: "Pus in crypts", exact: true }).click();
   await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil swollen; pus / exudate");
+  // Congested anterior pillars hatch on both sides; unticking takes them away again.
+  const pillar = exam.getByRole("button", { name: "Anterior tonsillar pillar congested", exact: true });
+  await pillar.click();
+  for (const z of ["r_ant_pillar", "l_ant_pillar"]) await expect(oro.locator(`[data-zone="${z}"]`)).toHaveAttribute("fill", "url(#hatch)");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R anterior pillar congested, L anterior pillar congested, R tonsil swollen; pus / exudate");
+  await pillar.click();
+  await expect(oro.locator('[data-zone="r_ant_pillar"]')).not.toHaveAttribute("fill", "url(#hatch)");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil swollen; pus / exudate");
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Right cord palsy");
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Left cord palsy");

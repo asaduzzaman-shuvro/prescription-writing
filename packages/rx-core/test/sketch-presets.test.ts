@@ -23,6 +23,16 @@ describe("throat & neck answers draw on the pictures", () => {
     expect(p.neck.marks).toEqual([{ kind: "mass", x: 50, y: 58 }]);
   });
 
+  it("congested anterior pillars hatch both sides, alongside congested tonsils", () => {
+    expect(sketchPresets({ thr_tonsil: ["Anterior tonsillar pillar congested"] }).oropharynx.zones).toEqual({ r_ant_pillar: "congested", l_ant_pillar: "congested" });
+    const all = sketchPresets({ thr_tonsil: ["Congested", "Anterior tonsillar pillar congested"] }).oropharynx;
+    expect(all.zones).toEqual({ r_tonsil: "congested", l_tonsil: "congested", r_ant_pillar: "congested", l_ant_pillar: "congested" });
+    // Unticking the pillar option clears only the pillars.
+    const drawn = applySketchPreset("oropharynx", undefined, { zones: {}, marks: [] }, all);
+    const next = sketchPresets({ thr_tonsil: ["Congested"] }).oropharynx;
+    expect(applySketchPreset("oropharynx", drawn, all, next).zones).toEqual({ r_tonsil: "congested", l_tonsil: "congested" });
+  });
+
   it("draws nothing for normal answers, sideless lesions or renamed options", () => {
     const p = sketchPresets({ thr_tonsil: ["Normal"], thr_ppw: "Normal", thr_cords: "Polyp", thr_neck: "No lymphadenopathy", thr_uvula: "Pushed (quinsy)" });
     for (const s of Object.values(p)) expect(s).toEqual({ zones: {}, marks: [] });
@@ -52,7 +62,7 @@ describe("throat & neck answers draw on the pictures", () => {
   });
 
   it("drawn pictures survive the print sanitiser", () => {
-    const p = sketchPresets({ thr_tonsil: ["Congested", "Pus in crypts", "Membrane"], thr_ppw: "Bulge", thr_cords: "Nodule", thr_neck: "Midline swelling" });
+    const p = sketchPresets({ thr_tonsil: ["Congested", "Anterior tonsillar pillar congested", "Pus in crypts", "Membrane"], thr_ppw: "Bulge", thr_cords: "Nodule", thr_neck: "Midline swelling" });
     for (const id of ["oropharynx", "larynx", "neck"] as const) {
       const svg = sketchSvg(id, applySketchPreset(id, undefined, { zones: {}, marks: [] }, p[id]));
       expect(sanitizeSvg(svg)).toBe(svg);

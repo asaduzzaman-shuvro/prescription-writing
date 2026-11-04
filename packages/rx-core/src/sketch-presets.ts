@@ -115,6 +115,7 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
   }
   const surface = many(f, L.tonsil);
   if (surface.includes("Congested")) oro.zones.r_tonsil = oro.zones.l_tonsil = "congested";
+  if (surface.includes("Anterior tonsillar pillar congested")) oro.zones.r_ant_pillar = oro.zones.l_ant_pillar = "congested";
   for (const s of ["right", "left"] as const) {
     if (surface.includes("Pus in crypts")) oro.marks.push(mark("pus", AT.tonsil[s].pus));
     if (surface.includes("Membrane")) oro.marks.push(mark("membrane", AT.tonsil[s].membrane));
