@@ -37,11 +37,14 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await expect(exam.getByLabel("Weber")).toBeVisible();
   await expect(exam.getByLabel("ABC")).toHaveCount(2);
 
-  // Audiology section
-  await exam.getByRole("button", { name: /Audiology/ }).click();
-  for (const [f, db] of [[500, 40], [1000, 45], [2000, 50], [4000, 55]] as const) await exam.getByLabel(`right ac ${f}`).fill(String(db));
-  for (const [f, db] of [[500, 10], [1000, 15], [2000, 20]] as const) await exam.getByLabel(`right bc ${f}`).fill(String(db));
-  await expect(exam.getByText("PTA 47.5 dB (Moderate) · A-B gap 30 dB")).toBeVisible();
+  // Audiology is an investigation: its block sits below the Ix list, not with the exam sections.
+  const audiology = page.getByTestId("specialty-exam-ix");
+  await expect(exam.getByRole("button", { name: /Audiology/ })).toHaveCount(0);
+  expect((await audiology.boundingBox())!.y).toBeGreaterThan((await page.getByTestId("ix-input").boundingBox())!.y);
+  await audiology.getByRole("button", { name: /Audiology/ }).click();
+  for (const [f, db] of [[500, 40], [1000, 45], [2000, 50], [4000, 55]] as const) await audiology.getByLabel(`right ac ${f}`).fill(String(db));
+  for (const [f, db] of [[500, 10], [1000, 15], [2000, 20]] as const) await audiology.getByLabel(`right bc ${f}`).fill(String(db));
+  await expect(audiology.getByText("PTA 47.5 dB (Moderate) · A-B gap 30 dB")).toBeVisible();
 
   // Throat and neck pictures: R tonsil congested and an ulcer on the oropharynx; a line drawn on the neck.
   await exam.getByRole("button", { name: /Throat/ }).click();
@@ -86,7 +89,10 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await expect(examSection(/^Ear$/).locator("figcaption", { hasText: /^(Right|Left) TM$/ })).toHaveCount(2);
   await expect(examSection(/^Throat$/).locator("figcaption", { hasText: /^(Oropharynx|Neck)$/ })).toHaveCount(1);
   await expect(examSection(/^Neck$/).locator("figcaption", { hasText: /^Neck$/ })).toHaveCount(1);
-  await expect(examSection(/^Audiology$/).locator("figure.diagram")).toHaveCount(1);
+  // Audiology prints inside Ix, with its audiogram; it has no heading of its own.
+  await expect(examSection(/^Ix$/).locator("figure.diagram")).toHaveCount(1);
+  await expect(examSection(/^Ix$/)).toContainText("R 47.5 dB (Moderate, A-B gap 30 dB)");
+  await expect(frame.locator("section h3", { hasText: /^Audiology$/ })).toHaveCount(0);
   await expect(frame.locator("section.diagrams")).toHaveCount(0);
   await expect(frame.locator(".instr")).toContainText("ডান কানে");
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/ent-print.png`, fullPage: true });

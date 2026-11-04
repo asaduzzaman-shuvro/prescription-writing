@@ -82,6 +82,8 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
     {
       id: "audiology",
       title: "Audiology",
+      // Audiology results are investigations: they sit below the Ix list and print inside Ix.
+      placement: "ix",
       fields: [
         { id: "aud_pta", label: "PTA", type: "audiogram" },
         { id: "aud_tymp", label: "Tympanogram", type: "select", lateral: true, options: ["Type A", "Type As", "Type Ad", "Type B", "Type C"] },

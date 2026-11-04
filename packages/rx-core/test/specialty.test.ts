@@ -47,6 +47,9 @@ describe("flattenFindings", () => {
       aud_pta: { right: { ac: { 500: 40, 1000: 45, 2000: 50, 4000: 55 }, bc: { 500: 10, 1000: 15, 2000: 20 } } },
     });
     expect(out.groups.map((g) => g.title)).toEqual(["Ear", "Nose & PNS", "Throat", "Audiology"]);
+    // Audiology is placed under Investigations; the other groups carry no placement.
+    expect(out.groups.map((g) => g.placement)).toEqual([undefined, undefined, undefined, "ix"]);
+    expect("placement" in out.groups[0]!).toBe(false);
     const ear = out.groups[0]!.lines;
     expect(ear).toContainEqual({ label: "TM", value: "R Perforated, L Intact" });
     expect(ear).toContainEqual({ label: "TM map", value: "R: perforation AI+PI", abovePictures: true });
@@ -159,6 +162,11 @@ describe("flattenFindings", () => {
     const pruned = pruneSubFields(ENT_TEMPLATE, { ...f, thr_neck: ["Thyroid swelling"] });
     expect(pruned.thr_neck_ln_r).toBeUndefined();
     expect(pruned.thr_neck_thyroid).toBe("Diffuse, moves with swallowing");
+  });
+  it("accepts a section placed under Investigations, and no other placement", () => {
+    expect(validateTemplateSchema(ENT_TEMPLATE)).toEqual([]);
+    const bad = { sections: [{ id: "x", title: "X", placement: "rx", fields: [{ id: "f", label: "F", type: "text" }] }] };
+    expect(validateTemplateSchema(bad)).toEqual(['section x: placement must be "ix" when given']);
   });
   it("prints the laryngoscopy text as FOL or I/L findings", () => {
     const throat = flattenFindings(ENT_TEMPLATE, { thr_idl: "Bilateral vocal cords mobile" }).groups.find((g) => g.id === "throat");

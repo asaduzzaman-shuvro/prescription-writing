@@ -45,6 +45,7 @@ import {
   withSubFieldParents,
 } from "@rx/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { SketchField } from "./sketch-field";
 
 type Flatten = (
@@ -568,11 +569,17 @@ export function SpecialtyExam({
   specialtyCode,
   readOnly,
   onFlatten,
+  ixSlot,
 }: {
   encounterId: string;
   specialtyCode: string;
   readOnly: boolean;
   onFlatten: Flatten;
+  /**
+   * Where sections placed under Investigations (audiology) render: an element below the Ix list. They stay part of
+   * this one form, so there is one set of answers and one autosave. Without a slot they render with the exam.
+   */
+  ixSlot?: HTMLElement | null;
 }) {
   const db = usePowerSync();
   const { data: tpls } = useQuery<{ id: string; name: string; schema: string }>(
@@ -696,125 +703,140 @@ export function SpecialtyExam({
       .find((s) => s.id === sid)!
       .fields.filter((f) => findings[f.id] !== undefined).length;
 
-  return (
-    <section className="@container space-y-2" data-testid="specialty-exam">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {tpl!.name}
-      </h3>
-      {schema.sections.map((s, si) => (
-        <div key={s.id} className="rounded-md border border-slate-200">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between px-2 py-1.5 text-sm font-medium"
-            onClick={() =>
-              setOpen((o) => ({ ...o, [s.id]: !(o[s.id] ?? si === 0) }))
-            }
-          >
-            <span>
-              {s.title}{" "}
-              {filled(s.id) > 0 && (
-                <span className="badge ml-1 bg-brand-50 text-brand-700">
-                  {filled(s.id)}
-                </span>
-              )}
+  /** One collapsible section; the first exam section starts open. */
+  const sectionBlock = (s: TemplateSection, si: number) => (
+    <div key={s.id} className="rounded-md border border-slate-200">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between px-2 py-1.5 text-sm font-medium"
+        onClick={() =>
+          setOpen((o) => ({ ...o, [s.id]: !(o[s.id] ?? si === 0) }))
+        }
+      >
+        <span>
+          {s.title}{" "}
+          {filled(s.id) > 0 && (
+            <span className="badge ml-1 bg-brand-50 text-brand-700">
+              {filled(s.id)}
             </span>
-            <span className="text-slate-400">
-              {(open[s.id] ?? si === 0) ? "−" : "+"}
-            </span>
-          </button>
-          {(open[s.id] ?? si === 0) && (
-            <div className="space-y-2 border-t border-slate-100 p-2">
-              {sectionFields(s, (f) => !rowShown(f) ? null : (
-                <div
-                  key={f.id}
-                  className="grid items-start gap-1 @min-[36rem]:grid-cols-[7.5rem_1fr]"
-                >
-                  {/* A sub-option (e.g. Polyp grade) sits indented under the option it belongs to. */}
-                  <span className={`pt-1.5 text-xs text-slate-600${f.parent ? " pl-2 before:mr-1 before:content-['↳']" : ""}`}>
-                    {f.label}
-                  </span>
-                  {f.type === "eardrum" ? (
-                    <EardrumField
-                      value={findings[f.id] as LateralValue<EardrumValue>}
-                      onChange={(v) => update(f.id, v)}
-                      onReset={f.id === TM_LINK.map ? resetTm : undefined}
-                      disabled={readOnly}
-                    />
-                  ) : f.type === "sketch" && f.sketch ? (
-                    <SketchField
-                      sketch={f.sketch}
-                      value={findings[f.id] as SketchValue}
-                      onChange={(v) => update(f.id, v)}
-                      disabled={readOnly}
-                    />
-                  ) : f.type === "audiogram" ? (
-                    <AudiogramField
-                      value={findings[f.id] as AudiogramValue}
-                      onChange={(v) => update(f.id, v)}
-                      disabled={readOnly}
-                    />
-                  ) : f.lateral ? (
-                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-1">
-                      {(["right", "left"] as const).map((side) => f.parent && !subFieldShown(findings, f, side) ? <div key={side} /> : (
-                        <div key={side} className="flex min-w-0 items-start gap-1">
-                          <span
-                            className={`pt-1.5 text-xs font-semibold ${side === "right" ? "text-red-700" : "text-blue-700"}`}
-                          >
-                            {side === "right"
-                              ? (schema.lateralLabels?.right ?? "R")
-                              : (schema.lateralLabels?.left ?? "L")}
-                          </span>
-                          <div className="flex-1">
-                            <SelectField
-                              f={f}
-                              value={
-                                (findings[f.id] as LateralValue<unknown>)?.[
-                                  side
-                                ]
-                              }
-                              // No perforation on an ear whose TM is intact.
-                              disabled={readOnly || (f.id === TM_LINK.perfType && perforationBlocked(findings, side))}
-                              onChange={(v) =>
-                                update(f.id, {
-                                  ...(findings[f.id] as object),
-                                  [side]: v,
-                                })
-                              }
-                            />
-                          </div>
-                        </div>
-                      ))}
-                      {!readOnly && !f.parent && (
-                        <button
-                          type="button"
-                          title="Copy right to left"
-                          className="btn-ghost px-1 text-xs"
-                          onClick={() =>
+          )}
+        </span>
+        <span className="text-slate-400">
+          {(open[s.id] ?? si === 0) ? "−" : "+"}
+        </span>
+      </button>
+      {(open[s.id] ?? si === 0) && (
+        <div className="space-y-2 border-t border-slate-100 p-2">
+          {sectionFields(s, (f) => !rowShown(f) ? null : (
+            <div
+              key={f.id}
+              className="grid items-start gap-1 @min-[36rem]:grid-cols-[7.5rem_1fr]"
+            >
+              {/* A sub-option (e.g. Polyp grade) sits indented under the option it belongs to. */}
+              <span className={`pt-1.5 text-xs text-slate-600${f.parent ? " pl-2 before:mr-1 before:content-['↳']" : ""}`}>
+                {f.label}
+              </span>
+              {f.type === "eardrum" ? (
+                <EardrumField
+                  value={findings[f.id] as LateralValue<EardrumValue>}
+                  onChange={(v) => update(f.id, v)}
+                  onReset={f.id === TM_LINK.map ? resetTm : undefined}
+                  disabled={readOnly}
+                />
+              ) : f.type === "sketch" && f.sketch ? (
+                <SketchField
+                  sketch={f.sketch}
+                  value={findings[f.id] as SketchValue}
+                  onChange={(v) => update(f.id, v)}
+                  disabled={readOnly}
+                />
+              ) : f.type === "audiogram" ? (
+                <AudiogramField
+                  value={findings[f.id] as AudiogramValue}
+                  onChange={(v) => update(f.id, v)}
+                  disabled={readOnly}
+                />
+              ) : f.lateral ? (
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-1">
+                  {(["right", "left"] as const).map((side) => f.parent && !subFieldShown(findings, f, side) ? <div key={side} /> : (
+                    <div key={side} className="flex min-w-0 items-start gap-1">
+                      <span
+                        className={`pt-1.5 text-xs font-semibold ${side === "right" ? "text-red-700" : "text-blue-700"}`}
+                      >
+                        {side === "right"
+                          ? (schema.lateralLabels?.right ?? "R")
+                          : (schema.lateralLabels?.left ?? "L")}
+                      </span>
+                      <div className="flex-1">
+                        <SelectField
+                          f={f}
+                          value={
+                            (findings[f.id] as LateralValue<unknown>)?.[
+                              side
+                            ]
+                          }
+                          // No perforation on an ear whose TM is intact.
+                          disabled={readOnly || (f.id === TM_LINK.perfType && perforationBlocked(findings, side))}
+                          onChange={(v) =>
                             update(f.id, {
                               ...(findings[f.id] as object),
-                              left: (findings[f.id] as LateralValue<unknown>)
-                                ?.right,
+                              [side]: v,
                             })
                           }
-                        >
-                          R→L
-                        </button>
-                      )}
+                        />
+                      </div>
                     </div>
-                  ) : (
-                    <SelectField
-                      f={f}
-                      value={findings[f.id]}
-                      onChange={(v) => update(f.id, v)}
-                      disabled={readOnly}
-                    />
+                  ))}
+                  {!readOnly && !f.parent && (
+                    <button
+                      type="button"
+                      title="Copy right to left"
+                      className="btn-ghost px-1 text-xs"
+                      onClick={() =>
+                        update(f.id, {
+                          ...(findings[f.id] as object),
+                          left: (findings[f.id] as LateralValue<unknown>)
+                            ?.right,
+                        })
+                      }
+                    >
+                      R→L
+                    </button>
                   )}
                 </div>
-              ))}
+              ) : (
+                <SelectField
+                  f={f}
+                  value={findings[f.id]}
+                  onChange={(v) => update(f.id, v)}
+                  disabled={readOnly}
+                />
+              )}
             </div>
-          )}
+          ))}
         </div>
-      ))}
+      )}
+    </div>
+  );
+
+  const inExam = schema.sections.filter((s) => s.placement !== "ix");
+  const inIx = schema.sections.filter((s) => s.placement === "ix");
+  const ixBlock = inIx.length ? (
+    <section className="@container space-y-2" data-testid="specialty-exam-ix">
+      {inIx.map((s) => sectionBlock(s, -1))}
     </section>
+  ) : null;
+
+  return (
+    <>
+      <section className="@container space-y-2" data-testid="specialty-exam">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          {tpl!.name}
+        </h3>
+        {inExam.map(sectionBlock)}
+        {!ixSlot && ixBlock}
+      </section>
+      {ixSlot && ixBlock && createPortal(ixBlock, ixSlot)}
+    </>
   );
 }

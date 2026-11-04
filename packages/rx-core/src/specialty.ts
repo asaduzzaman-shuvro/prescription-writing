@@ -35,6 +35,11 @@ export interface TemplateSection {
   id: string;
   title: string;
   fields: TemplateField[];
+  /**
+   * Where the section belongs, when not with the examination: "ix" puts it under Investigations, in the editor
+   * (below the Ix list) and on the prescription (inside Ix, after the advised tests). Used for audiology results.
+   */
+  placement?: "ix";
 }
 
 export interface SpecialtyTemplateSchema {
@@ -117,6 +122,7 @@ export function validateTemplateSchema(raw: unknown): string[] {
   const ids = new Set<string>();
   t.sections.forEach((s, si) => {
     if (!s.id || !s.title) errors.push(`section ${si + 1}: id and title are required`);
+    if (s.placement !== undefined && s.placement !== "ix") errors.push(`section ${s.id}: placement must be "ix" when given`);
     if (!Array.isArray(s.fields)) return errors.push(`section ${s.id}: fields must be an array`);
     s.fields.forEach((f) => {
       if (!f.id || !f.label) errors.push(`section ${s.id}: every field needs id and label`);
@@ -593,7 +599,7 @@ export interface Diagram {
 }
 
 export interface FlattenedExam {
-  groups: { id: string; title: string; lines: ExamFindingLine[] }[];
+  groups: { id: string; title: string; lines: ExamFindingLine[]; placement?: "ix" }[];
   diagrams: Diagram[];
 }
 
@@ -663,7 +669,7 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, saved: Findings
     }
     // Pictures print under their own section, so a section with pictures but no lines still gets a heading.
     for (const d of diagrams.slice(firstDiagram)) d.section = section.id;
-    if (lines.length || diagrams.length > firstDiagram) groups.push({ id: section.id, title: section.title, lines });
+    if (lines.length || diagrams.length > firstDiagram) groups.push({ id: section.id, title: section.title, lines, ...(section.placement ? { placement: section.placement } : {}) });
   }
   return { groups, diagrams };
 }

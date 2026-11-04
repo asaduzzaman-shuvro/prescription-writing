@@ -430,6 +430,8 @@ function RxEditor({
   const rx = rxRows[0];
   const [doc, setDoc] = useState<PrescriptionDoc | null>(null);
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
+  // Below the Ix list: where the exam's investigation sections (audiology) render.
+  const [ixSlot, setIxSlot] = useState<HTMLDivElement | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const finalizingRef = useRef(false);
@@ -902,6 +904,7 @@ function RxEditor({
             onFlatten={(groups, diagrams) =>
               update((d) => ({ ...d, specialtyFindings: groups, diagrams }))
             }
+            ixSlot={ixSlot}
           />
           <ChipList
             title="Ix — Investigations"
@@ -911,6 +914,7 @@ function RxEditor({
             params={spec}
             testId="ix-input"
           />
+          <div ref={setIxSlot} className="empty:hidden" />
           <ChipList
             title="Dx — Diagnosis"
             values={doc.diagnoses}

@@ -360,18 +360,24 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   // "always print" picture whose section has no findings) print together after all findings.
   const groups = doc.specialtyFindings ?? [];
   const placed = (d: (typeof allDiagrams)[number]) => typeof d.section === "string" && groups.some((g) => g.id === d.section);
+  const groupBody = (g: (typeof groups)[number]) => {
+    const own = g.id ? allDiagrams.filter((d) => d.section === g.id) : [];
+    const pics = figures(own);
+    // A picture's own words (the TM map's) print last, right above the pictures. Exams saved before the flag
+    // existed have their "TM map" line moved the same way when the section prints the drums.
+    const above = (l: ExamFindingLine) => l.abovePictures || (l.label === "TM map" && own.some(isTm));
+    const ordered = pics ? [...g.lines.filter((l) => !above(l)), ...g.lines.filter(above)] : g.lines;
+    const lines = ordered.length ? `<ul>${ordered.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
+    return lines + (pics ? `<div class="diagrams">${pics}</div>` : "");
+  };
+  // A section placed under Investigations (audiology results) prints inside Ix, after the advised tests, without its
+  // own heading. If the doctor hides Ix, it keeps its heading with the examination, so the results still print.
+  const underIx = (g: (typeof groups)[number]) => g.placement === "ix" && !hidden.has("ix");
   const specialty = groups
-    .map((g) => {
-      const own = g.id ? allDiagrams.filter((d) => d.section === g.id) : [];
-      const pics = figures(own);
-      // A picture's own words (the TM map's) print last, right above the pictures. Exams saved before the flag
-      // existed have their "TM map" line moved the same way when the section prints the drums.
-      const above = (l: ExamFindingLine) => l.abovePictures || (l.label === "TM map" && own.some(isTm));
-      const ordered = pics ? [...g.lines.filter((l) => !above(l)), ...g.lines.filter(above)] : g.lines;
-      const lines = ordered.length ? `<ul>${ordered.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
-      return section(g.title, lines + (pics ? `<div class="diagrams">${pics}</div>` : ""));
-    })
+    .filter((g) => !underIx(g))
+    .map((g) => section(g.title, groupBody(g)))
     .join("");
+  const ixResults = groups.filter(underIx).map(groupBody).join("");
   const diagrams = figures(allDiagrams.filter((d) => !placed(d)));
 
   // Letterhead: centred in the footer. Pad: the pad prints its own footer, so the QR stays in the body.
@@ -385,7 +391,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     specialty,
     diagrams ? `<section class="diagrams">${diagrams}</section>` : "",
     sec("labs", list((doc.labFindings ?? []).map((l) => l.text))),
-    sec("ix", list(doc.investigations)),
+    sec("ix", list(doc.investigations) + ixResults),
     sec("dx", list(doc.diagnoses)),
     sec("plan", list(doc.plan ?? [])),
     sec("notes", list([...birthNotes(patient), ...(doc.notes ?? [])])),
