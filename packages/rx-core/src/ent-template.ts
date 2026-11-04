@@ -47,7 +47,11 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
       id: "throat",
       title: "Throat",
       fields: [
-        { id: "thr_oral", label: "Oral cavity", type: "select", options: ["Normal", "Ulcer", "Coated tongue", "Dental caries", "Trismus"], normal: "Normal" },
+        { id: "thr_oral", label: "Oral cavity", type: "multiselect", options: ["Normal", "Ulcer", "Coated tongue", "Dental caries", "Trismus", "Mass", "Growth", "Other"], normal: "Normal" },
+        { id: "thr_oral_ulcer", label: "Ulcer details", type: "text", parent: { field: "thr_oral", option: "Ulcer" } },
+        { id: "thr_oral_mass", label: "Mass details", type: "text", parent: { field: "thr_oral", option: "Mass" } },
+        { id: "thr_oral_growth", label: "Growth details", type: "text", parent: { field: "thr_oral", option: "Growth" } },
+        { id: "thr_oral_other", label: "Other findings", type: "text", parent: { field: "thr_oral", option: "Other" } },
         { id: "thr_tonsil_grade", label: "Tonsil (Brodsky)", type: "select", lateral: true, options: ["Grade 0", "Grade 1", "Grade 2", "Grade 3", "Grade 4"] },
         { id: "thr_tonsil", label: "Tonsil surface", type: "multiselect", options: ["Normal", "Congested", "Pus in crypts", "Membrane", "Irwin Moore sign +", "Jugulodigastric LN enlarged"], normal: "Normal" },
         { id: "thr_ppw", label: "Posterior pharyngeal wall", type: "select", options: ["Normal", "Congested", "Granular", "Post-nasal drip", "Bulge"], normal: "Normal" },

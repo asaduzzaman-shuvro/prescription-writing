@@ -132,6 +132,30 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await exam.getByRole("button", { name: /Throat/ }).click();
   const oro = page.getByTestId("sketch-oropharynx"), larynx = page.getByTestId("sketch-larynx");
 
+  // Oral cavity takes several findings; Other asks for the doctor's own words.
+  const field = (label: string) => exam.locator("span.text-slate-600", { hasText: new RegExp(`^${label}$`) }).locator("xpath=..");
+  const chip = (option: string) => field("Oral cavity").getByRole("button", { name: option, exact: true });
+  // Ulcer, Mass, Growth and Other each open their own description box when ticked.
+  const ulcer = field("Ulcer details").getByRole("textbox"), mass = field("Mass details").getByRole("textbox"), growth = field("Growth details").getByRole("textbox");
+  await expect(ulcer).toHaveCount(0);
+  await chip("Ulcer").click();
+  await ulcer.fill("Aphthous, 3 mm, lower lip");
+  await expect(mass).toHaveCount(0);
+  await chip("Mass").click();
+  await mass.fill("Hard palate, 1 cm");
+  await expect(growth).toHaveCount(0);
+  await chip("Growth").click();
+  await growth.fill("Lateral tongue");
+  await expect(chip("Ulcer")).toHaveClass(/bg-brand-50/);
+  await expect(ulcer).toHaveValue("Aphthous, 3 mm, lower lip");
+  await chip("Growth").click();
+  await expect(growth).toHaveCount(0);
+  const other = field("Other findings").getByRole("textbox");
+  await expect(other).toHaveCount(0);
+  await chip("Other").click();
+  await other.fill("Leukoplakia on buccal mucosa");
+  await expect(other).toHaveValue("Leukoplakia on buccal mucosa");
+
   await exam.getByLabel("Tonsil (Brodsky)", { exact: true }).nth(0).selectOption("Grade 4");
   await expect(oro.locator('[data-zone="r_tonsil"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByRole("button", { name: "Pus in crypts", exact: true }).click();

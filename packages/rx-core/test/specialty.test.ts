@@ -112,6 +112,36 @@ describe("flattenFindings", () => {
     expect(ear).toContainEqual({ label: "Perforation", value: "R Central (small)" });
     expect(ear.find((l) => l.label === "Perforation size")).toBeUndefined();
   });
+  it("prints several Oral cavity findings, without Normal, and still reads an old single answer", () => {
+    const oral = (v: unknown) => flattenFindings(ENT_TEMPLATE, { thr_oral: v }).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Oral cavity");
+    expect(oral(["Ulcer", "Dental caries"])).toEqual({ label: "Oral cavity", value: "Ulcer, Dental caries" });
+    expect(oral("Trismus")).toEqual({ label: "Oral cavity", value: "Trismus" });
+    expect(oral(["Normal"])).toBeUndefined();
+    expect(oral("Normal")).toBeUndefined();
+    expect(oral(["Mass", "Growth"])).toEqual({ label: "Oral cavity", value: "Mass, Growth" });
+  });
+  it("prints the doctor's own Oral cavity words after Other, and drops them with Other", () => {
+    const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Oral cavity");
+    const f = { thr_oral: ["Ulcer", "Other"], thr_oral_other: "Leukoplakia on buccal mucosa" };
+    expect(line(f)).toEqual({ label: "Oral cavity", value: "Ulcer, Other (Leukoplakia on buccal mucosa)" });
+    expect(line({ ...f, thr_oral: ["Ulcer"] })).toEqual({ label: "Oral cavity", value: "Ulcer" });
+    expect(pruneSubFields(ENT_TEMPLATE, { ...f, thr_oral: ["Ulcer"] }).thr_oral_other).toBeUndefined();
+  });
+  it("prints the Ulcer description after Ulcer, and drops it with Ulcer", () => {
+    const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Oral cavity");
+    const f = { thr_oral: ["Ulcer", "Dental caries"], thr_oral_ulcer: "Aphthous, 3 mm, lower lip" };
+    expect(line(f)).toEqual({ label: "Oral cavity", value: "Ulcer (Aphthous, 3 mm, lower lip), Dental caries" });
+    expect(line({ ...f, thr_oral: ["Dental caries"] })).toEqual({ label: "Oral cavity", value: "Dental caries" });
+    expect(pruneSubFields(ENT_TEMPLATE, { ...f, thr_oral: ["Dental caries"] }).thr_oral_ulcer).toBeUndefined();
+  });
+  it("prints Mass and Growth descriptions after their options, in tick order", () => {
+    const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Oral cavity");
+    const f = { thr_oral: ["Growth", "Mass"], thr_oral_mass: "Hard palate, 1 cm", thr_oral_growth: "Lateral tongue, ulcero-proliferative" };
+    expect(line(f)).toEqual({ label: "Oral cavity", value: "Growth (Lateral tongue, ulcero-proliferative), Mass (Hard palate, 1 cm)" });
+    const pruned = pruneSubFields(ENT_TEMPLATE, { ...f, thr_oral: ["Mass"] });
+    expect(pruned.thr_oral_mass).toBe("Hard palate, 1 cm");
+    expect(pruned.thr_oral_growth).toBeUndefined();
+  });
   it("mirrors the left eardrum", () => {
     expect(eardrumSvg(undefined, "left")).toContain("scale(-1,1)");
     expect(eardrumSvg({ perforation: ["ai"], retraction: [] }, "right")).toContain('fill="#111"');
