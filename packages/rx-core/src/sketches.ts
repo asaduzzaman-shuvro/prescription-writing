@@ -14,7 +14,7 @@ export type SketchId = (typeof SKETCH_IDS)[number];
 
 type Shape =
   | "ulcer" | "patch" | "growth" | "pus" | "bulge" | "nodule" | "polyp" | "cyst" | "leukoplakia" | "node" | "mass" | "scar" | "sinus"
-  | "bowR" | "bowL" | "spurR" | "spurL" | "hole" | "diamond";
+  | "bowR" | "bowL" | "spurR" | "spurL" | "hole" | "diamond" | "drip";
 
 export interface SketchDef {
   id: SketchId;
@@ -94,6 +94,7 @@ const OROPHARYNX: SketchDef = {
   states: [
     { id: "congested", label: "Congested", fill: "url(#hatch)" },
     { id: "swollen", label: "Swollen", fill: "#bbb" },
+    { id: "granular", label: "Granular", fill: "url(#stipple)" },
   ],
   marks: [
     { kind: "ulcer", label: "Ulcer", shape: "ulcer" },
@@ -101,6 +102,7 @@ const OROPHARYNX: SketchDef = {
     { kind: "pus", label: "Pus / exudate", shape: "pus" },
     { kind: "growth", label: "Growth", shape: "growth" },
     { kind: "bulge", label: "Bulge (quinsy)", shape: "bulge" },
+    { kind: "pnd", label: "Post-nasal drip", shape: "drip" },
   ],
 };
 
@@ -310,6 +312,11 @@ function shapeSvg(shape: Shape, x: number, y: number, compact = false): string {
       return `<path d="M${x},${r1(y - 2.6)} L${r1(x + 2.2)},${y} L${x},${r1(y + 2.6)} L${r1(x - 2.2)},${y} Z" fill="#111"/>`;
     case "sinus":
       return c(0, 0, 2.2, "#fff", 0.9) + `<circle cx="${x}" cy="${y}" r="0.7" fill="#111"/>`;
+    case "drip":
+      // Two trickles, each ending in a drop.
+      return [-1.6, 1.6]
+        .map((dx) => `<line x1="${r1(x + dx)}" y1="${r1(y - 4)}" x2="${r1(x + dx)}" y2="${r1(y + 1.6)}" stroke="#111" stroke-width="0.7"/><circle cx="${r1(x + dx)}" cy="${r1(y + 2.8)}" r="0.9" fill="#111"/>`)
+        .join("");
   }
 }
 

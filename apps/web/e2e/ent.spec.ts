@@ -185,10 +185,16 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await ppw("Bulge").click();
   await expect(oro.locator('[data-zone="ppw"]')).toHaveAttribute("fill", "url(#hatch)");
   await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall congested, R tonsil grade 4; pus / exudate, bulge (quinsy)");
+  // Every wall answer draws: Granular is dotted (and wins over Congested), post-nasal drip and a growth are marked.
+  await ppw("Granular").click();
+  await expect(oro.locator('[data-zone="ppw"]')).toHaveAttribute("fill", "url(#stipple)");
+  await ppw("Post-nasal drip").click();
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall granular, R tonsil grade 4; pus / exudate, bulge (quinsy), post-nasal drip");
   const ppwGrowth = field("Growth/Mass details").getByRole("textbox");
   await expect(ppwGrowth).toHaveCount(0);
   await ppw("Growth/Mass").click();
   await ppwGrowth.fill("Left lateral wall, 1.5 cm");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("Posterior pharyngeal wall granular, R tonsil grade 4; pus / exudate, growth, bulge (quinsy), post-nasal drip");
   await expect(ppw("Congested")).toHaveClass(/bg-brand-50/);
   // Uvula / palate: Cleft palate and Ulcer/Growth/Mass each ask for a description; changing the answer swaps the box.
   const uvula = exam.getByLabel("Uvula / palate", { exact: true });

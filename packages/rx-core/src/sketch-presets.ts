@@ -62,6 +62,9 @@ const AT = {
   crust: { right: [42, 74], left: [58, 74] }, // on the inferior turbinates
   tonsil: { right: { pus: [24, 52], membrane: [24, 62] }, left: { pus: [76, 52], membrane: [76, 62] } },
   ppwBulge: [50, 56],
+  // Post-nasal drip runs down the upper wall either side of the uvula; a wall growth sits below a bulge.
+  pnd: [[40, 44], [60, 44]],
+  ppwGrowth: [50, 62],
   // Junction of the anterior and middle thirds of each cord: the usual site of vocal nodules.
   nodule: { right: [46.6, 49.7], left: [53.4, 49.7] },
   midline: [50, 58],
@@ -69,7 +72,7 @@ const AT = {
 const mark = (kind: string, [x, y]: readonly [number, number]): PlacedMark => ({ kind, x, y });
 
 /**
- * Every picture's preset for these answers. Later rules win a zone (e.g. "Congested" over a grade's "Swollen"); within a
+ * Every picture's preset for these answers. Later rules win a zone (e.g. wall "Granular" over "Congested"); within a
  * multi-select field, the answer later in its option list wins (turbinate "Congested" over "Hypertrophied").
  */
 export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
@@ -126,8 +129,11 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
 
   // Several findings since it became a multi-select; an older single answer still reads.
   const ppw = list(f[L.ppw]);
-  if (ppw.includes("Congested") || ppw.includes("Granular")) oro.zones.ppw = "congested";
+  if (ppw.includes("Congested")) oro.zones.ppw = "congested";
+  if (ppw.includes("Granular")) oro.zones.ppw = "granular";
+  if (ppw.includes("Post-nasal drip")) oro.marks.push(...AT.pnd.map((at) => mark("pnd", at)));
   if (ppw.includes("Bulge")) oro.marks.push(mark("bulge", AT.ppwBulge));
+  if (ppw.includes("Growth/Mass")) oro.marks.push(mark("growth", AT.ppwGrowth));
 
   switch (one(f, L.cords)) {
     case "Congested":

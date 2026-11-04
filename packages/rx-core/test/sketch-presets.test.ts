@@ -47,12 +47,15 @@ describe("throat & neck answers draw on the pictures", () => {
     expect(applySketchPreset("oropharynx", drawn, g3, { zones: {}, marks: [] }).sizes).toBeUndefined();
   });
 
-  it("posterior pharyngeal wall takes several findings, and still reads an old single answer", () => {
-    const p = sketchPresets({ thr_ppw: ["Granular", "Bulge", "Growth/Mass"] }).oropharynx;
-    expect(p.zones).toEqual({ ppw: "congested" });
-    expect(p.marks).toEqual([{ kind: "bulge", x: 50, y: 56 }]);
-    expect(sketchPresets({ thr_ppw: "Bulge" }).oropharynx.marks).toEqual([{ kind: "bulge", x: 50, y: 56 }]);
-    expect(sketchPresets({ thr_ppw: ["Normal"] }).oropharynx).toEqual({ zones: {}, marks: [] });
+  it("every posterior pharyngeal wall answer draws, and an old single answer still reads", () => {
+    const at = (ppw: unknown) => sketchPresets({ thr_ppw: ppw }).oropharynx;
+    expect(at(["Congested"]).zones).toEqual({ ppw: "congested" });
+    expect(at(["Granular"]).zones).toEqual({ ppw: "granular" });
+    expect(at(["Congested", "Granular"]).zones).toEqual({ ppw: "granular" }); // later option wins
+    expect(at(["Post-nasal drip"]).marks).toEqual([{ kind: "pnd", x: 40, y: 44 }, { kind: "pnd", x: 60, y: 44 }]);
+    expect(at(["Growth/Mass", "Bulge"]).marks).toEqual([{ kind: "bulge", x: 50, y: 56 }, { kind: "growth", x: 50, y: 62 }]);
+    expect(at("Bulge").marks).toEqual([{ kind: "bulge", x: 50, y: 56 }]);
+    expect(at(["Normal"])).toEqual({ zones: {}, marks: [] });
   });
 
   it("draws nothing for normal answers, sideless lesions or renamed options", () => {
@@ -84,7 +87,7 @@ describe("throat & neck answers draw on the pictures", () => {
   });
 
   it("drawn pictures survive the print sanitiser", () => {
-    const p = sketchPresets({ thr_tonsil_grade: { right: "Grade 4", left: "Grade 0" }, thr_tonsil: ["Congested", "Anterior tonsillar pillar congested", "Pus in crypts", "Membrane"], thr_ppw: "Bulge", thr_cords: "Nodule", thr_neck: "Midline swelling" });
+    const p = sketchPresets({ thr_tonsil_grade: { right: "Grade 4", left: "Grade 0" }, thr_tonsil: ["Congested", "Anterior tonsillar pillar congested", "Pus in crypts", "Membrane"], thr_ppw: ["Granular", "Post-nasal drip", "Bulge", "Growth/Mass"], thr_cords: "Nodule", thr_neck: "Midline swelling" });
     for (const id of ["oropharynx", "larynx", "neck"] as const) {
       const svg = sketchSvg(id, applySketchPreset(id, undefined, { zones: {}, marks: [] }, p[id]));
       expect(sanitizeSvg(svg)).toBe(svg);

@@ -97,8 +97,9 @@ describe("sketch values", () => {
     expect(medial(r.sizes![4]!.path)).toBeGreaterThan(medial(r.sizes![1]!.path));
   });
 
-  it("names a tonsil's grade", () => {
+  it("names a tonsil's grade, and the wall's granular state and post-nasal drip", () => {
     expect(sketchText("oropharynx", { sizes: { r_tonsil: 3, l_tonsil: 1 }, zones: { r_tonsil: "congested" } })).toBe("R tonsil grade 3 congested, L tonsil grade 1");
+    expect(sketchText("oropharynx", { zones: { ppw: "granular" }, marks: [{ kind: "pnd", x: 40, y: 44 }] })).toBe("Posterior pharyngeal wall granular; post-nasal drip");
   });
 
   it("words findings in drawing order, whatever the tap order", () => {
