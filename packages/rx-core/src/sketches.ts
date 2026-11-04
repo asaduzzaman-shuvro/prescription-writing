@@ -48,6 +48,9 @@ const sides = (y: number) => text(5, y, "R", 7) + text(95, y, "L", 7);
 // Oropharynx (open mouth)
 // ---------------------------------------------------------------------------
 
+// The arch is the edge of the anterior pillars (palatoglossal), lateral to each tonsil; the thin lines medial to the
+// tonsils are the posterior pillars (palatopharyngeal). The band outside the arch is the soft palate on top and an
+// anterior pillar down each side, split where the arch reaches y ≈ 40 (its cubic cut at t = 0.43).
 const ORO_ARCH = "M14,74 C14,40 30,24 50,24 C70,24 86,40 86,74";
 const OROPHARYNX: SketchDef = {
   id: "oropharynx",
@@ -55,7 +58,9 @@ const OROPHARYNX: SketchDef = {
   title: "Oropharynx",
   viewBox: [100, 108],
   zones: [
-    { id: "palate", label: "Soft palate / pillars", path: "M10,72.7 A46,42 0 1 1 90,72.7 L86,74 C86,40 70,24 50,24 C30,24 14,40 14,74 Z" },
+    { id: "palate", label: "Soft palate", path: "M5.93,40 A46,42 0 0 1 94.07,40 L78.08,39.92 C71.5,29.19 61.4,24 50,24 C38.6,24 28.5,29.19 21.92,39.92 Z" },
+    { id: "r_ant_pillar", label: "R anterior pillar", path: "M10,72.7 A46,42 0 0 1 5.93,40 L21.92,39.92 C16.96,48.02 14,59.38 14,74 Z" },
+    { id: "l_ant_pillar", label: "L anterior pillar", path: "M90,72.7 A46,42 0 0 0 94.07,40 L78.08,39.92 C83.04,48.02 86,59.38 86,74 Z" },
     { id: "ppw", label: "Posterior pharyngeal wall", path: `${ORO_ARCH} Z` },
     { id: "tongue", label: "Tongue", path: "M10,72.7 Q50,60 90,72.7 A46,42 0 0 1 10,72.7 Z" },
     { id: "uvula", label: "Uvula", path: "M45.5,24 C45.5,34 44,41 50,45 C56,41 54.5,34 54.5,24 Z" },

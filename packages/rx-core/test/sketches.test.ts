@@ -52,6 +52,8 @@ describe("sketch definitions", () => {
     const left = (p: string) => Number(/^M(-?[\d.]+)/.exec(p)![1]);
     const zone = (id: SketchId, z: string) => SKETCHES[id].zones.find((x) => x.id === z)!.path;
     expect(left(zone("oropharynx", "r_tonsil"))).toBeLessThan(left(zone("oropharynx", "l_tonsil")));
+    expect(left(zone("oropharynx", "r_ant_pillar"))).toBeLessThan(50);
+    expect(left(zone("oropharynx", "l_ant_pillar"))).toBeGreaterThan(50);
     expect(left(zone("neck", "r_iii"))).toBeLessThan(50);
     expect(left(zone("neck", "l_iii"))).toBeGreaterThan(50);
   });
@@ -75,6 +77,8 @@ describe("sketch values", () => {
     expect(sketchText("oropharynx", { zones: { uvula: "swollen", r_tonsil: "congested" }, marks: [{ kind: "membrane", x: 1, y: 1 }, { kind: "ulcer", x: 2, y: 2 }], strokes: ["1,1 2,2"] }))
       .toBe("Uvula swollen, R tonsil congested; ulcer, membrane / slough; drawing");
     expect(sketchText("larynx", { zones: { l_cord: "fixed" } })).toBe("L vocal cord fixed (palsy)");
+    expect(sketchText("oropharynx", { zones: { l_ant_pillar: "congested", r_ant_pillar: "congested", palate: "swollen" } }))
+      .toBe("Soft palate swollen, R anterior pillar congested, L anterior pillar congested");
     expect(sketchText("neck", {})).toBe("");
   });
 
