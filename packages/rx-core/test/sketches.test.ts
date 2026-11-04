@@ -95,7 +95,11 @@ describe("sketch values", () => {
     expect(svg).toMatch(/<path d="M10,72\.7 Q[^"]+" fill="#fff" stroke="#999" stroke-width="0.5"\/>/); // tongue
     // Grade 4 reaches further towards the midline than grade 1.
     const medial = (p: string) => Number(/ ([\d.]+),57 A/.exec(p)![1]);
-    expect(medial(r.sizes![4]!.path)).toBeGreaterThan(medial(r.sizes![1]!.path));
+    // Each grade fills its Brodsky share of the way from the lateral wall (17) to the midline (50); grade 4 meets the
+    // other tonsil there.
+    expect(r.sizes!.map((s) => medial(s.path))).toEqual([21, 25.2, 33.6, 41.8, 50]);
+    const l = SKETCHES.oropharynx.zones.find((z) => z.id === "l_tonsil")!;
+    expect(Number(/^M([\d.]+),57/.exec(l.sizes![4]!.path)![1])).toBe(50);
   });
 
   it("gives a polyp on the left vocal cord its stalk on that cord", () => {

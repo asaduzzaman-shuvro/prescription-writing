@@ -62,10 +62,11 @@ const ellipse = (cx: number, cy: number, rx: number, ry: number) =>
 // anterior pillar down each side, split where the arch reaches y ≈ 40 (its cubic cut at t = 0.43).
 const ORO_ARCH = "M14,74 C14,40 30,24 50,24 C70,24 86,40 86,74";
 /**
- * Tonsil outline per Brodsky grade 0–4 (radii): each sits against the lateral wall and reaches further towards the
- * midline as the grade rises; grade 2 is the outline drawn when no grade is given.
+ * Tonsil outline per Brodsky grade 0–4 (radii). Each sits against the lateral wall (x = 17) and fills that grade's share
+ * of the 33 units to the midline (x = 50): 0 in the fossa (~12%), 1 25%, 2 50%, 3 75%, 4 all the way, so grade 4
+ * tonsils meet in the middle. Grade 2 is the outline drawn when no grade is given.
  */
-const TONSIL_GRADES: [number, number][] = [[2, 6], [4, 8], [7, 10], [10.5, 11.5], [14, 13]];
+const TONSIL_GRADES: [number, number][] = [[2, 6], [4.1, 8], [8.3, 10.5], [12.4, 12], [16.5, 13.5]];
 const tonsil = (s: "right" | "left", grade: number) => {
   const [rx, ry] = TONSIL_GRADES[grade]!;
   const cx = 17 + rx;
