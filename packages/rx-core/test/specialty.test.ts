@@ -150,6 +150,16 @@ describe("flattenFindings", () => {
     expect(line({ ...lesion, thr_uvula: "Bifid" })).toEqual({ label: "Uvula / palate", value: "Bifid" });
     expect(pruneSubFields(ENT_TEMPLATE, { ...lesion, thr_uvula: "Bifid" }).thr_uvula_lesion).toBeUndefined();
   });
+  it("prints several Neck findings, each with its own description, and drops a description with its option", () => {
+    const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "neck")?.lines.find((l) => l.label === "Neck");
+    const f = { thr_neck: ["LN enlarged right", "Thyroid swelling"], thr_neck_ln_r: "Level II, 2 cm, firm", thr_neck_thyroid: "Diffuse, moves with swallowing" };
+    expect(line(f)).toEqual({ label: "Neck", value: "LN enlarged right (Level II, 2 cm, firm), Thyroid swelling (Diffuse, moves with swallowing)" });
+    expect(line({ thr_neck: ["Other swelling"], thr_neck_other: "Sebaceous cyst, left posterior triangle" })).toEqual({ label: "Neck", value: "Other swelling (Sebaceous cyst, left posterior triangle)" });
+    expect(line({ thr_neck: ["No lymphadenopathy"] })).toBeUndefined();
+    const pruned = pruneSubFields(ENT_TEMPLATE, { ...f, thr_neck: ["Thyroid swelling"] });
+    expect(pruned.thr_neck_ln_r).toBeUndefined();
+    expect(pruned.thr_neck_thyroid).toBe("Diffuse, moves with swallowing");
+  });
   it("prints the laryngoscopy text as FOL or I/L findings", () => {
     const throat = flattenFindings(ENT_TEMPLATE, { thr_idl: "Bilateral vocal cords mobile" }).groups.find((g) => g.id === "throat");
     expect(throat?.lines).toEqual([{ label: "FOL or I/L findings", value: "Bilateral vocal cords mobile" }]);

@@ -172,24 +172,14 @@ export function sketchPresets(f: Findings): Record<SketchId, SketchPreset> {
       break;
   }
 
-  // Level II (jugulodigastric) is the usual first-echelon node.
-  switch (one(f, L.neck)) {
-    case "LN enlarged right":
-      neck.zones.r_ii = "enlarged";
-      break;
-    case "LN enlarged left":
-      neck.zones.l_ii = "enlarged";
-      break;
-    case "Bilateral LN":
-      neck.zones.r_ii = neck.zones.l_ii = "enlarged";
-      break;
-    case "Thyroid swelling":
-      neck.zones.thyroid = "enlarged";
-      break;
-    case "Midline swelling":
-      neck.marks.push(mark("mass", AT.midline));
-      break;
-  }
+  // Level II (jugulodigastric) is the usual first-echelon node. Several findings since Neck became a multi-select; an
+  // older single answer still reads.
+  const neckFindings = list(f[L.neck]);
+  if (neckFindings.includes("LN enlarged right") || neckFindings.includes("Bilateral LN")) neck.zones.r_ii = "enlarged";
+  if (neckFindings.includes("LN enlarged left") || neckFindings.includes("Bilateral LN")) neck.zones.l_ii = "enlarged";
+  if (neckFindings.includes("Thyroid swelling")) neck.zones.thyroid = "enlarged";
+  // "Other swelling" has no fixed place, so the doctor marks it. "Midline swelling" is no longer offered; a visit that saved it still draws it.
+  if (neckFindings.includes("Midline swelling")) neck.marks.push(mark("mass", AT.midline));
 
   return { nose, oropharynx: oro, larynx: lar, neck };
 }

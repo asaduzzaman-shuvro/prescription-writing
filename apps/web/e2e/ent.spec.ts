@@ -229,7 +229,25 @@ test("Throat and neck answers draw on the pictures; Reset clears a picture after
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#fff");
   await expect(larynx.locator('[data-zone="l_cord"]')).toHaveAttribute("fill", "#bbb");
   await exam.getByRole("button", { name: /^Neck/ }).click();
-  await exam.getByLabel("Neck", { exact: true }).selectOption("Thyroid swelling");
+  // Neck takes several findings, each drawn and each with its own description box.
+  const neckChip = (option: string) => field("Neck").getByRole("button", { name: option, exact: true });
+  const thyroid = field("Thyroid swelling details").getByRole("textbox"), lnRight = field("LN enlarged right details").getByRole("textbox");
+  await expect(thyroid).toHaveCount(0);
+  await neckChip("Thyroid swelling").click();
+  await expect(page.getByTestId("sketch-summary-neck")).toHaveText("Thyroid enlarged");
+  await thyroid.fill("Diffuse, moves with swallowing");
+  // Other swelling has no fixed place on the picture: it asks for a description and draws nothing.
+  const otherSwelling = field("Other swelling details").getByRole("textbox");
+  await expect(otherSwelling).toHaveCount(0);
+  await neckChip("Other swelling").click();
+  await otherSwelling.fill("Sebaceous cyst, left posterior triangle");
+  await expect(page.getByTestId("sketch-summary-neck")).toHaveText("Thyroid enlarged");
+  await neckChip("LN enlarged right").click();
+  await expect(page.getByTestId("sketch-summary-neck")).toHaveText("R level II enlarged, Thyroid enlarged");
+  await lnRight.fill("Level II, 2 cm, firm");
+  await expect(thyroid).toHaveValue("Diffuse, moves with swallowing");
+  await neckChip("LN enlarged right").click();
+  await expect(lnRight).toHaveCount(0);
   await expect(page.getByTestId("sketch-summary-neck")).toHaveText("Thyroid enlarged");
 
   const reset = page.getByTestId("sketch-tools-oropharynx").getByRole("button", { name: "Reset", exact: true });

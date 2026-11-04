@@ -70,7 +70,12 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
       id: "neck",
       title: "Neck",
       fields: [
-        { id: "thr_neck", label: "Neck", type: "select", options: ["No lymphadenopathy", "LN enlarged right", "LN enlarged left", "Bilateral LN", "Thyroid swelling", "Midline swelling"], normal: "No lymphadenopathy" },
+        { id: "thr_neck", label: "Neck", type: "multiselect", options: ["Thyroid swelling", "Other swelling", "No lymphadenopathy", "LN enlarged right", "LN enlarged left", "Bilateral LN"], normal: "No lymphadenopathy" },
+        { id: "thr_neck_thyroid", label: "Thyroid swelling details", type: "text", parent: { field: "thr_neck", option: "Thyroid swelling" } },
+        { id: "thr_neck_other", label: "Other swelling details", type: "text", parent: { field: "thr_neck", option: "Other swelling" } },
+        { id: "thr_neck_ln_r", label: "LN enlarged right details", type: "text", parent: { field: "thr_neck", option: "LN enlarged right" } },
+        { id: "thr_neck_ln_l", label: "LN enlarged left details", type: "text", parent: { field: "thr_neck", option: "LN enlarged left" } },
+        { id: "thr_neck_ln_bl", label: "Bilateral LN details", type: "text", parent: { field: "thr_neck", option: "Bilateral LN" } },
         { id: "thr_neck_map", label: "Neck map", type: "sketch", sketch: "neck" },
       ],
     },

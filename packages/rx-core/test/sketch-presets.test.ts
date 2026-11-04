@@ -75,6 +75,16 @@ describe("throat & neck answers draw on the pictures", () => {
     expect(at("Growth")).toEqual([]); // an old answer with no side draws nothing
   });
 
+  it("neck takes several findings, each drawn, and still reads an old single answer", () => {
+    const at = (neck: unknown) => sketchPresets({ thr_neck: neck }).neck;
+    expect(at(["Thyroid swelling", "Other swelling", "LN enlarged left"])).toEqual({ zones: { l_ii: "enlarged", thyroid: "enlarged" }, marks: [] });
+    expect(at(["Midline swelling"]).marks).toEqual([{ kind: "mass", x: 50, y: 58 }]); // no longer offered; an old answer still draws
+    expect(at(["LN enlarged right", "LN enlarged left"]).zones).toEqual({ r_ii: "enlarged", l_ii: "enlarged" });
+    expect(at(["Bilateral LN"]).zones).toEqual({ r_ii: "enlarged", l_ii: "enlarged" });
+    expect(at("Thyroid swelling").zones).toEqual({ thyroid: "enlarged" });
+    expect(at(["No lymphadenopathy"])).toEqual({ zones: {}, marks: [] });
+  });
+
   it("draws nothing for normal answers, sideless lesions or renamed options", () => {
     const p = sketchPresets({ thr_tonsil: ["Normal"], thr_ppw: "Normal", thr_cords: "Polyp", thr_neck: "No lymphadenopathy", thr_uvula: "Pushed (quinsy)" });
     for (const s of Object.values(p)) expect(s).toEqual({ zones: {}, marks: [] });
