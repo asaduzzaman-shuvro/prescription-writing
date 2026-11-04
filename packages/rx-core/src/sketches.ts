@@ -133,7 +133,7 @@ const R_LEVELS = {
 };
 const NECK: SketchDef = {
   id: "neck",
-  section: "throat",
+  section: "neck",
   title: "Neck",
   viewBox: [100, 112],
   zones: [

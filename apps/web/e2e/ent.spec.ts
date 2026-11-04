@@ -43,7 +43,7 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   for (const [f, db] of [[500, 10], [1000, 15], [2000, 20]] as const) await exam.getByLabel(`right bc ${f}`).fill(String(db));
   await expect(exam.getByText("PTA 47.5 dB (Moderate) · A-B gap 30 dB")).toBeVisible();
 
-  // Throat & neck pictures: R tonsil congested and an ulcer on the oropharynx; a line drawn on the neck.
+  // Throat and neck pictures: R tonsil congested and an ulcer on the oropharynx; a line drawn on the neck.
   await exam.getByRole("button", { name: /Throat/ }).click();
   const oro = page.getByTestId("sketch-oropharynx");
   await oro.locator('[data-zone="r_tonsil"]').click(); // "Congested" is the first tool
@@ -53,6 +53,7 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   const ob = (await oro.boundingBox())!;
   await page.mouse.click(ob.x + ob.width * 0.6, ob.y + ob.height * (80 / 108));
   await expect(page.getByTestId("sketch-summary-oropharynx")).toHaveText("R tonsil congested; ulcer");
+  await exam.getByRole("button", { name: /^Neck/ }).click();
   await page.getByTestId("sketch-tools-neck").getByRole("button", { name: "Pen", exact: true }).click();
   await page.getByTestId("sketch-neck").scrollIntoViewIfNeeded();
   const nb = (await page.getByTestId("sketch-neck").boundingBox())!;
@@ -83,7 +84,8 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   // Each picture prints under its own findings, not in one block at the end.
   const examSection = (title: RegExp) => frame.locator("section", { has: frame.locator("h3", { hasText: title }) });
   await expect(examSection(/^Ear$/).locator("figcaption", { hasText: /^(Right|Left) TM$/ })).toHaveCount(2);
-  await expect(examSection(/^Throat & neck$/).locator("figcaption", { hasText: /^(Oropharynx|Neck)$/ })).toHaveCount(2);
+  await expect(examSection(/^Throat$/).locator("figcaption", { hasText: /^(Oropharynx|Neck)$/ })).toHaveCount(1);
+  await expect(examSection(/^Neck$/).locator("figcaption", { hasText: /^Neck$/ })).toHaveCount(1);
   await expect(examSection(/^Audiology$/).locator("figure.diagram")).toHaveCount(1);
   await expect(frame.locator("section.diagrams")).toHaveCount(0);
   await expect(frame.locator(".instr")).toContainText("ডান কানে");
@@ -122,7 +124,7 @@ test("TM answer draws on the TM map; Reset sets both TMs back to normal after co
   await expect(exam.getByLabel("Perforation", { exact: true }).nth(0)).toHaveValue(""); // Perforation goes back to —
 });
 
-test("Throat & neck answers draw on the pictures; Reset clears a picture after confirming", async ({ page }) => {
+test("Throat and neck answers draw on the pictures; Reset clears a picture after confirming", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);
   await registerPatient(page, { name: `ENT Throat ${uniq()}`, age: "30", sex: "Female", mobile: mobile() });
@@ -139,6 +141,7 @@ test("Throat & neck answers draw on the pictures; Reset clears a picture after c
   await exam.getByLabel("Vocal cords", { exact: true }).selectOption("Left cord palsy");
   await expect(larynx.locator('[data-zone="r_cord"]')).toHaveAttribute("fill", "#fff");
   await expect(larynx.locator('[data-zone="l_cord"]')).toHaveAttribute("fill", "#bbb");
+  await exam.getByRole("button", { name: /^Neck/ }).click();
   await exam.getByLabel("Neck", { exact: true }).selectOption("Thyroid swelling");
   await expect(page.getByTestId("sketch-summary-neck")).toHaveText("Thyroid enlarged");
 

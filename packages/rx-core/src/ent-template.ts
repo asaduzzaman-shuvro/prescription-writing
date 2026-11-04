@@ -45,7 +45,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
     },
     {
       id: "throat",
-      title: "Throat & neck",
+      title: "Throat",
       fields: [
         { id: "thr_oral", label: "Oral cavity", type: "select", options: ["Normal", "Ulcer", "Coated tongue", "Dental caries", "Trismus"], normal: "Normal" },
         { id: "thr_tonsil_grade", label: "Tonsil (Brodsky)", type: "select", lateral: true, options: ["Grade 0", "Grade 1", "Grade 2", "Grade 3", "Grade 4"] },
@@ -56,6 +56,13 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
         { id: "thr_idl", label: "IDL / laryngoscopy", type: "text" },
         { id: "thr_cords", label: "Vocal cords", type: "select", options: ["Mobile, normal", "Nodule", "Polyp", "Congested", "Right cord palsy", "Left cord palsy", "Growth"] },
         { id: "thr_larynx_map", label: "Larynx map", type: "sketch", sketch: "larynx" },
+      ],
+    },
+    {
+      // Field ids keep their "thr_" prefix: saved findings are keyed by them (the neck used to sit under Throat).
+      id: "neck",
+      title: "Neck",
+      fields: [
         { id: "thr_neck", label: "Neck", type: "select", options: ["No lymphadenopathy", "LN enlarged right", "LN enlarged left", "Bilateral LN", "Thyroid swelling", "Midline swelling"], normal: "No lymphadenopathy" },
         { id: "thr_neck_map", label: "Neck map", type: "sketch", sketch: "neck" },
       ],

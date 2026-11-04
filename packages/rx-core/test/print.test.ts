@@ -292,7 +292,7 @@ describe("exam pictures print under their own section", () => {
 
   it("puts Ear, Nose, Throat and Audiology pictures right after their findings", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
-    const order = ["<h3>Ear</h3>", "Right TM</figcaption>", "<h3>Nose &amp; PNS</h3>", "Nose &amp; sinuses</figcaption>", "<h3>Throat &amp; neck</h3>", "Oropharynx</figcaption>", "<h3>Audiology</h3>", "Audiogram"];
+    const order = ["<h3>Ear</h3>", "Right TM</figcaption>", "<h3>Nose &amp; PNS</h3>", "Nose &amp; sinuses</figcaption>", "<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Audiology</h3>", "Audiogram"];
     const idx = order.map((s) => at(html, s));
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
     expect(html).not.toContain(`<section class="diagrams">`);
@@ -310,10 +310,45 @@ describe("exam pictures print under their own section", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams.filter((d) => d.section !== "ear") }, {}, settings);
     expect(at(html, "<h3>Ear</h3>")).toBeLessThan(at(html, "Right TM</figcaption>"));
     expect(at(html, "Right TM</figcaption>")).toBeLessThan(at(html, "<h3>Nose &amp; PNS</h3>"));
-    expect(at(html, "<h3>Throat &amp; neck</h3>")).toBeLessThan(at(html, "Larynx (IDL)</figcaption>"));
+    expect(at(html, "<h3>Throat</h3>")).toBeLessThan(at(html, "Larynx (IDL)</figcaption>"));
     expect(at(html, "Larynx (IDL)</figcaption>")).toBeLessThan(at(html, "<h3>Audiology</h3>"));
     const noEar = render({ specialtyFindings: exam.groups.filter((g) => g.id !== "ear"), diagrams: [] }, {}, settings);
     expect(at(noEar, `<section class="diagrams">`)).toBeLessThan(at(noEar, "Right TM</figcaption>"));
+  });
+
+  describe("Neck is its own section, after Throat", () => {
+    const withNeck = flattenFindings(ENT_TEMPLATE, {
+      thr_tonsil_grade: { right: "Grade 3" },
+      thr_oro_map: { zones: { r_tonsil: "swollen" } },
+      thr_neck: "Thyroid swelling",
+      thr_neck_map: { zones: { thyroid: "enlarged" } },
+    });
+
+    it("groups the neck answers and picture under Neck, not Throat", () => {
+      expect(withNeck.groups.map((g) => [g.id, g.title])).toEqual([["throat", "Throat"], ["neck", "Neck"]]);
+      expect(withNeck.groups.find((g) => g.id === "throat")!.lines.map((l) => l.label)).not.toContain("Neck");
+      const neckPics = withNeck.diagrams.filter((d) => d.ref === "neck");
+      expect(neckPics.length).toBeGreaterThan(0);
+      expect(neckPics.every((d) => d.section === "neck")).toBe(true);
+    });
+
+    it("prints Throat then Neck, each with its own picture", () => {
+      const html = render({ specialtyFindings: withNeck.groups, diagrams: withNeck.diagrams });
+      const order = ["<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Neck</h3>", "<b>Neck:</b> Thyroid swelling", "Neck</figcaption>"];
+      const idx = order.map((s) => at(html, s));
+      expect(idx).toEqual([...idx].sort((a, b) => a - b));
+      expect(html).not.toContain(`<section class="diagrams">`);
+    });
+
+    it("puts a blank always-print neck under Neck, or after the findings when Neck has no answers", () => {
+      const settings = { ...DEFAULT_PRINT_SETTINGS, sketchesAlways: ["neck" as const] };
+      const linesOnly = { specialtyFindings: withNeck.groups, diagrams: withNeck.diagrams.filter((d) => d.ref !== "neck") };
+      const html = render(linesOnly, {}, settings);
+      expect(at(html, "<h3>Neck</h3>")).toBeLessThan(at(html, "Neck</figcaption>"));
+      expect(html).not.toContain(`<section class="diagrams">`);
+      const throatOnly = render({ ...linesOnly, specialtyFindings: withNeck.groups.filter((g) => g.id !== "neck") }, {}, settings);
+      expect(at(throatOnly, `<section class="diagrams">`)).toBeLessThan(at(throatOnly, "Neck</figcaption>"));
+    });
   });
 });
 

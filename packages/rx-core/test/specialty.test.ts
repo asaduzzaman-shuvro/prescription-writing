@@ -46,7 +46,7 @@ describe("flattenFindings", () => {
       thr_tonsil_grade: { right: "Grade 3", left: "Grade 3" },
       aud_pta: { right: { ac: { 500: 40, 1000: 45, 2000: 50, 4000: 55 }, bc: { 500: 10, 1000: 15, 2000: 20 } } },
     });
-    expect(out.groups.map((g) => g.title)).toEqual(["Ear", "Nose & PNS", "Throat & neck", "Audiology"]);
+    expect(out.groups.map((g) => g.title)).toEqual(["Ear", "Nose & PNS", "Throat", "Audiology"]);
     const ear = out.groups[0]!.lines;
     expect(ear).toContainEqual({ label: "TM", value: "R Perforated, L Intact" });
     expect(ear).toContainEqual({ label: "TM map", value: "R: perforation AI+PI", abovePictures: true });

@@ -3,7 +3,7 @@ import { normalizeSketch, type NormalizedSketch, type SketchId } from "./sketche
 import type { Findings, LateralValue, SpecialtyTemplateSchema } from "./specialty";
 
 /**
- * Nose, throat & neck answers → the nose, throat and neck pictures. Like the TM map, an answer draws a starting
+ * Nose, throat and neck answers → the nose, throat and neck pictures. Like the TM map, an answer draws a starting
  * picture the doctor can still edit; changing the answer swaps only what the old answer drew.
  * Option text is matched as written in the ENT template, so a renamed option simply draws nothing.
  * Findings with no side in the answer (a single laryngeal polyp, growth, quinsy) and findings the

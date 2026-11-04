@@ -98,9 +98,10 @@ describe("sketches in the ENT exam", () => {
       thr_oro_map: { zones: { r_tonsil: "congested" }, marks: [{ kind: "ulcer", x: 60, y: 80 }] },
       thr_neck_map: { strokes: ["20,30 25,40"] },
     });
-    const throat = out.groups.find((g) => g.title === "Throat & neck")!.lines;
+    const throat = out.groups.find((g) => g.title === "Throat")!.lines;
+    const neck = out.groups.find((g) => g.title === "Neck")!.lines;
     expect(throat).toContainEqual({ label: "Oropharynx map", value: "R tonsil congested; ulcer" });
-    expect(throat).toContainEqual({ label: "Neck map", value: "drawing" });
+    expect(neck).toContainEqual({ label: "Neck map", value: "drawing" });
     expect(out.diagrams.map((d) => d.title)).toEqual(["Oropharynx", "Key", "Neck"]);
     expect(out.diagrams.map((d) => [d.kind, d.ref])).toEqual([["sketch", "oropharynx"], ["legend", "oropharynx"], ["sketch", "neck"]]);
     expect(out.diagrams[1]!.svg).toContain(">Congested</text>");
