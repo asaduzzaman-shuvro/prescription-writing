@@ -4,10 +4,12 @@ import {
   DEFAULT_PRINT_SETTINGS,
   labLine,
   labReportDepartment,
+  nextFit,
   printAge,
   renderLabReportHtml,
   prescriptionFileName,
   renderPrescriptionHtml,
+  startFit,
   type ChamberHeader,
   type ChamberSlot,
   type LabResult,
@@ -111,7 +113,7 @@ export async function prescriptionPdf(
   const verifyUrl = rx.verifyToken ? `${base}/v/${rx.verifyToken}` : null;
   const date = rx.finalizedAt ? rx.finalizedAt.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }) : (enc?.visitDate ?? rx.createdAt.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }));
   const qrSvg = verifyUrl ? await QRCode.toString(verifyUrl, { type: "svg", margin: 0 }) : undefined;
-  const render = (pages?: number) => renderPrescriptionHtml({
+  const render = (pages: number, fit: number) => renderPrescriptionHtml({
     doc,
     patient: {
       name: patient.name, sex: (patient.sex as Sex) ?? undefined, mobile: patient.mobile ?? undefined, patientCode: patient.code ?? undefined,
@@ -132,12 +134,21 @@ export async function prescriptionPdf(
     fonts: fonts(),
     footerNote: verifyUrl ? undefined : "DRAFT — not valid",
     pages,
+    fit,
   });
-  // Print once to learn the page count; 2+ pages print again, numbered, with the footer at the bottom of the last.
-  const first = await htmlToPdf(render());
-  const count = pdfPageCount(first);
+  // The same fit search as the preview, judged by the PDF's real page count: the largest body that fits one page,
+  // else the natural layout again on numbered pages with the footer at the bottom of the last.
+  let st = startFit();
+  let pdf = await htmlToPdf(render(st.pages, st.level));
+  for (;;) {
+    const next = nextFit(st, settings, pdfPageCount(pdf));
+    const same = next.level === st.level && next.pages === st.pages;
+    st = next;
+    if (!same) pdf = await htmlToPdf(render(st.pages, st.level));
+    if (st.done) break;
+  }
   return {
-    pdf: count > 1 ? await htmlToPdf(render(count)) : first,
+    pdf,
     filename: prescriptionFileName({ name: patient.name, mobile: patient.mobile, id: patient.code, date }),
   };
 }
