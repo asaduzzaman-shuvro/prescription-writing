@@ -222,7 +222,8 @@ function formatPatientCode(seq: number) {
   return `P-${String(seq).padStart(6, "0")}`;
 }
 
-async function nextPatientCode(tx: Db, tenantId: string): Promise<string> {
+/** Takes the database or a write transaction: both have `get`. */
+async function nextPatientCode(tx: Pick<Db, "get">, tenantId: string): Promise<string> {
   const row = await tx.get<{ n: number }>(
     `SELECT COALESCE(MAX(CAST(REPLACE(code, 'P-', '') AS INTEGER)), 0) + 1 AS n
        FROM patient WHERE tenant_id = ? AND code IS NOT NULL AND code GLOB 'P-[0-9]*'`,
