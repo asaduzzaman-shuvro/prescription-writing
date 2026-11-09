@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_PRINT_SETTINGS, defaultSectionLabel, SECTION_KEYS, SKETCH_IDS, SKETCHES, type PrintSettings, type SectionKey, type SketchId } from "@rx/core";
+import { DEFAULT_PRINT_SETTINGS, defaultSectionLabel, EXAM_COLUMNS_FROM_PCT, SECTION_KEYS, SKETCH_IDS, SKETCHES, type PrintSettings, type SectionKey, type SketchId } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
 import { ChevronRight, FlaskConical, ListChecks, Settings } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -460,7 +460,9 @@ export function SettingsScreen() {
               )}
               <div className={cell3}>{num("fontSizePt", "Font (pt)", 0.5)}</div>
               <div className={cell3}>{num("drugFontSizePt", "Medicine font (pt)", 0.5)}</div>
-              <div className={cell3}>{num("leftColumnPct", "Left column %", 1)}</div>
+              <div className={cell3} title={`From ${EXAM_COLUMNS_FROM_PCT}%, exam sections (Nose & PNS, Throat, Neck) print two per row; Ear keeps the full width.`}>
+                {num("leftColumnPct", "Left column %", 1)}
+              </div>
               <label className="col-span-12 flex items-center gap-1.5 text-xs text-slate-700" title="A long prescription gets tighter spacing and a smaller body (down to 80%) before it uses a second page. The header, patient line, signature and footer keep their size.">
                 <input type="checkbox" checked={s.fitOnePage} onChange={(e) => set("fitOnePage", e.target.checked)} data-testid="fit-one-page" />
                 Fit to one page <span className="text-slate-500">(shrinks the body to 80% at most before using a second page)</span>

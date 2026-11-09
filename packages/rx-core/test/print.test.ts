@@ -328,6 +328,39 @@ describe("medicine font", () => {
   });
 });
 
+describe("exam sections two per row", () => {
+  const exam = flattenFindings(ENT_TEMPLATE, {
+    ear_tm: { right: "Perforated" },
+    ear_tm_map: { right: { perforation: ["ai"], retraction: [] } },
+    nose_notes: "DNS to left",
+    thr_notes: "Tonsils grade 2",
+    neck_notes: "No lymphadenopathy",
+  });
+  const at = (s: string, sub: string) => s.indexOf(sub);
+  const withLeft = (pct: number) =>
+    render({ specialtyFindings: exam.groups, diagrams: exam.diagrams }, {}, { ...DEFAULT_PRINT_SETTINGS, leftColumnPct: pct });
+
+  it("keeps one section per row in a narrow left column", () => {
+    expect(withLeft(34)).not.toContain(`<div class="exam-cols">`);
+    expect(withLeft(44)).not.toContain(`<div class="exam-cols">`);
+  });
+
+  it("puts Nose & PNS, Throat and Neck two per row in a wide one; Ear and its drums keep the full width", () => {
+    const html = withLeft(50);
+    const cols = html.slice(at(html, `<div class="exam-cols">`));
+    expect(cols).toMatch(/^<div class="exam-cols"><section><h3>Nose &amp; PNS<\/h3>[\s\S]*<h3>Throat<\/h3>[\s\S]*<h3>Neck<\/h3>/);
+    expect(at(html, "<h3>Ear</h3>")).toBeLessThan(at(html, `<div class="exam-cols">`));
+    expect(html.match(/<div class="exam-cols">/g)).toHaveLength(1);
+  });
+
+  it("a lone section needs no row", () => {
+    const one = flattenFindings(ENT_TEMPLATE, { thr_notes: "Tonsils grade 2" });
+    const html = render({ specialtyFindings: one.groups, diagrams: one.diagrams }, {}, { ...DEFAULT_PRINT_SETTINGS, leftColumnPct: 60 });
+    expect(html).toContain("<h3>Throat</h3>");
+    expect(html).not.toContain(`<div class="exam-cols">`);
+  });
+});
+
 describe("the fit search", () => {
   const s = DEFAULT_PRINT_SETTINGS;
   /** Runs the search against a prescription that fits from level `fitsFrom` (never: Infinity); returns the levels tried. */

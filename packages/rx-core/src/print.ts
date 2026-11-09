@@ -28,6 +28,7 @@ export interface PrintSettings {
   fontSizePt: number;
   /** Medicine names (the line with the number), usually a little bigger than the rest. */
   drugFontSizePt: number;
+  /** From `EXAM_COLUMNS_FROM_PCT`, exam sections without eardrums print two per row. */
   leftColumnPct: number;
   drugNameCase: "upper" | "as_is";
   genericDisplay: "brand" | "brand_generic" | "generic";
@@ -126,6 +127,9 @@ export interface RenderInput {
   fit?: number;
 }
 
+/** A left column at least this wide (%) prints exam sections two per row; one with eardrums keeps the full width. */
+export const EXAM_COLUMNS_FROM_PCT = 45;
+
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /** Bottom page margin the "Page 1 of 2" number prints in, when there are 2+ pages. */
@@ -220,6 +224,7 @@ function fitCss(level: number, s: PrintSettings): string {
 :where(.body) .ear-row { gap: ${b(2)}; margin-bottom: ${b(2)}; }
 :where(.body) .ear-row .diagram.tm { flex: 0 1 ${b(20)}; min-width: ${b(14)}; }
 :where(.body) .diagram.neck .svg svg { width: ${b(30)}; }
+:where(.body) .exam-cols { column-gap: ${b(3)}; }
 .barcode { font-size: ${r1(0.8 * s.fontSizePt)}pt; }
 .sign { margin-top: 15mm; font-size: ${s.fontSizePt}pt; line-height: 1.35; }
 `;
@@ -488,9 +493,22 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   // A section placed under Investigations (audiology results) prints inside Ix, after the advised tests, without its
   // own heading. If the doctor hides Ix, it keeps its heading with the examination, so the results still print.
   const underIx = (g: (typeof groups)[number]) => g.placement === "ix" && !hidden.has("ix");
-  const specialty = groups
-    .filter((g) => !underIx(g))
-    .map((g) => section(g.title, groupBody(g)))
+  const shownGroups = groups.filter((g) => !underIx(g));
+  // A wide left column takes exam sections two per row (Nose & PNS beside Throat, Neck below). A section with
+  // eardrums keeps the full width: the drums and their key need it.
+  const twoUp = s.leftColumnPct >= EXAM_COLUMNS_FROM_PCT;
+  const fullWidth = (g: (typeof groups)[number]) => !!g.id && allDiagrams.some((d) => d.section === g.id && isTm(d));
+  const runs: (typeof groups)[] = [];
+  for (const g of shownGroups) {
+    const last = runs.at(-1);
+    if (twoUp && !fullWidth(g) && last && !fullWidth(last[0]!)) last.push(g);
+    else runs.push([g]);
+  }
+  const specialty = runs
+    .map((run) => {
+      const html = run.map((g) => section(g.title, groupBody(g))).join("");
+      return run.length > 1 ? `<div class="exam-cols">${html}</div>` : html;
+    })
     .join("");
   const ixResults = groups.filter(underIx).map(groupBody).join("");
   const diagrams = figures(allDiagrams.filter((d) => !placed(d)));
@@ -615,6 +633,8 @@ ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .rx-note { margin: 0 0 3mm; }
 .rx-item .num { display: inline-block; min-width: 5mm; }
 .rx-item .drug { font-size: ${r3(drugEm)}em; }
+.exam-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 3mm; }
+.exam-cols > section { min-width: 0; }
 .rx-item .gen { font-size: ${r3(0.85 / drugEm)}em; }
 .rx-item .instr, .rx-item .note { padding-left: 5mm; }
 .rx-item .note { font-size: 0.9em; }
