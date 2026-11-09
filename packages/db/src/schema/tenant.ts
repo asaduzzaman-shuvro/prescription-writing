@@ -21,7 +21,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { brandProduct, company, dosageForm, specialty, specialtyTemplate } from "./catalogue";
+import { brandProduct, company, complaint, dosageForm, specialty, specialtyTemplate } from "./catalogue";
 
 export const platformRole = pgEnum("platform_role", ["super_admin", "data_editor"]);
 export const tenantRole = pgEnum("tenant_role", ["clinic_admin", "doctor", "assistant"]);
@@ -33,6 +33,7 @@ export const prescriptionStatus = pgEnum("prescription_status", ["draft", "final
 export const visitType = pgEnum("visit_type", ["new", "followup", "report"]);
 export const encounterStatus = pgEnum("encounter_status", ["waiting", "in_progress", "done", "cancelled"]);
 export const customMedicineStatus = pgEnum("custom_medicine_status", ["pending", "approved", "rejected"]);
+export const doctorComplaintStatus = pgEnum("doctor_complaint_status", ["pending", "approved", "rejected"]);
 
 const timestamps = {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -538,6 +539,41 @@ export const customMedicine = pgTable(
   (t) => [
     index("custom_medicine_owner_idx").on(t.tenantId, t.ownerUserId),
     index("custom_medicine_status_idx").on(t.status, t.createdAt),
+  ],
+);
+
+/**
+ * A doctor's own chief-complaint line ("Fever for 3 days"): a new one, or their edit of a shared `complaint`
+ * (`replaces_complaint_id`), which hides that shared line for them only. Only its owner sees it (the sync pull
+ * filters by owner). A platform admin may share it with every doctor: approving copies it into `complaint` under the
+ * same id, or rewrites the shared line it replaces (`approved_complaint_id`). Not shared, it stays private.
+ */
+export const doctorComplaint = pgTable(
+  "doctor_complaint",
+  {
+    id: uuid().primaryKey(),
+    tenantId: uuid()
+      .notNull()
+      .references(() => tenant.id),
+    ownerUserId: uuid()
+      .notNull()
+      .references(() => appUser.id),
+    name: text().notNull(),
+    nameBn: text(),
+    replacesComplaintId: uuid().references(() => complaint.id),
+    /** The doctor's remove; removing an edit of a shared line brings the shared line back. */
+    isActive: boolean().notNull().default(true),
+    status: doctorComplaintStatus().notNull().default("pending"),
+    reviewNote: text(),
+    reviewedBy: uuid(),
+    reviewedAt: timestamp({ withTimezone: true }),
+    approvedComplaintId: uuid().references(() => complaint.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("doctor_complaint_owner_idx").on(t.tenantId, t.ownerUserId),
+    index("doctor_complaint_status_idx").on(t.status, t.createdAt),
+    uniqueIndex("doctor_complaint_override_uq").on(t.ownerUserId, t.replacesComplaintId).where(sql`replaces_complaint_id IS NOT NULL`),
   ],
 );
 
