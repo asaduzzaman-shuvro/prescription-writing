@@ -346,13 +346,13 @@ export function SettingsScreen() {
   const p = prof[0];
   const chamberSelect =
     chambers.length > 1 ? (
-      <select className="input h-8 w-auto max-w-xs text-sm" value={current?.id ?? ""} onChange={(e) => select(e.target.value)} aria-label="Chamber for print settings">
+      <select className="input h-8 w-auto max-w-xs text-sm" value={current?.id ?? ""} onChange={(e) => select(e.target.value)} aria-label="Chamber for print settings" data-testid="print-chamber">
         {chambers.map((c) => (
           <option key={c.id} value={c.id}>{c.name.replace(/\s*\n\s*/g, " ")}</option>
         ))}
       </select>
     ) : current ? (
-      <span className="text-[11px] text-slate-500">{current.name.replace(/\s*\n\s*/g, " ")}</span>
+      <span className="text-[11px] text-slate-500" data-testid="print-chamber">{current.name.replace(/\s*\n\s*/g, " ")}</span>
     ) : null;
 
   return (
@@ -460,6 +460,10 @@ export function SettingsScreen() {
               )}
               <div className={cell3}>{num("fontSizePt", "Font (pt)", 0.5)}</div>
               <div className={cell3}>{num("leftColumnPct", "Left column %", 1)}</div>
+              <label className="col-span-12 flex items-center gap-1.5 text-xs text-slate-700" title="A long prescription gets tighter spacing and a smaller body (down to 80%) before it uses a second page. The header, patient line, signature and footer keep their size.">
+                <input type="checkbox" checked={s.fitOnePage} onChange={(e) => set("fitOnePage", e.target.checked)} data-testid="fit-one-page" />
+                Fit to one page <span className="text-slate-500">(shrinks the body to 80% at most before using a second page)</span>
+              </label>
             </div>
           </SubBlock>
 
