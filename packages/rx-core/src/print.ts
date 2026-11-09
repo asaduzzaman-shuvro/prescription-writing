@@ -26,6 +26,8 @@ export interface PrintSettings {
   padHeaderMm: number;
   padFooterMm: number;
   fontSizePt: number;
+  /** Medicine names (the line with the number), usually a little bigger than the rest. */
+  drugFontSizePt: number;
   leftColumnPct: number;
   drugNameCase: "upper" | "as_is";
   genericDisplay: "brand" | "brand_generic" | "generic";
@@ -76,6 +78,7 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   padHeaderMm: 45,
   padFooterMm: 20,
   fontSizePt: 11,
+  drugFontSizePt: 12,
   leftColumnPct: 34,
   drugNameCase: "upper",
   genericDisplay: "brand_generic",
@@ -122,6 +125,8 @@ export interface RenderInput {
    */
   fit?: number;
 }
+
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /** Bottom page margin the "Page 1 of 2" number prints in, when there are 2+ pages. */
 const PAGE_NO_MM = 7;
@@ -558,6 +563,8 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const pages = Math.min(50, Math.max(1, Math.floor(Number(input.pages) || 1)));
   const numbered = pages > 1;
   const pageBoxMm = r1(pages * pageContentHeightMm(s, numbered));
+  // Medicine names relative to the body (so fitting shrinks them too); the generic beside them keeps its old size.
+  const drugEm = s.drugFontSizePt > 0 && s.fontSizePt > 0 ? s.drugFontSizePt / s.fontSizePt : 1;
   const fit = Math.min(FIT_LEVELS.length - 1, Math.max(0, Math.floor(Number(input.fit) || 0)));
   const pageRule = numbered
     ? `@page { size: ${widthMm}mm ${heightMm}mm; margin: 0 0 ${PAGE_NO_MM}mm 0;
@@ -607,7 +614,8 @@ ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .patient .oe { white-space: nowrap; }
 .rx-note { margin: 0 0 3mm; }
 .rx-item .num { display: inline-block; min-width: 5mm; }
-.rx-item .gen { font-size: 0.85em; }
+.rx-item .drug { font-size: ${r3(drugEm)}em; }
+.rx-item .gen { font-size: ${r3(0.85 / drugEm)}em; }
 .rx-item .instr, .rx-item .note { padding-left: 5mm; }
 .rx-item .note { font-size: 0.9em; }
 ul + .diagrams { margin-top: 1.5mm; }

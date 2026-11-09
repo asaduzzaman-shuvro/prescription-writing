@@ -459,6 +459,7 @@ export function SettingsScreen() {
                 </>
               )}
               <div className={cell3}>{num("fontSizePt", "Font (pt)", 0.5)}</div>
+              <div className={cell3}>{num("drugFontSizePt", "Medicine font (pt)", 0.5)}</div>
               <div className={cell3}>{num("leftColumnPct", "Left column %", 1)}</div>
               <label className="col-span-12 flex items-center gap-1.5 text-xs text-slate-700" title="A long prescription gets tighter spacing and a smaller body (down to 80%) before it uses a second page. The header, patient line, signature and footer keep their size.">
                 <input type="checkbox" checked={s.fitOnePage} onChange={(e) => set("fitOnePage", e.target.checked)} data-testid="fit-one-page" />

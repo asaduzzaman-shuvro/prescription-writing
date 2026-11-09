@@ -315,6 +315,19 @@ describe("fit to one page", () => {
   });
 });
 
+describe("medicine font", () => {
+  it("prints medicine names at their own size, relative to the body so fitting shrinks them too", () => {
+    expect(DEFAULT_PRINT_SETTINGS.drugFontSizePt).toBe(12);
+    const html = render();
+    expect(html).toContain(".rx-item .drug { font-size: 1.091em; }"); // 12pt over an 11pt body
+    expect(html).toContain(".rx-item .gen { font-size: 0.779em; }"); // the generic stays 0.85 of the body
+    const big = render({}, {}, { ...DEFAULT_PRINT_SETTINGS, fontSizePt: 10, drugFontSizePt: 13 });
+    expect(big).toContain(".rx-item .drug { font-size: 1.3em; }");
+    // A missing or broken size prints medicine names at the body size.
+    expect(render({}, {}, { ...DEFAULT_PRINT_SETTINGS, drugFontSizePt: 0 })).toContain(".rx-item .drug { font-size: 1em; }");
+  });
+});
+
 describe("the fit search", () => {
   const s = DEFAULT_PRINT_SETTINGS;
   /** Runs the search against a prescription that fits from level `fitsFrom` (never: Infinity); returns the levels tried. */
