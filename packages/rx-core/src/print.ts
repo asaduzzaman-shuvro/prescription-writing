@@ -48,6 +48,8 @@ export interface PrintSettings {
   tmMapAlways: boolean;
   /** ENT: throat/neck pictures printed blank when nothing was marked. */
   sketchesAlways: SketchId[];
+  /** Before using a second page, tighten the body's spacing and shrink it (to 80% at most) to fit one page. */
+  fitOnePage: boolean;
 }
 
 /** Printable sections whose heading can be renamed or hidden. */
@@ -89,6 +91,7 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   chambersInHeader: false,
   tmMapAlways: false,
   sketchesAlways: [],
+  fitOnePage: true,
 };
 
 export interface RenderInput {
@@ -113,6 +116,11 @@ export interface RenderInput {
    * on the server). 2+ numbers the pages and pins the footer to the bottom of the last one.
    */
   pages?: number;
+  /**
+   * Fit level (an index into `FIT_LEVELS`): 0 is the natural layout; higher levels tighten and shrink the body
+   * (findings, Rx, advice) so a long prescription fits one page. Header, patient strip and footer never change.
+   */
+  fit?: number;
 }
 
 /** Bottom page margin the "Page 1 of 2" number prints in, when there are 2+ pages. */
@@ -128,6 +136,88 @@ export function pageContentHeightMm(s: PrintSettings, numbered: boolean): number
 export function printPagesFor(contentHeightMm: number, s: PrintSettings): number {
   if (!(contentHeightMm > pageContentHeightMm(s, false) + 0.5)) return 1;
   return Math.min(50, Math.ceil((contentHeightMm - 0.5) / pageContentHeightMm(s, true)));
+}
+
+/**
+ * The steps a long prescription takes to fit one page: tighter spacing first, then the body scaled down to a floor
+ * of 80%. Past the last level it prints on numbered pages at its natural size.
+ */
+export const FIT_LEVELS: readonly { scale: number; tight: boolean }[] = [
+  { scale: 1, tight: false },
+  { scale: 1, tight: true },
+  { scale: 0.95, tight: true },
+  { scale: 0.9, tight: true },
+  { scale: 0.85, tight: true },
+  { scale: 0.8, tight: true },
+];
+
+/**
+ * Where the fit search stands: render at `level` with `pages`, measure, and pass the pages it took to `nextFit`.
+ * Once `done`, that render is the one to print.
+ */
+export interface FitState {
+  level: number;
+  pages: number;
+  done: boolean;
+  /** Levels still to try, lo..hi (the lowest level that fits is the largest size that fits). */
+  lo: number;
+  hi: number;
+  /** Lowest level seen to fit so far. */
+  best: number | null;
+  /** Pages the natural layout takes: the fallback when even the smallest level overflows. */
+  pagesAt0: number;
+}
+
+export function startFit(): FitState {
+  return { level: 0, pages: 1, done: false, lo: 1, hi: FIT_LEVELS.length - 1, best: null, pagesAt0: 1 };
+}
+
+/**
+ * The next render, from the pages the current one took (`printPagesFor` in the browser, the PDF's page count on the
+ * server). The body only gets shorter as the level rises, so a binary search over the levels finds the largest size
+ * that fits in at most three more renders. Nothing fits: the natural layout on numbered pages, as without fitting.
+ */
+export function nextFit(st: FitState, s: PrintSettings, pagesNeeded: number): FitState {
+  if (st.done) return st;
+  const pages = Math.max(1, Math.floor(pagesNeeded) || 1);
+  if (st.level === 0) {
+    if (pages === 1 || !s.fitOnePage) return { ...st, pages, done: true };
+    st = { ...st, pagesAt0: pages };
+  } else if (pages === 1) st = { ...st, best: st.level, hi: st.level - 1 };
+  else st = { ...st, lo: st.level + 1 };
+  if (st.lo > st.hi) return st.best !== null ? { ...st, level: st.best, pages: 1, done: true } : { ...st, level: 0, pages: st.pagesAt0, done: true };
+  return { ...st, level: (st.lo + st.hi) >> 1, pages: 1 };
+}
+
+/** CSS that tightens and scales the body for a fit level, after the base rules. Fixed sizes: QR, barcode, signature. */
+function fitCss(level: number, s: PrintSettings): string {
+  const f = FIT_LEVELS[level];
+  if (!f || level === 0) return "";
+  const b = (mm: number) => `${r1(mm * f.scale)}mm`;
+  return `/* Fit to one page: level ${level} (${Math.round(f.scale * 100)}%). */
+.body { font-size: ${f.scale}em; line-height: 1.2; }
+.left { padding: ${b(2)} ${b(3)} ${b(2)} 0; }
+.right { padding: ${b(2)} 0 ${b(2)} ${b(4)}; }
+:where(.body) section { margin-bottom: ${b(1.5)}; }
+:where(.body) h3 { margin: 0 0 ${b(1)}; }
+:where(.body) ul { padding-left: ${b(4)}; }
+:where(.body) .rx-symbol { margin-bottom: ${b(1)}; }
+:where(.body) ol.rx { margin: 0 0 ${b(2)}; }
+:where(.body) .rx-item { margin-bottom: ${b(1.5)}; }
+:where(.body) .rx-note { margin: 0 0 ${b(2)}; }
+:where(.body) .rx-item .num { min-width: ${b(5)}; }
+:where(.body) .rx-item .instr, :where(.body) .rx-item .note { padding-left: ${b(5)}; }
+:where(.body) ul + .diagrams { margin-top: ${b(1.5)}; }
+:where(.body) .diagram { margin: 0 ${b(2)} ${b(2)} 0; }
+:where(.body) .diagram .svg svg { width: ${b(28)}; }
+:where(.body) .diagram.legend figcaption { margin-bottom: ${b(0.5)}; }
+:where(.body) .diagram.legend .svg svg { width: ${b(32)}; }
+:where(.body) .ear-row { gap: ${b(2)}; margin-bottom: ${b(2)}; }
+:where(.body) .ear-row .diagram.tm { flex: 0 1 ${b(20)}; min-width: ${b(14)}; }
+:where(.body) .diagram.neck .svg svg { width: ${b(30)}; }
+.barcode { font-size: ${r1(0.8 * s.fontSizePt)}pt; }
+.sign { margin-top: 15mm; font-size: ${s.fontSizePt}pt; line-height: 1.35; }
+`;
 }
 
 /** Saved PDF name: name, mobile, patient id and visit date, so one patient's prescriptions stay distinct. */
@@ -468,6 +558,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const pages = Math.min(50, Math.max(1, Math.floor(Number(input.pages) || 1)));
   const numbered = pages > 1;
   const pageBoxMm = r1(pages * pageContentHeightMm(s, numbered));
+  const fit = Math.min(FIT_LEVELS.length - 1, Math.max(0, Math.floor(Number(input.fit) || 0)));
   const pageRule = numbered
     ? `@page { size: ${widthMm}mm ${heightMm}mm; margin: 0 0 ${PAGE_NO_MM}mm 0;
   @bottom-right { content: "Page " counter(page) " of " counter(pages); font-family: "RxLatin", sans-serif; font-size: 8pt; padding-right: ${m.right}mm; } }`
@@ -547,7 +638,7 @@ header .logo img { max-height: 18mm; max-width: 30mm; }
 .barcode { margin-bottom: 2mm; text-align: center; font-size: 0.8em; letter-spacing: 0.5pt; }
 .barcode svg { display: block; margin: 0 auto 0.5mm; }
 .footnote { font-size: 0.75em; text-align: center; color: #333; margin-top: 2mm; }
-@media screen {
+${fitCss(fit, s)}@media screen {
   body { background: #e5e7eb; }
   .sheet { width: ${widthMm}mm; min-height: ${heightMm}mm; margin: 8mm auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
 }

@@ -5,11 +5,13 @@ import {
   eardrumLegendSvg,
   eardrumSvg,
   ENT_TEMPLATE,
+  FIT_LEVELS,
   flattenFindings,
   followUpDate,
   formatDateDmy,
   formatInstructionParts,
   historyLines,
+  nextFit,
   pageContentHeightMm,
   printAge,
   printPagesFor,
@@ -18,6 +20,8 @@ import {
   SAMPLE_DOC,
   SAMPLE_DOCTOR,
   SAMPLE_PATIENT,
+  startFit,
+  type FitState,
   type PrescriptionDoc,
   type PatientInfo,
 } from "../src";
@@ -265,6 +269,94 @@ describe("prescriptions longer than a page", () => {
     // A doctored page count can't blow the page up.
     expect(render({}, {}, DEFAULT_PRINT_SETTINGS, 1e9)).toContain(".page { min-height: 13850mm;");
     expect(render({}, {}, DEFAULT_PRINT_SETTINGS, -2)).not.toContain("counter(pages)");
+  });
+});
+
+describe("fit to one page", () => {
+  const fitted = (fit: number | undefined, settings = DEFAULT_PRINT_SETTINGS) =>
+    renderPrescriptionHtml({
+      doc: SAMPLE_DOC, patient: SAMPLE_PATIENT, doctor: SAMPLE_DOCTOR, chamber: SAMPLE_CHAMBER, date: "2026-06-11",
+      settings, fonts: { bengali: "", latin: "" }, fit,
+    });
+
+  it("is on by default and steps from the natural layout down to 80%", () => {
+    expect(DEFAULT_PRINT_SETTINGS.fitOnePage).toBe(true);
+    expect(FIT_LEVELS[0]).toEqual({ scale: 1, tight: false });
+    expect(FIT_LEVELS.at(-1)).toEqual({ scale: 0.8, tight: true });
+    const scales = FIT_LEVELS.map((l) => l.scale);
+    expect(scales).toEqual([...scales].sort((a, b) => b - a));
+  });
+
+  it("level 0 prints exactly as without fitting", () => {
+    expect(fitted(0)).toBe(fitted(undefined));
+    expect(fitted(0)).not.toContain("Fit to one page");
+    expect(fitted(-3)).toBe(fitted(undefined)); // a doctored level is clamped
+  });
+
+  it("tightens the body's spacing at level 1, at full size", () => {
+    const html = fitted(1);
+    expect(html).toContain(".body { font-size: 1em; line-height: 1.2; }");
+    expect(html).toContain(":where(.body) .rx-item { margin-bottom: 1.5mm; }");
+    expect(html).toContain(":where(.body) .diagram .svg svg { width: 28mm; }");
+    expect(html).toContain(".sign { margin-top: 15mm; font-size: 11pt; line-height: 1.35; }");
+  });
+
+  it("shrinks only the body at the floor: header, patient strip, footer, QR, barcode and signature keep their size", () => {
+    const html = fitted(5, { ...DEFAULT_PRINT_SETTINGS, fontSizePt: 10 });
+    expect(html).toContain(".body { font-size: 0.8em; line-height: 1.2; }");
+    expect(html).toContain(":where(.body) .diagram .svg svg { width: 22.4mm; }");
+    expect(html).toContain(":where(.body) .diagram.neck .svg svg { width: 24mm; }");
+    expect(html).toContain(":where(.body) .ear-row .diagram.tm { flex: 0 1 16mm; min-width: 11.2mm; }");
+    expect(html).toContain(".barcode { font-size: 8pt; }");
+    expect(html).toContain(".sign { margin-top: 15mm; font-size: 10pt; line-height: 1.35; }");
+    // Everything outside the body is the same CSS as the natural layout.
+    const base = fitted(0, { ...DEFAULT_PRINT_SETTINGS, fontSizePt: 10 });
+    expect(html.replace(/\/\* Fit to one page[\s\S]*?(?=@media screen)/, "")).toBe(base);
+  });
+});
+
+describe("the fit search", () => {
+  const s = DEFAULT_PRINT_SETTINGS;
+  /** Runs the search against a prescription that fits from level `fitsFrom` (never: Infinity); returns the levels tried. */
+  const run = (fitsFrom: number, pagesAt0 = 2, settings = s) => {
+    let st: FitState = startFit();
+    const tried: number[] = [];
+    while (!st.done) {
+      tried.push(st.level);
+      st = nextFit(st, settings, st.level === 0 ? (fitsFrom === 0 ? 1 : pagesAt0) : st.level >= fitsFrom ? 1 : 2);
+    }
+    return { st, tried };
+  };
+
+  it("keeps a prescription that already fits as it is", () => {
+    const { st, tried } = run(0);
+    expect(tried).toEqual([0]);
+    expect(st).toMatchObject({ level: 0, pages: 1, done: true });
+  });
+
+  it("finds the largest size that fits, in at most four renders", () => {
+    for (let k = 1; k < FIT_LEVELS.length; k++) {
+      const { st, tried } = run(k);
+      expect(st).toMatchObject({ level: k, pages: 1, done: true });
+      expect(tried.length).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("falls back to the natural size on numbered pages when even 80% overflows", () => {
+    const { st, tried } = run(Infinity, 3);
+    expect(st).toMatchObject({ level: 0, pages: 3, done: true });
+    expect(tried.length).toBeLessThanOrEqual(4);
+  });
+
+  it("with fitting off, uses numbered pages straight away", () => {
+    const { st, tried } = run(1, 2, { ...s, fitOnePage: false });
+    expect(tried).toEqual([0]);
+    expect(st).toMatchObject({ level: 0, pages: 2, done: true });
+  });
+
+  it("ignores measurements once done", () => {
+    const done = run(3).st;
+    expect(nextFit(done, s, 5)).toBe(done);
   });
 });
 
