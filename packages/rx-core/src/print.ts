@@ -335,10 +335,11 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const allDiagrams = [...blankTm, ...(doc.diagrams ?? []), ...blankSketches];
   const isTm = (d: (typeof allDiagrams)[number] | undefined) => !!d && (d.kind === "tm" || /^(Right|Left) TM$/.test(d.title));
   // Diagrams come from the client-writable prescription doc: sanitise before embedding.
-  // A picture's caption goes under it; a key's heading ("Key") goes above its rows.
+  // A picture's caption goes under it; a key's heading ("Key") goes above its rows. A drum has none: it is marked R / L
+  // inside its own picture, so "Right TM" / "Left TM" would only repeat that.
   const figure = (d: (typeof allDiagrams)[number], style = "") => {
     const legend = d.kind === "tm-legend" || d.kind === "legend";
-    const svg = `<div class="svg">${sanitizeSvg(d.svg)}</div>`, caption = `<figcaption>${esc(d.title)}</figcaption>`;
+    const svg = `<div class="svg">${sanitizeSvg(d.svg)}</div>`, caption = isTm(d) ? "" : `<figcaption>${esc(d.title)}</figcaption>`;
     return `<figure class="diagram${legend ? " legend" : ""}${isTm(d) ? " tm" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"${style}>${legend ? caption + svg : svg + caption}</figure>`;
   };
   const figures = (ds: typeof allDiagrams) => {
@@ -359,15 +360,16 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   // Each picture prints under its own exam section; the rest (older prescriptions, or a blank
   // "always print" picture whose section has no findings) print together after all findings.
   const groups = doc.specialtyFindings ?? [];
+  const tmPrinted = allDiagrams.some(isTm);
   const placed = (d: (typeof allDiagrams)[number]) => typeof d.section === "string" && groups.some((g) => g.id === d.section);
   const groupBody = (g: (typeof groups)[number]) => {
     const own = g.id ? allDiagrams.filter((d) => d.section === g.id) : [];
     const pics = figures(own);
-    // A picture's own words (the TM map's) print last, right above the pictures. Exams saved before the flag
-    // existed have their "TM map" line moved the same way when the section prints the drums.
-    const above = (l: ExamFindingLine) => l.abovePictures || (l.label === "TM map" && own.some(isTm));
-    const ordered = pics ? [...g.lines.filter((l) => !above(l)), ...g.lines.filter(above)] : g.lines;
-    const lines = ordered.length ? `<ul>${ordered.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
+    // The drums show the TM map, so its words ("R: central perforation (large) · L: …") don't print when they do.
+    // Exams saved before the abovePictures flag existed are matched by their "TM map" label.
+    const tmWords = (l: ExamFindingLine) => l.abovePictures || l.label === "TM map";
+    const shown = tmPrinted ? g.lines.filter((l) => !tmWords(l)) : g.lines;
+    const lines = shown.length ? `<ul>${shown.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
     return lines + (pics ? `<div class="diagrams">${pics}</div>` : "");
   };
   // A section placed under Investigations (audiology results) prints inside Ix, after the advised tests, without its

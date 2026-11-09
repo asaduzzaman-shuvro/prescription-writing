@@ -182,7 +182,7 @@ describe("renderPrescriptionHtml", () => {
 
 describe("TM map always printed", () => {
   const always = { ...DEFAULT_PRINT_SETTINGS, tmMapAlways: true };
-  const drums = (html: string) => html.match(/<figcaption>(Right|Left) TM<\/figcaption>/g) ?? [];
+  const drums = (html: string) => html.match(/<figure class="diagram tm">/g) ?? [];
 
   it("prints blank drums when nothing was marked, only when the setting is on", () => {
     expect(drums(render({ diagrams: [] }))).toHaveLength(0);
@@ -209,9 +209,10 @@ describe("TM map always printed", () => {
     const key = { title: "Key", svg: eardrumLegendSvg(["perforation", "bulging"]), kind: "tm-legend" as const };
     const html = render({ diagrams: [...tm, key, { title: "Audiogram (O right, X left)", svg: "<svg></svg>", kind: "audiogram" }] });
     const row = /<div class="ear-row">([\s\S]*?)<\/div><figure/.exec(html)?.[1] ?? "";
-    expect(row.match(/<figcaption>[^<]*<\/figcaption>/g)).toEqual(["<figcaption>Right TM</figcaption>", "<figcaption>Left TM</figcaption>", "<figcaption>Key</figcaption>"]);
+    // The drums carry no "Right TM" / "Left TM" caption (each is marked R / L inside its picture); the key keeps its heading.
+    expect(row.match(/<figcaption>[^<]*<\/figcaption>/g)).toEqual(["<figcaption>Key</figcaption>"]);
     expect(row).toContain(`<figure class="diagram legend" style="width:18.9mm"><figcaption>Key</figcaption><div class="svg">`); // heading above the rows; "Perforation": 61 units wide
-    expect(row).toContain(`</svg></div><figcaption>Left TM</figcaption>`); // pictures keep their caption below
+    expect(row).toContain(`>L</text></svg></div></figure>`); // the left drum: its R / L mark, then no caption
     expect(html).toContain(`</div><figure class="diagram">`); // what follows prints after the row, not in it
     // Older prescriptions (no kind) get the row too; a doctored key width is clamped.
     const old = [...tm.map(({ title, svg }) => ({ title, svg })), { ...key, svg: `<svg viewBox="0 0 99999 10"></svg>` }];
@@ -266,19 +267,21 @@ describe("exam pictures print under their own section", () => {
     return i;
   };
 
-  it("prints the TM map's words last in the Ear findings, right above the drums", () => {
+  it("doesn't print the TM map's words when the drums print, since the pictures show them", () => {
     const ear = flattenFindings(ENT_TEMPLATE, {
       ear_tm: { right: "Retracted" },
       ear_tm_map: { right: { perforation: [], retraction: ["as", "ai", "ps", "pi"] }, left: { perforation: [], retraction: [], disc: "medium" } },
       ear_discharge: { right: ["Mucoid"] },
     });
     const html = render({ specialtyFindings: ear.groups, diagrams: ear.diagrams });
-    const words = "<li><b>TM map:</b> R: retraction AS+AI+PS+PI · L: central perforation (medium)</li></ul>";
-    expect(at(html, "<b>Discharge:</b>")).toBeLessThan(at(html, words)); // after the answers below it in the template
-    expect(html).toContain(`${words}<div class="diagrams"><div class="ear-row">`); // straight above the drums
-    // Exams saved before the marker existed: their "TM map" line moves too, but only when the drums print with it.
+    expect(html).not.toContain("<b>TM map:</b>");
+    expect(html).not.toContain("central perforation (medium)");
+    expect(html).toContain(`<b>Discharge:</b> R Mucoid</li></ul><div class="diagrams"><div class="ear-row">`); // the other answers, then the drums
+    // Exams saved before the marker existed are matched by the label, and so are older prescriptions' unplaced drums.
     const old = ear.groups.map((g) => ({ ...g, lines: g.lines.map(({ label, value }) => ({ label, value })) }));
-    expect(render({ specialtyFindings: old, diagrams: ear.diagrams })).toContain(`${words}<div class="diagrams"><div class="ear-row">`);
+    expect(render({ specialtyFindings: old, diagrams: ear.diagrams })).not.toContain("<b>TM map:</b>");
+    expect(render({ specialtyFindings: old, diagrams: ear.diagrams.map(({ section: _, ...d }) => d) })).not.toContain("<b>TM map:</b>");
+    // Without the drums the words are all there is, so they print.
     const noDrums = render({ specialtyFindings: old, diagrams: [] });
     expect(at(noDrums, "<b>TM map:</b>")).toBeLessThan(at(noDrums, "<b>Discharge:</b>"));
   });
@@ -292,7 +295,7 @@ describe("exam pictures print under their own section", () => {
 
   it("puts Ear, Nose and Throat pictures right after their findings, and the audiogram inside Ix", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
-    const order = ["<h3>Ear</h3>", "Right TM</figcaption>", "<h3>Nose &amp; PNS</h3>", "Nose &amp; sinuses</figcaption>", "<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Ix</h3>", "Audiogram"];
+    const order = ["<h3>Ear</h3>", `<figure class="diagram tm">`, "<h3>Nose &amp; PNS</h3>", "Nose &amp; sinuses</figcaption>", "<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Ix</h3>", "Audiogram"];
     const idx = order.map((s) => at(html, s));
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
     expect(html).not.toContain(`<section class="diagrams">`);
@@ -302,18 +305,18 @@ describe("exam pictures print under their own section", () => {
     const old = { specialtyFindings: exam.groups.map(({ title, lines }) => ({ title, lines })), diagrams: exam.diagrams.map(({ section: _, ...d }) => d) };
     const html = render(old);
     expect(at(html, "<h3>Audiology</h3>")).toBeLessThan(at(html, `<section class="diagrams">`));
-    expect(at(html, `<section class="diagrams">`)).toBeLessThan(at(html, "Right TM</figcaption>"));
+    expect(at(html, `<section class="diagrams">`)).toBeLessThan(at(html, `<figure class="diagram tm">`));
   });
 
   it("puts a blank always-print picture in its section, or after the findings when that section is empty", () => {
     const settings = { ...DEFAULT_PRINT_SETTINGS, tmMapAlways: true, sketchesAlways: ["larynx" as const] };
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams.filter((d) => d.section !== "ear") }, {}, settings);
-    expect(at(html, "<h3>Ear</h3>")).toBeLessThan(at(html, "Right TM</figcaption>"));
-    expect(at(html, "Right TM</figcaption>")).toBeLessThan(at(html, "<h3>Nose &amp; PNS</h3>"));
+    expect(at(html, "<h3>Ear</h3>")).toBeLessThan(at(html, `<figure class="diagram tm">`));
+    expect(at(html, `<figure class="diagram tm">`)).toBeLessThan(at(html, "<h3>Nose &amp; PNS</h3>"));
     expect(at(html, "<h3>Throat</h3>")).toBeLessThan(at(html, "Larynx (IDL)</figcaption>"));
     expect(at(html, "Larynx (IDL)</figcaption>")).toBeLessThan(at(html, "<h3>Ix</h3>"));
     const noEar = render({ specialtyFindings: exam.groups.filter((g) => g.id !== "ear"), diagrams: [] }, {}, settings);
-    expect(at(noEar, `<section class="diagrams">`)).toBeLessThan(at(noEar, "Right TM</figcaption>"));
+    expect(at(noEar, `<section class="diagrams">`)).toBeLessThan(at(noEar, `<figure class="diagram tm">`));
   });
 
   describe("Audiology prints inside Ix", () => {
