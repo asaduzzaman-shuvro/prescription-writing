@@ -387,7 +387,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
       return !!ref && WORDLESS_SKETCHES.has(ref) && sketchesPrinted.has(ref);
     };
     const shown = g.lines.filter((l) => !(tmPrinted && tmWords(l)) && !sketchWords(l));
-    const lines = shown.length ? `<ul>${shown.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
+    const lines = shown.length ? `<ul>${shown.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value.trim()).replace(/\n/g, "<br>")}</li>`).join("")}</ul>` : "";
     return lines + (pics ? `<div class="diagrams">${pics}</div>` : "");
   };
   // A section placed under Investigations (audiology results) prints inside Ix, after the advised tests, without its

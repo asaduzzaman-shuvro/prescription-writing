@@ -15,6 +15,28 @@ describe("ENT template", () => {
     expect(grouped(["TFT", "TFT", undefined])).toEqual([]);
     expect(grouped([" "])).toEqual(["field f0: group must be a non-empty name"]);
     expect(grouped(["A", "B", "A"])).toEqual(['field f2: group "A" must be next to its other fields']);
+    expect(validateTemplateSchema({ sections: [{ id: "s", title: "S", fields: [{ id: "a", label: "A", type: "select", options: ["x"], multiline: true }] }] })).toEqual([
+      "field a: multiline is only for text fields (true or false)",
+    ]);
+  });
+
+  it("opens Ear, Nose & PNS, Throat and Neck with a free-writing Findings box", () => {
+    for (const id of ["ear", "nose", "throat", "neck"]) {
+      const first = ENT_TEMPLATE.sections.find((s) => s.id === id)!.fields[0]!;
+      expect(first).toMatchObject({ label: "Findings", type: "text", multiline: true });
+    }
+  });
+
+  it("prints written findings alone, first in their section, and skips a blank box", () => {
+    const out = flattenFindings(ENT_TEMPLATE, {
+      ear_notes: "Wax in both EAC\nTM intact both sides",
+      ear_discharge: { right: ["Mucoid"] },
+      thr_notes: "Tonsils grade 2, congested",
+      nose_notes: "   ",
+    });
+    expect(out.groups.map((g) => g.id)).toEqual(["ear", "throat"]);
+    expect(out.groups[0]!.lines[0]).toEqual({ label: "Findings", value: "Wax in both EAC\nTM intact both sides" });
+    expect(out.groups[1]!.lines).toEqual([{ label: "Findings", value: "Tonsils grade 2, congested" }]);
   });
 });
 

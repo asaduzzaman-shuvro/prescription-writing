@@ -172,6 +172,11 @@ describe("renderPrescriptionHtml", () => {
     expect(html).toContain("<h3>C/C</h3>");
   });
 
+  it("keeps the line breaks of written exam findings", () => {
+    const html = render({ specialtyFindings: [{ id: "ear", title: "Ear", lines: [{ label: "Findings", value: "Wax in both EAC\nTM intact <both>\n" }] }] });
+    expect(html).toContain(`<h3>Ear</h3><ul><li><b>Findings:</b> Wax in both EAC<br>TM intact &lt;both&gt;</li></ul>`);
+  });
+
   it("prints chief complaints on one line, comma separated", () => {
     const html = render({ chiefComplaints: ["Hearing loss × 3 days", " ", "Ear discharge (R) × 7 days", "জ্বর × ৩ দিন", "Itching <ear>"] });
     expect(html).toContain(`<h3>C/C</h3><p class="inline">Hearing loss × 3 days, Ear discharge (R) × 7 days, জ্বর × ৩ দিন, Itching &lt;ear&gt;</p>`);

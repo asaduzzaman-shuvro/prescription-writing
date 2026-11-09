@@ -19,6 +19,8 @@ export interface TemplateField {
   unit?: string;
   /** Option printed as "normal" is omitted from print to keep the pad short. */
   normal?: string;
+  /** For `type: "text"`: a box for several lines of free writing, kept line by line on the print. */
+  multiline?: boolean;
   /** For `type: "sketch"`: which picture (nose, oropharynx, larynx, neck). */
   sketch?: SketchId;
   /** Sub-heading inside the section; consecutive fields with the same group fold under it, collapsed until opened. */
@@ -129,6 +131,7 @@ export function validateTemplateSchema(raw: unknown): string[] {
       if (ids.has(f.id)) errors.push(`duplicate field id "${f.id}"`);
       ids.add(f.id);
       if (!FIELD_TYPES.includes(f.type)) errors.push(`field ${f.id}: unknown type "${f.type}"`);
+      if (f.multiline !== undefined && (typeof f.multiline !== "boolean" || f.type !== "text")) errors.push(`field ${f.id}: multiline is only for text fields (true or false)`);
       if (f.type === "sketch" && !isSketchId(f.sketch)) errors.push(`field ${f.id}: "sketch" must be one of ${SKETCH_IDS.join(", ")}`);
       if ((f.type === "select" || f.type === "multiselect") && (!Array.isArray(f.options) || !f.options.length))
         errors.push(`field ${f.id}: options required for ${f.type}`);
@@ -504,6 +507,7 @@ function text(v: unknown, f: TemplateField, sub: (option: string) => string = (o
   if (v === undefined || v === null || v === "") return "";
   if (Array.isArray(v)) return v.filter((x) => x !== f.normal).map((x) => sub(String(x))).join(", ");
   const s = String(v);
+  if (!s.trim()) return "";
   if (f.normal && s === f.normal) return "";
   return f.unit ? `${s} ${f.unit}` : sub(s);
 }

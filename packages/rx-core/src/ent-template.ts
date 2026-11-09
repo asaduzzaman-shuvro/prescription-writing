@@ -10,6 +10,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
       id: "ear",
       title: "Ear",
       fields: [
+        { id: "ear_notes", label: "Findings", type: "text", multiline: true },
         { id: "ear_pinna", label: "Pinna / mastoid", type: "multiselect", lateral: true, options: ["Normal", "Tender mastoid", "Pre-auricular sinus", "Post-aural scar", "Swelling"], normal: "Normal" },
         { id: "ear_eac", label: "EAC", type: "multiselect", lateral: true, options: ["Normal", "Wax", "Impacted wax", "Discharge", "Oedematous", "Fungal debris", "Furuncle", "Foreign body", "Narrow"], normal: "Normal" },
         { id: "ear_tm", label: "TM", type: "select", lateral: true, options: ["Intact (Normal)", "Perforated", "Retracted", "Bulging", "Congested", "Dull", "Not visible"] },
@@ -28,6 +29,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
       id: "nose",
       title: "Nose & PNS",
       fields: [
+        { id: "nose_notes", label: "Findings", type: "text", multiline: true },
         { id: "nose_external", label: "External nose", type: "multiselect", options: ["Normal", "Deviated", "Saddle", "Swelling"], normal: "Normal" },
         { id: "nose_septum", label: "Septum", type: "multiselect", options: ["Central", "DNS to right", "DNS to left", "S-shaped DNS", "Spur right", "Spur left", "Perforation", "Haematoma"], normal: "Central" },
         { id: "nose_turbinate", label: "Inferior turbinate", type: "multiselect", lateral: true, options: ["Normal", "Hypertrophied", "Pale & boggy", "Congested"], normal: "Normal" },
@@ -47,6 +49,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
       id: "throat",
       title: "Throat",
       fields: [
+        { id: "thr_notes", label: "Findings", type: "text", multiline: true },
         { id: "thr_oral", label: "Oral cavity", type: "multiselect", options: ["Normal", "Ulcer", "Coated tongue", "Dental caries", "Trismus", "Mass", "Growth", "Other"], normal: "Normal" },
         { id: "thr_oral_ulcer", label: "Ulcer details", type: "text", parent: { field: "thr_oral", option: "Ulcer" } },
         { id: "thr_oral_mass", label: "Mass details", type: "text", parent: { field: "thr_oral", option: "Mass" } },
@@ -70,6 +73,7 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
       id: "neck",
       title: "Neck",
       fields: [
+        { id: "neck_notes", label: "Findings", type: "text", multiline: true },
         { id: "thr_neck", label: "Neck", type: "multiselect", options: ["Thyroid swelling", "Other swelling", "No lymphadenopathy", "LN enlarged right", "LN enlarged left", "Bilateral LN"], normal: "No lymphadenopathy" },
         { id: "thr_neck_thyroid", label: "Thyroid swelling details", type: "text", parent: { field: "thr_neck", option: "Thyroid swelling" } },
         { id: "thr_neck_other", label: "Other swelling details", type: "text", parent: { field: "thr_neck", option: "Other swelling" } },

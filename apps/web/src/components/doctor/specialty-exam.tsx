@@ -98,6 +98,20 @@ function SelectField({
       </div>
     );
   }
+  // A free-writing box, for doctors who would rather write the findings than pick them.
+  if (f.type === "text" && f.multiline)
+    return (
+      <textarea
+        className="input"
+        rows={2}
+        disabled={disabled}
+        placeholder="Write the findings…"
+        value={String(value ?? "")}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        aria-label={f.label}
+        data-testid={`exam-${f.id}`}
+      />
+    );
   if (f.type === "text")
     return (
       <input
