@@ -4,6 +4,7 @@ import { useSession } from "@/lib/doctor/context";
 import {
   applyTemplate,
   clearTemplate,
+  COMPLAINT_SUGGESTIONS_QUERY,
   emptyDoc,
   ensureDraft,
   finalizePrescription,
@@ -11,6 +12,7 @@ import {
   lastFinalDoc,
   hiddenTemplateIds,
   newVersion,
+  saveDoctorComplaint,
   saveDraftDoc,
   saveFee,
   saveTemplate,
@@ -872,7 +874,9 @@ function RxEditor({
           </label>
           )}
           <ChipList title="C/C — Chief complaints" values={doc.chiefComplaints} onChange={(v) => update((d) => ({ ...d, chiefComplaints: v }))}
-            query={libQuery("complaint", "name", "name", "name_bn")} params={spec} placeholder="Fever × 3 days" testId="cc-input" multiline voice />
+            query={COMPLAINT_SUGGESTIONS_QUERY} params={spec} placeholder="Fever × 3 days" testId="cc-input" multiline voice
+            saveLabel="my C/C list"
+            onSaveCustom={session.tenantRole === "doctor" ? async (t) => void (await saveDoctorComplaint(db, session.tenantId, session.userId, { name: t })) : undefined} />
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</h3>
             <textarea className="input" rows={2} disabled={readOnly} value={doc.history ?? ""} onChange={(e) => update((d) => ({ ...d, history: e.target.value || undefined }))} placeholder="P/H, D/H, F/H…" />

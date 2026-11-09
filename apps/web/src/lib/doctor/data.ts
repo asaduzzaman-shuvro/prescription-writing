@@ -5,7 +5,18 @@
  * PowerSync; writes are queued and uploaded to /api/sync/upload when online.
  */
 import type { ChamberSlot, LabFileRef, LabResult, LabSignatory, PrescriptionDoc, PrintSettings, RxItem, Vitals } from "@rx/core";
-import { customMedicineProblem, DEFAULT_PRINT_SETTINGS, labCatalogueRowProblem, labLine, labReportProblem, labRowId, type CustomMedicineStatus } from "@rx/core";
+import {
+  customMedicineProblem,
+  DEFAULT_PRINT_SETTINGS,
+  doctorComplaintOverrideId,
+  doctorComplaintProblem,
+  labCatalogueRowProblem,
+  labLine,
+  labReportProblem,
+  labRowId,
+  type CustomMedicineStatus,
+  type DoctorComplaintStatus,
+} from "@rx/core";
 import type { AbstractPowerSyncDatabase } from "@powersync/web";
 import { localNowIso, nowIso, parseJson, randomToken, today, uuid } from "./util";
 
@@ -147,6 +158,84 @@ export async function saveCustomMedicine(db: Db, tenantId: string, userId: strin
   if (!hit) throw new Error("medicine not saved");
   return hit;
 }
+
+/** One of this doctor's own C/C lines, as the device holds it. */
+export interface DoctorComplaintRow {
+  id: string;
+  name: string;
+  name_bn: string | null;
+  replaces_complaint_id: string | null;
+  is_active: number;
+  status: DoctorComplaintStatus;
+  review_note: string | null;
+  approved_complaint_id: string | null;
+}
+
+export interface DoctorComplaintInput {
+  /** Set when editing one of the doctor's lines. */
+  id?: string;
+  name: string;
+  nameBn?: string | null;
+  /** Set when the doctor edits a shared complaint: the line then replaces it, for this doctor only. */
+  replacesComplaintId?: string | null;
+}
+
+/**
+ * Adds or edits one of this doctor's C/C lines; only they see it, and it waits for the platform admin, who may share
+ * it with every doctor. New text on a reviewed line makes it pending again, as the server does. Returns its id.
+ */
+export async function saveDoctorComplaint(db: Db, tenantId: string, userId: string, input: DoctorComplaintInput): Promise<string> {
+  const name = input.name.trim();
+  const nameBn = input.nameBn?.trim() || null;
+  const problem = doctorComplaintProblem({ name, name_bn: nameBn });
+  if (problem) throw new Error(problem);
+  const replaces = input.replacesComplaintId || null;
+  const id = input.id ?? (replaces ? doctorComplaintOverrideId(userId, replaces) : uuid());
+  const dup = await db.getOptional<{ id: string }>(
+    `SELECT id FROM doctor_complaint WHERE is_active = 1 AND lower(name) = lower(?) AND id <> ?`,
+    [name, id],
+  );
+  if (dup) throw new Error("This line is already in your list");
+  const now = nowIso();
+  const before = await db.getOptional<DoctorComplaintRow>(`SELECT * FROM doctor_complaint WHERE id = ?`, [id]);
+  if (before) {
+    const changed = before.name !== name || (before.name_bn || null) !== nameBn;
+    const reopen = changed && before.status !== "pending";
+    await db.execute(
+      `UPDATE doctor_complaint SET name = ?, name_bn = ?, is_active = 1, updated_at = ?
+         ${reopen ? ", status = 'pending', review_note = NULL" : ""}
+       WHERE id = ?`,
+      [name, nameBn, now, id],
+    );
+  } else {
+    await db.execute(
+      `INSERT INTO doctor_complaint (id, tenant_id, owner_user_id, name, name_bn, replaces_complaint_id, is_active, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`,
+      [id, tenantId, userId, name, nameBn, replaces, now, now],
+    );
+  }
+  return id;
+}
+
+/** Removes one of the doctor's lines from their list; removing an edit of a shared line brings the shared line back. */
+export async function removeDoctorComplaint(db: Db, id: string) {
+  await db.execute(`UPDATE doctor_complaint SET is_active = 0, updated_at = ? WHERE id = ?`, [nowIso(), id]);
+}
+
+/**
+ * C/C suggestions for the visit: the doctor's own lines first, then the shared list for the specialty (?1), minus the
+ * shared lines the doctor edited or already has as their own. ?2 is the LIKE pattern ChipList appends.
+ */
+export const COMPLAINT_SUGGESTIONS_QUERY = `
+  SELECT label, value, hint, tag FROM (
+    SELECT name AS label, name AS value, name_bn AS hint, 'Mine' AS tag, 0 AS grp, 0 AS shared, 0 AS sort_order, name AS ord
+      FROM doctor_complaint WHERE is_active = 1 AND (name LIKE ?2 OR name_bn LIKE ?2)
+    UNION ALL
+    SELECT c.name, c.name, c.name_bn, NULL, 1, c.specialty_code IS NULL, c.sort_order, c.name
+      FROM complaint c
+     WHERE (c.specialty_code IS NULL OR c.specialty_code = ?1) AND (c.name LIKE ?2 OR c.name_bn LIKE ?2)
+       AND NOT EXISTS (SELECT 1 FROM doctor_complaint d WHERE d.is_active = 1 AND (d.replaces_complaint_id = c.id OR lower(d.name) = lower(c.name)))
+  ) ORDER BY grp, shared, sort_order, ord LIMIT 12`;
 
 export interface CatalogueOption {
   id: string;

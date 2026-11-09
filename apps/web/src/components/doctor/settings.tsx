@@ -2,7 +2,7 @@
 
 import { DEFAULT_PRINT_SETTINGS, defaultSectionLabel, SECTION_KEYS, SKETCH_IDS, SKETCHES, type PrintSettings, type SectionKey, type SketchId } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
-import { ChevronRight, FlaskConical, Settings } from "lucide-react";
+import { ChevronRight, FlaskConical, ListChecks, Settings } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { printSettingsOf, savePrintSettings, saveSignature } from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
@@ -413,6 +413,23 @@ export function SettingsScreen() {
         </div>
         <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
       </a>
+
+      {session.tenantRole === "doctor" && (
+        <a
+          href="#/settings/complaints"
+          className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm transition hover:border-brand-200 hover:bg-brand-50/30"
+          data-testid="settings-complaints"
+        >
+          <div className="flex min-w-0 items-start gap-2">
+            <ListChecks className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+            <div>
+              <h2 className="text-xs font-semibold text-slate-900">My chief complaints (C/C)</h2>
+              <p className="text-[11px] text-slate-500">Your own C/C lines, like “Fever for 3 days”, and edits of shared ones</p>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+        </a>
+      )}
 
       <SettingsSection
         title="Print layout"

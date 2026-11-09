@@ -27,6 +27,7 @@ const DisplayScreen = dynamic(() => import("./display").then((m) => m.DisplayScr
 const InvestigationsScreen = dynamic(() => import("./investigations").then((m) => m.InvestigationsScreen), { loading: list });
 const LabScreen = dynamic(() => import("./lab").then((m) => m.LabScreen), { loading: list });
 const LabSettingsScreen = dynamic(() => import("./lab-settings").then((m) => m.LabSettingsScreen), { loading: form });
+const ComplaintSettingsScreen = dynamic(() => import("./complaint-settings").then((m) => m.ComplaintSettingsScreen), { loading: form });
 const MedicinesScreen = dynamic(() => import("./medicines").then((m) => m.MedicinesScreen), { loading: list });
 const SettingsScreen = dynamic(() => import("./settings").then((m) => m.SettingsScreen), { loading: form });
 const TemplatesScreen = dynamic(() => import("./templates").then((m) => m.TemplatesScreen), { loading: list });
@@ -91,7 +92,7 @@ export function DoctorApp() {
     case "templates":
       return <TemplatesScreen />;
     case "settings":
-      return r[1] === "lab" ? <LabSettingsScreen /> : <SettingsScreen />;
+      return r[1] === "lab" ? <LabSettingsScreen /> : r[1] === "complaints" ? <ComplaintSettingsScreen /> : <SettingsScreen />;
     default:
       return <div className="text-sm text-slate-500">Not found.</div>;
   }

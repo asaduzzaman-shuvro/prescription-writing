@@ -4,6 +4,7 @@ import { buildLabCatalogue, LAB_CURATED_PANELS, LAB_CURATED_TESTS, labPanelRow, 
 import { useQuery } from "@powersync/react";
 import { useMemo } from "react";
 import { useSession } from "./context";
+import type { DoctorComplaintRow } from "./data";
 
 export interface ChamberRow {
   id: string;
@@ -33,6 +34,15 @@ export interface DoctorRow {
 
 export function useDoctors() {
   const { data } = useQuery<DoctorRow>("SELECT id, name_en, specialty_code FROM doctor_profile ORDER BY name_en");
+  return data;
+}
+
+/** This doctor's C/C lines that are still in their list (the device only holds their own). */
+export function useDoctorComplaints(): DoctorComplaintRow[] {
+  const { data } = useQuery<DoctorComplaintRow>(
+    `SELECT id, name, name_bn, replaces_complaint_id, is_active, status, review_note, approved_complaint_id
+       FROM doctor_complaint WHERE is_active = 1 ORDER BY name`,
+  );
   return data;
 }
 

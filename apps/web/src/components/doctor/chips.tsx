@@ -9,6 +9,8 @@ export interface Suggestion {
   /** Text inserted when picked. */
   value: string;
   hint?: string;
+  /** Small label after the suggestion, e.g. "Mine". */
+  tag?: string | null;
 }
 
 /**
@@ -26,6 +28,8 @@ export function ChipList({
   multiline,
   voice,
   maxSuggestions = 8,
+  onSaveCustom,
+  saveLabel = "my list",
 }: {
   title: string;
   values: string[];
@@ -39,12 +43,17 @@ export function ChipList({
   voice?: boolean;
   /** How many suggestions the dropdown lists; it scrolls past about eight. */
   maxSuggestions?: number;
+  /** When set, typed text with no exact suggestion can also be saved for next time ("＋ Save … to my list"). */
+  onSaveCustom?: (text: string) => Promise<void>;
+  /** Where saved text goes, as the save row names it. */
+  saveLabel?: string;
 }) {
   const db = usePowerSync();
   const [text, setText] = useState("");
   const [sugs, setSugs] = useState<Suggestion[]>([]);
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -71,6 +80,21 @@ export function ChipList({
     if (clean && !values.includes(clean)) onChange([...values, clean]);
     setText("");
     inputRef.current?.focus();
+  }
+
+  const typed = text.trim();
+  const canSave = !!onSaveCustom && typed.length > 0 && !sugs.some((s) => s.value.toLowerCase() === typed.toLowerCase());
+
+  async function addAndSave() {
+    if (!onSaveCustom) return;
+    const t = typed;
+    add(t);
+    setSaveError(undefined);
+    try {
+      await onSaveCustom(t);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Not saved");
+    }
   }
 
   return (
@@ -128,6 +152,7 @@ export function ChipList({
           onChange={(e) => {
             setText(e.target.value);
             setOpen(true);
+            setSaveError(undefined);
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -154,7 +179,7 @@ export function ChipList({
           }}
         />
         {open &&
-          sugs.length > 0 &&
+          (sugs.length > 0 || canSave) &&
           (text.trim().length > 0 || values.length === 0) && (
             <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
               {sugs.map((s, i) => (
@@ -168,12 +193,28 @@ export function ChipList({
                     {s.hint && (
                       <span className="text-xs text-slate-400">{s.hint}</span>
                     )}
+                    {s.tag && (
+                      <span className="badge ml-1 bg-brand-50 text-[10px] text-brand-700">{s.tag}</span>
+                    )}
                   </button>
                 </li>
               ))}
+              {canSave && (
+                <li className="border-t border-slate-100">
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-1.5 text-left text-brand-700 hover:bg-brand-50"
+                    onMouseDown={() => void addAndSave()}
+                    data-testid={testId ? `${testId}-save` : undefined}
+                  >
+                    ＋ Save “{typed}” to {saveLabel}
+                  </button>
+                </li>
+              )}
             </ul>
           )}
       </div>
+      {saveError && <p className="text-xs text-red-700">{saveError}</p>}
     </section>
   );
 }
