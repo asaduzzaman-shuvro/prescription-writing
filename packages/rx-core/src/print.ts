@@ -279,6 +279,11 @@ function bmdcBn(n: string): string {
 
 const COURSE_LINE = { bn: "সম্পূর্ণ কোর্স শেষ করুন", en: "Complete the full course" };
 
+/** Sketches that print without their words or caption (the nose picture marks R / L itself). */
+const WORDLESS_SKETCHES = new Set<string>(["nose"]);
+/** Exams saved before lines named their picture: the curated label of each sketch's words. */
+const LEGACY_SKETCH_LABELS: Record<string, string> = { "Nose & sinus map": "nose" };
+
 /** Render a self-contained, printable HTML document for a prescription. */
 export function renderPrescriptionHtml(input: RenderInput): string {
   const { doc, patient, doctor, chamber, settings: s } = input;
@@ -338,12 +343,15 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     .map((id) => ({ title: SKETCHES[id].title, svg: sketchSvg(id), kind: "sketch" as const, ref: id, section: SKETCHES[id].section }));
   const allDiagrams = [...blankTm, ...(doc.diagrams ?? []), ...blankSketches];
   const isTm = (d: (typeof allDiagrams)[number] | undefined) => !!d && (d.kind === "tm" || /^(Right|Left) TM$/.test(d.title));
+  /** A picture that prints alone: what it shows is drawn and its sides are marked inside, so no caption and no words. */
+  const sketchRef = (d: (typeof allDiagrams)[number]) => (d.kind === "sketch" && "ref" in d && d.ref ? d.ref : null);
+  const wordless = (d: (typeof allDiagrams)[number] | undefined) => !!d && (isTm(d) || WORDLESS_SKETCHES.has(sketchRef(d) ?? ""));
   // Diagrams come from the client-writable prescription doc: sanitise before embedding.
   // A picture's caption goes under it; a key's heading ("Key") goes above its rows. A drum has none: it is marked R / L
   // inside its own picture, so "Right TM" / "Left TM" would only repeat that.
   const figure = (d: (typeof allDiagrams)[number], style = "") => {
     const legend = d.kind === "tm-legend" || d.kind === "legend";
-    const svg = `<div class="svg">${sanitizeSvg(d.svg)}</div>`, caption = isTm(d) ? "" : `<figcaption>${esc(d.title)}</figcaption>`;
+    const svg = `<div class="svg">${sanitizeSvg(d.svg)}</div>`, caption = wordless(d) ? "" : `<figcaption>${esc(d.title)}</figcaption>`;
     return `<figure class="diagram${legend ? " legend" : ""}${isTm(d) ? " tm" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"${style}>${legend ? caption + svg : svg + caption}</figure>`;
   };
   const figures = (ds: typeof allDiagrams) => {
@@ -365,6 +373,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   // "always print" picture whose section has no findings) print together after all findings.
   const groups = doc.specialtyFindings ?? [];
   const tmPrinted = allDiagrams.some(isTm);
+  const sketchesPrinted = new Set(allDiagrams.map(sketchRef).filter((r): r is string => !!r));
   const placed = (d: (typeof allDiagrams)[number]) => typeof d.section === "string" && groups.some((g) => g.id === d.section);
   const groupBody = (g: (typeof groups)[number]) => {
     const own = g.id ? allDiagrams.filter((d) => d.section === g.id) : [];
@@ -372,7 +381,12 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     // The drums show the TM map, so its words ("R: central perforation (large) · L: …") don't print when they do.
     // Exams saved before the abovePictures flag existed are matched by their "TM map" label.
     const tmWords = (l: ExamFindingLine) => l.abovePictures || l.label === "TM map";
-    const shown = tmPrinted ? g.lines.filter((l) => !tmWords(l)) : g.lines;
+    // Likewise a wordless sketch's words ("Nose & sinus map: R frontal sinus tender…"); older exams match by label.
+    const sketchWords = (l: ExamFindingLine) => {
+      const ref = l.picture ?? LEGACY_SKETCH_LABELS[l.label];
+      return !!ref && WORDLESS_SKETCHES.has(ref) && sketchesPrinted.has(ref);
+    };
+    const shown = g.lines.filter((l) => !(tmPrinted && tmWords(l)) && !sketchWords(l));
     const lines = shown.length ? `<ul>${shown.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value)}</li>`).join("")}</ul>` : "";
     return lines + (pics ? `<div class="diagrams">${pics}</div>` : "");
   };

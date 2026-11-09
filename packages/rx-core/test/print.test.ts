@@ -305,9 +305,26 @@ describe("exam pictures print under their own section", () => {
     ]);
   });
 
+  it("prints the nose picture without its words or caption; its key and the other answers stay", () => {
+    const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
+    const nose = html.slice(at(html, "<h3>Nose &amp; PNS</h3>"), at(html, "<h3>Throat</h3>"));
+    expect(nose).toContain("<b>Septum:</b> DNS to left");
+    expect(nose).not.toContain("Nose &amp; sinus map");
+    expect(nose).not.toContain("Nose &amp; sinuses</figcaption>");
+    expect(nose).toContain(">Max</text>"); // the picture
+    expect(nose).toContain("<figcaption>Key</figcaption>");
+    // Other pictures keep their words and caption.
+    expect(html).toContain("<b>Oropharynx map:</b>");
+    expect(html).toContain("Oropharynx</figcaption>");
+    // Older exams (lines without `picture`) are matched by label; without the picture the words are all there is.
+    const old = exam.groups.map((g) => ({ ...g, lines: g.lines.map(({ label, value }) => ({ label, value })) }));
+    expect(render({ specialtyFindings: old, diagrams: exam.diagrams })).not.toContain("Nose &amp; sinus map");
+    expect(render({ specialtyFindings: exam.groups, diagrams: [] })).toContain("<b>Nose &amp; sinus map:</b>");
+  });
+
   it("puts Ear, Nose and Throat pictures right after their findings, and the audiogram inside Ix", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
-    const order = ["<h3>Ear</h3>", `<figure class="diagram tm">`, "<h3>Nose &amp; PNS</h3>", "Nose &amp; sinuses</figcaption>", "<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Ix</h3>", "Audiogram"];
+    const order = ["<h3>Ear</h3>", `<figure class="diagram tm">`, "<h3>Nose &amp; PNS</h3>", ">Max</text>", "<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Ix</h3>", "Audiogram"];
     const idx = order.map((s) => at(html, s));
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
     expect(html).not.toContain(`<section class="diagrams">`);

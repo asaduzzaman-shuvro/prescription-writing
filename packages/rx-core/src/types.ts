@@ -102,6 +102,8 @@ export interface ExamFindingLine {
   value: string;
   /** Printed last in its section, right above the section's pictures (the TM map's words above the drums). */
   abovePictures?: boolean;
+  /** The words of a picture (its sketch id, e.g. "nose"), so the print can leave them out where the picture shows them. */
+  picture?: string;
 }
 
 export interface PrescriptionDoc {

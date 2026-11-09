@@ -642,7 +642,7 @@ export function flattenFindings(schema: SpecialtyTemplateSchema, saved: Findings
         if (!isSketchId(f.sketch)) continue;
         const t = sketchText(f.sketch, v);
         if (t) {
-          lines.push({ label: f.label, value: t });
+          lines.push({ label: f.label, value: t, picture: f.sketch });
           diagrams.push({ title: SKETCHES[f.sketch].title, svg: sketchSvg(f.sketch, v), kind: "sketch", ref: f.sketch });
           if (sketchNeedsLegend(f.sketch, v)) diagrams.push({ title: "Key", svg: sketchLegendSvg(f.sketch, v), kind: "legend", ref: f.sketch });
         }

@@ -336,15 +336,18 @@ test("Nose & PNS answers draw on the nose picture; Reset clears it after confirm
   await expect(summary).toHaveCount(0);
   await expect(nose.locator('[data-zone="r_it"]')).toHaveAttribute("fill", "#fff");
 
-  // It prints like the throat pictures: picture plus key.
+  // It prints as picture plus key, without its own words or a caption (R / L are drawn on it).
   await chip("Inferior turbinate", "Pale & boggy").nth(1).click();
   await addMedicine(page, "candistin", "3 drop tds re 7d");
   await page.waitForTimeout(800); // exam autosave debounce
   await page.getByTestId("finalize").click();
   const frame = page.frameLocator("[data-testid=print-frame]");
-  await expect(frame.getByText("L inferior turbinate pale / boggy")).toBeVisible();
+  await expect(frame.getByText("L inferior turbinate pale / boggy")).toHaveCount(0);
+  await expect(frame.getByText("Nose & sinus map")).toHaveCount(0);
   await expect(frame.locator("li", { hasText: "Nasal cavity:" })).toHaveText("Nasal cavity: L Foreign body (Bead), Nasal mass (Pedunculated, bleeds on touch)"); // in tick order
-  await expect(frame.locator("section", { has: frame.locator("h3", { hasText: /^Nose & PNS$/ }) }).locator("figure.diagram", { hasText: "Nose & sinuses" })).toHaveCount(1);
+  const noseSection = frame.locator("section", { has: frame.locator("h3", { hasText: /^Nose & PNS$/ }) });
+  await expect(noseSection.locator("figure.diagram:not(.legend)")).toHaveCount(1);
+  await expect(noseSection.locator("figcaption", { hasText: "Nose & sinuses" })).toHaveCount(0);
   await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Pale / boggy" })).toHaveCount(1);
 });
 
