@@ -33,6 +33,6 @@ test("Ref By from registration (screen only), O/E findings, plan, note and follo
   await expect(frame.locator(".left")).toContainText("Refd to Vascular Surgery Dept., BSMMU — Dr. Tarek");
   await expect(frame.locator(".left")).toContainText("H/O DM");
   await expect(frame.locator(".rx-note")).toContainText("Referred back to Dr. Imran.");
-  await expect(frame.locator(".dur").first()).toHaveText("- ৫ দিন");
+  await expect(frame.locator(".instr").first()).toHaveText(/ — ৫ দিন$/); // the duration ends the instruction line
   await expect(frame.locator(".right")).toContainText(/৭ দিন পর আসবেন। \(তারিখঃ [০-৯]{2}-[০-৯]{2}-[০-৯]{4}\)/);
 });

@@ -85,10 +85,15 @@ describe("renderPrescriptionHtml", () => {
     expect(render({ followUp: { kind: "date", date: "2026-07-20" } })).toContain("২০-০৭-২০২৬ তারিখে আসবেন।");
   });
 
-  it("puts the duration in its own column", () => {
+  it("ends the instruction line with the duration", () => {
     const html = render();
-    expect(html).toContain(`<div class="instr">১+০+১ — খাবারের পরে</div>`);
-    expect(html).toContain(`<div class="dur">- ৫ দিন</div>`);
+    expect(html).toContain(`<div class="instr">১+০+১ — খাবারের পরে — ৫ দিন</div>`);
+    expect(html).not.toContain(`class="dur"`);
+    // "Continue" reads the same way; no duration leaves no stray separator.
+    const continued = render({ items: [{ ...SAMPLE_DOC.items[0]!, duration: { kind: "continue" } }] });
+    expect(continued).toContain(`<div class="instr">১+০+১ — খাবারের পরে — চলবে</div>`);
+    const noDuration = render({ items: [{ ...SAMPLE_DOC.items[0]!, duration: { kind: "none" } }] });
+    expect(noDuration).toContain(`<div class="instr">১+০+১ — খাবারের পরে</div>`);
   });
 
   it("prints visit number, address, infant age and dd/mm/yyyy date", () => {

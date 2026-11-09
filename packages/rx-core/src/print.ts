@@ -408,14 +408,15 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const items = doc.items
     .map((it, i) => {
       const { main, duration } = formatInstructionParts(it, lang, s.numerals);
+      // The duration ends the instruction line: "১+০+১ — খাবারের পরে — ১০ দিন".
+      const instr = [main, duration].filter(Boolean).join(" — ");
       return `<li class="rx-item">
         <div class="lines">
           <div class="drug"><span class="num">${digits(i + 1, s.numerals)}.</span> ${drugName(it, s)}</div>
-          ${main ? `<div class="instr">${esc(main)}</div>` : ""}
+          ${instr ? `<div class="instr">${esc(instr)}</div>` : ""}
           ${it.note ? `<div class="note">${esc(it.note)}</div>` : ""}
           ${it.isAntibiotic ? `<div class="note course">${COURSE_LINE[lang]}</div>` : ""}
         </div>
-        <div class="dur">${duration ? `- ${esc(duration)}` : ""}</div>
       </li>`;
     })
     .join("");
@@ -497,8 +498,7 @@ ul { margin: 0; padding-left: 4mm; }
 .inline { margin: 0; }
 .rx-symbol { font-size: 2em; font-weight: 700; line-height: 1; margin-bottom: 1mm; }
 ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
-.rx-item { margin-bottom: 2.5mm; break-inside: avoid; display: grid; grid-template-columns: 1fr auto; column-gap: 4mm; }
-.rx-item .dur { align-self: center; white-space: nowrap; }
+.rx-item { margin-bottom: 2.5mm; break-inside: avoid; }
 .patient .oe { white-space: nowrap; }
 .rx-note { margin: 0 0 3mm; }
 .rx-item .num { display: inline-block; min-width: 5mm; }
