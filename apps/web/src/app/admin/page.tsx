@@ -18,6 +18,7 @@ interface Dash {
   tenants: number;
   unverified: number;
   medRequests: number;
+  ccRequests: number;
   devSeed: number;
   jobs: { id: string; createdAt: Date; filename: string; source: string; summary: unknown }[];
 }
@@ -36,13 +37,15 @@ async function loadDash(): Promise<Dash> {
       tenants: number;
       unverified: number;
       med_requests: number;
+      cc_requests: number;
     }>(sql`
       SELECT p.products, p.active, p.dev_seed,
              (SELECT count(*)::int FROM generic) AS generics,
              (SELECT count(*)::int FROM company) AS companies,
              (SELECT count(*)::int FROM tenant) AS tenants,
              (SELECT count(*)::int FROM doctor_profile WHERE bmdc_verified_at IS NULL) AS unverified,
-             (SELECT count(*)::int FROM custom_medicine WHERE status = 'pending') AS med_requests
+             (SELECT count(*)::int FROM custom_medicine WHERE status = 'pending') AS med_requests,
+             (SELECT count(*)::int FROM doctor_complaint WHERE status = 'pending' AND is_active) AS cc_requests
         FROM (
           SELECT count(*)::int AS products,
                  count(*) FILTER (WHERE is_active)::int AS active,
@@ -71,6 +74,7 @@ async function loadDash(): Promise<Dash> {
     tenants: 0,
     unverified: 0,
     med_requests: 0,
+    cc_requests: 0,
   };
   const n = (v: unknown) => Number(v) || 0;
   dashCache = {
@@ -82,6 +86,7 @@ async function loadDash(): Promise<Dash> {
     tenants: n(row.tenants),
     unverified: n(row.unverified),
     medRequests: n(row.med_requests),
+    ccRequests: n(row.cc_requests),
     devSeed: n(row.dev_seed),
     jobs,
   };
@@ -90,7 +95,7 @@ async function loadDash(): Promise<Dash> {
 
 export default async function AdminDashboard() {
   await connection();
-  const { products, active, generics, companies, tenants, unverified, medRequests, devSeed, jobs } = await loadDash();
+  const { products, active, generics, companies, tenants, unverified, medRequests, ccRequests, devSeed, jobs } = await loadDash();
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -101,7 +106,7 @@ export default async function AdminDashboard() {
           replaced by licensed or DGDA data before production.
         </div>
       )}
-      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4 xl:grid-cols-8">
         <Stat label="Products" value={products.toLocaleString()} href="/admin/medicines" accent="border-l-4 border-l-brand-500" />
         <Stat label="Active" value={active.toLocaleString()} accent="border-l-4 border-l-green-500" />
         <Stat label="Generics" value={generics.toLocaleString()} href="/admin/generics" accent="border-l-4 border-l-brand-500" />
@@ -109,6 +114,7 @@ export default async function AdminDashboard() {
         <Stat label="Chambers" value={tenants.toLocaleString()} href="/admin/doctors" accent="border-l-4 border-l-blue-500" />
         <Stat label="BMDC unverified" value={unverified.toLocaleString()} href="/admin/doctors?filter=unverified" accent="border-l-4 border-l-amber-500" />
         <Stat label="Medicines to review" value={medRequests.toLocaleString()} href="/admin/medicine-requests" accent="border-l-4 border-l-amber-500" />
+        <Stat label="C/C lines to review" value={ccRequests.toLocaleString()} href="/admin/complaint-requests" accent="border-l-4 border-l-amber-500" />
       </div>
       <div className="mt-3 grid min-h-0 flex-1 items-stretch gap-1.5 lg:grid-cols-3">
         <div className="card flex min-h-0 flex-col overflow-hidden lg:col-span-2">
