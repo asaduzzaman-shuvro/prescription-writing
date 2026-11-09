@@ -81,9 +81,10 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   const frame = page.frameLocator("[data-testid=print-frame]");
   await expect(frame.locator("section h3", { hasText: "Ear" })).toBeVisible();
   await expect(frame.getByText("R Perforated, L Intact (Normal)")).toBeVisible();
-  // "Perforated" with no type yet draws a central perforation; the AI and PI taps add to it.
-  await expect(frame.getByText("R: central perforation (medium); perforation AI+PI; drawing · L: grommet")).toBeVisible();
-  await expect(frame.locator("figure.diagram", { hasText: "Right TM" }).locator("polyline")).toHaveCount(1);
+  // "Perforated" with no type yet draws a central perforation; the AI and PI taps add to it. The drums show it, so the
+  // TM map's words don't print, and the drums have no "Right TM" / "Left TM" caption (each is marked R / L inside).
+  await expect(frame.getByText(/central perforation \(medium\)/)).toHaveCount(0);
+  await expect(frame.locator("figure.diagram.tm").first().locator("polyline")).toHaveCount(1);
   await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Grommet" })).toHaveCount(1);
   await expect(frame.getByText("R tonsil congested; ulcer")).toBeVisible();
   await expect(frame.locator("figure.diagram.legend").filter({ hasText: "Congested" })).toContainText("Ulcer");
@@ -93,7 +94,8 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await expect(frame.locator(".diagram svg")).toHaveCount(7);
   // Each picture prints under its own findings, not in one block at the end.
   const examSection = (title: RegExp) => frame.locator("section", { has: frame.locator("h3", { hasText: title }) });
-  await expect(examSection(/^Ear$/).locator("figcaption", { hasText: /^(Right|Left) TM$/ })).toHaveCount(2);
+  await expect(examSection(/^Ear$/).locator("figure.diagram.tm")).toHaveCount(2);
+  await expect(frame.locator("figcaption", { hasText: /TM$/ })).toHaveCount(0);
   await expect(examSection(/^Throat$/).locator("figcaption", { hasText: /^(Oropharynx|Neck)$/ })).toHaveCount(1);
   await expect(examSection(/^Neck$/).locator("figcaption", { hasText: /^Neck$/ })).toHaveCount(1);
   // Audiology prints inside Ix, with its audiogram; it has no heading of its own.
@@ -364,7 +366,8 @@ test("ENT doctor can always print blank TM maps and throat/neck pictures, to mar
     await addMedicine(page, "candistin", "3 drop tds re 7d");
     await page.getByTestId("finalize").click();
     const frame = page.frameLocator("[data-testid=print-frame]");
-    await expect(frame.locator("figcaption", { hasText: /^(Right|Left) TM$/ })).toHaveCount(2);
+    await expect(frame.locator("figure.diagram.tm")).toHaveCount(2); // drums carry no caption: R / L is in the picture
+    await expect(frame.locator("figcaption", { hasText: /TM$/ })).toHaveCount(0);
     await expect(frame.locator("figcaption", { hasText: /^(Oropharynx|Larynx \(IDL\)|Neck)$/ })).toHaveCount(3);
     await expect(frame.locator("figure.diagram.legend")).toHaveCount(0);
   } finally {
