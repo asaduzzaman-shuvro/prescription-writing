@@ -61,6 +61,47 @@ test("a doctor saves their own C/C line while prescribing; only they see it unti
   await admin.close();
 });
 
+test("picking a complaint offers a duration; any chip can be edited", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  await registerPatient(page, { name: `E2E CC duration ${uniq()}`, age: "40", sex: "Female", mobile: mobile() });
+  const chips = page.getByTestId("cc-input-chip");
+
+  // Pick a shared line: the quick durations open on it.
+  await page.getByTestId("cc-input").fill("Hearing");
+  await page.getByRole("button", { name: /^Hearing loss/ }).click();
+  await page.getByTestId("cc-input-duration").getByRole("button", { name: "3 days", exact: true }).click();
+  await expect(chips.first()).toContainText("Hearing loss × 3 days");
+  await expect(page.getByTestId("cc-input-duration")).toHaveCount(0);
+
+  // Another duration replaces it: any number of days, weeks, months or years.
+  await chips.first().getByRole("button", { name: "Duration of Hearing loss × 3 days" }).click();
+  await page.getByTestId("cc-input-duration-n").fill("4");
+  await page.getByTestId("cc-input-duration-set").click();
+  await expect(chips.first()).toContainText("Hearing loss × 4 days");
+  await chips.first().getByRole("button", { name: /Duration of/ }).click();
+  await page.getByTestId("cc-input-duration-n").fill("6");
+  await page.getByTestId("cc-input-duration-unit").selectOption("month");
+  await page.getByTestId("cc-input-duration-n").press("Enter");
+  await expect(chips.first()).toContainText("Hearing loss × 6 months");
+
+  // A Bangla line gets a Bangla duration.
+  await page.getByTestId("cc-input").fill("জ্বর");
+  await page.getByTestId("cc-input").press("Enter");
+  await page.getByTestId("cc-input-duration").getByRole("button", { name: "৭ দিন", exact: true }).click();
+  await expect(chips.nth(1)).toContainText("জ্বর × ৭ দিন");
+
+  // Tap a chip's text to edit it; Escape leaves it as it was.
+  await chips.first().getByRole("button", { name: "Hearing loss × 6 months", exact: true }).click();
+  await page.getByTestId("cc-input-chip-edit").fill("Hearing loss (R) × 6 months");
+  await page.getByTestId("cc-input-chip-edit").press("Enter");
+  await expect(chips.first()).toContainText("Hearing loss (R) × 6 months");
+  await chips.first().getByRole("button", { name: "Hearing loss (R) × 6 months", exact: true }).click();
+  await page.getByTestId("cc-input-chip-edit").fill("oops");
+  await page.getByTestId("cc-input-chip-edit").press("Escape");
+  await expect(chips.first()).toContainText("Hearing loss (R) × 6 months");
+});
+
 test("a doctor edits a shared C/C line for themselves in settings, and can revert it", async ({ page }) => {
   await login(page, "doctor@rx.local", "doctor123");
   await waitSynced(page);

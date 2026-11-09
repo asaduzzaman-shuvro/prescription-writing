@@ -19,3 +19,4 @@ export * from "./lab-tests";
 export * from "./lab-print";
 export * from "./custom-medicine";
 export * from "./doctor-complaint";
+export * from "./complaint-duration";
