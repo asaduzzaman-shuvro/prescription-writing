@@ -877,7 +877,7 @@ function RxEditor({
           </label>
           )}
           <ChipList title="C/C — Chief complaints" values={doc.chiefComplaints} onChange={(v) => update((d) => ({ ...d, chiefComplaints: v }))}
-            query={COMPLAINT_SUGGESTIONS_QUERY} params={spec} placeholder="Fever × 3 days" testId="cc-input" multiline voice
+            query={COMPLAINT_SUGGESTIONS_QUERY} params={spec} placeholder="Fever - 3 days" testId="cc-input" multiline voice
             saveLabel="my C/C list"
             durations
             onSaveCustom={session.tenantRole === "doctor" ? async (t) => void (await saveDoctorComplaint(db, session.tenantId, session.userId, { name: t })) : undefined} />

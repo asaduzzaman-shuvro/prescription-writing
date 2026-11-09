@@ -1,5 +1,5 @@
 /**
- * How long a chief complaint has lasted, written into its text: "Hearing loss × 3 days", "কানে কম শোনা × ৩ দিন".
+ * How long a chief complaint has lasted, written into its text: "Hearing loss - 3 days", "কানে কম শোনা - ৩ দিন".
  * C/C stays free text on the prescription; these helpers only add, replace or read the trailing duration.
  */
 
@@ -30,11 +30,11 @@ export function formatComplaintDuration(n: number, unit: ComplaintDurationUnit, 
   return `${n} ${unit}${n === 1 ? "" : "s"}`;
 }
 
-// A trailing duration as doctors type it: "× 3 days", "x 2 wk", "for 1 month", "- 7d", "৩ দিন".
+// A trailing duration as doctors type it: "- 3 days", "× 3 days", "x 2 wk", "for 1 month", "7d", "৩ দিন".
 const TRAILING =
   /\s*(?:[×x]|for|-|–)?\s*[0-9০-৯]+(?:\.[0-9০-৯]+)?\s*(?:days?|weeks?|wks?|months?|mo|years?|yrs?|d|w|m|y|দিন|সপ্তাহ|মাস|বছর)\s*$/iu;
 
-/** The complaint without its trailing duration: "Hearing loss × 3 days" → "Hearing loss". */
+/** The complaint without its trailing duration: "Hearing loss - 3 days" → "Hearing loss". */
 export function stripComplaintDuration(text: string): string {
   const stripped = text.replace(TRAILING, "").trim();
   return stripped || text.trim();
@@ -47,9 +47,9 @@ export function complaintDuration(text: string): string | null {
   return m[0].replace(/^\s*(?:[×x]|for|-|–)?\s*/iu, "").trim();
 }
 
-/** Sets the line's duration, replacing any it had: ("Hearing loss", 3, "day") → "Hearing loss × 3 days". */
+/** Sets the line's duration, replacing any it had: ("Hearing loss", 3, "day") → "Hearing loss - 3 days". */
 export function withComplaintDuration(text: string, n: number, unit: ComplaintDurationUnit): string {
   const base = stripComplaintDuration(text);
   if (!Number.isFinite(n) || n <= 0) return base;
-  return `${base} × ${formatComplaintDuration(Math.round(n * 10) / 10, unit, isBanglaText(base))}`;
+  return `${base} - ${formatComplaintDuration(Math.round(n * 10) / 10, unit, isBanglaText(base))}`;
 }

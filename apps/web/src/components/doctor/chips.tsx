@@ -58,7 +58,7 @@ export function ChipList({
   /** Where saved text goes, as the save row names it. */
   saveLabel?: string;
   /**
-   * Chips are editable (tap the text) and offer quick durations ("× 3 days", "× ৩ দিন"): right after one is added,
+   * Chips are editable (tap the text) and offer quick durations ("- 3 days", "- ৩ দিন"): right after one is added,
    * or from its clock button.
    */
   durations?: boolean;
