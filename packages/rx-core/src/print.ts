@@ -183,6 +183,12 @@ function list(items: string[]): string {
   return clean.length ? `<ul>${clean.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
 }
 
+/** Items on one line, comma separated ("Fever × 3 days, Cough, Hearing loss (R)"); wraps only when it must. */
+function inline(items: string[]): string {
+  const clean = items.map((s) => s.trim()).filter(Boolean);
+  return clean.length ? `<p class="inline">${clean.map(esc).join(", ")}</p>` : "";
+}
+
 /** History as editable lines: the legacy free-text history first (one line per line of text), then the picked lines. */
 export function historyLines(doc: Pick<PrescriptionDoc, "history" | "histories">): string[] {
   return [...(doc.history ?? "").split("\n"), ...(doc.histories ?? [])].map((s) => s.trim()).filter(Boolean);
@@ -387,7 +393,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const barcodeSvg = s.showBarcode && patient.patientCode ? code39Svg(patient.patientCode) : null;
   const left = [
     barcodeSvg ? `<div class="barcode">${barcodeSvg}<div>*${esc(patient.patientCode!.toUpperCase())}*</div></div>` : "",
-    sec("cc", list(doc.chiefComplaints)),
+    sec("cc", inline(doc.chiefComplaints)),
     sec("history", (doc.history?.trim() ? `<p class="pre">${esc(doc.history.trim())}</p>` : "") + list(doc.histories ?? [])),
     hidden.has("oe") ? "" : oeBlock(doc, s.sectionLabels?.oe?.trim() || defaultSectionLabel("oe", lang)),
     specialty,
@@ -490,6 +496,7 @@ h3 { font-size: 0.95em; margin: 0 0 1mm; text-decoration: underline; break-after
 li, .oe, .pre { break-inside: avoid; }
 ul { margin: 0; padding-left: 4mm; }
 .pre { white-space: pre-wrap; margin: 0; }
+.inline { margin: 0; }
 .rx-symbol { font-size: 2em; font-weight: 700; line-height: 1; margin-bottom: 1mm; }
 ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .rx-item { margin-bottom: 2.5mm; break-inside: avoid; display: grid; grid-template-columns: 1fr auto; column-gap: 4mm; }

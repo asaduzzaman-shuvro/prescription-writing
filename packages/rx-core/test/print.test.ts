@@ -166,6 +166,12 @@ describe("renderPrescriptionHtml", () => {
     expect(html).toContain("<h3>C/C</h3>");
   });
 
+  it("prints chief complaints on one line, comma separated", () => {
+    const html = render({ chiefComplaints: ["Hearing loss × 3 days", " ", "Ear discharge (R) × 7 days", "জ্বর × ৩ দিন", "Itching <ear>"] });
+    expect(html).toContain(`<h3>C/C</h3><p class="inline">Hearing loss × 3 days, Ear discharge (R) × 7 days, জ্বর × ৩ দিন, Itching &lt;ear&gt;</p>`);
+    expect(render({ chiefComplaints: [] })).not.toContain("<h3>C/C</h3>");
+  });
+
   it("uses English headings for advice and follow-up when instructions are in English", () => {
     const html = render({ followUp: { kind: "after", value: 7, unit: "day" } }, {}, { ...DEFAULT_PRINT_SETTINGS, instructionLang: "en", numerals: "en" });
     expect(html).toContain("<h3>Advice</h3>");
