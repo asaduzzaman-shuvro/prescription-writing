@@ -312,7 +312,12 @@ function hash128(s: string): number[] {
  * offline write the same row (the later upload wins) instead of two rows the server would refuse.
  */
 export function labRowId(tenantId: string, table: "lab_test" | "lab_panel", code: string): string {
-  const hex = hash128(`${table}:${tenantId}:${code}`).map((n) => n.toString(16).padStart(8, "0")).join("");
+  return derivedUuid(`${table}:${tenantId}:${code}`);
+}
+
+/** A uuid-shaped id derived from a key: the same key always gives the same id, on any device. */
+export function derivedUuid(key: string): string {
+  const hex = hash128(key).map((n) => n.toString(16).padStart(8, "0")).join("");
   const variant = ((parseInt(hex[16]!, 16) & 3) | 8).toString(16);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20)}`;
 }
