@@ -26,6 +26,7 @@ export const CLINIC_SYNC_TABLES = [
   "appointment",
   "doctor_favorite",
   "custom_medicine",
+  "doctor_complaint",
 ] as const;
 
 export const CATALOGUE_SYNC_TABLES = [
@@ -84,6 +85,10 @@ export const SYNC_COLUMNS: Record<string, readonly string[]> = {
   custom_medicine: [
     "id", "tenant_id", "owner_user_id", "brand_name", "form_id", "strength_text", "generic_text", "generic_ids", "company_id",
     "company_name", "status", "review_note", "approved_product_id", "created_at", "updated_at",
+  ],
+  doctor_complaint: [
+    "id", "tenant_id", "owner_user_id", "name", "name_bn", "replaces_complaint_id", "is_active", "status", "review_note",
+    "approved_complaint_id", "created_at", "updated_at",
   ],
   dosage_form: ["id", "name", "short_label", "default_route", "default_unit"],
   company: ["id", "name"],

@@ -1,5 +1,5 @@
 import "server-only";
-import { customMedicineProblem, formatInstruction, labCatalogueRowProblem, labReportProblem, type PrescriptionDoc, type RxItem } from "@rx/core";
+import { customMedicineProblem, doctorComplaintProblem, formatInstruction, labCatalogueRowProblem, labReportProblem, type PrescriptionDoc, type RxItem } from "@rx/core";
 import { s, withTenant, type Tx } from "@rx/db";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { appDb } from "./db";
@@ -114,6 +114,11 @@ const SPECS: Record<string, TableSpec> = {
       brand_name: "text", form_id: "uuid", strength_text: "text", generic_text: "text", generic_ids: "uuidarr",
       company_id: "uuid", company_name: "text", created_at: "ts",
     },
+  },
+  // A doctor's own C/C line; review fields (status, note, shared complaint) are the platform admin's.
+  doctor_complaint: {
+    roles: ["doctor"],
+    columns: { name: "text", name_bn: "text", replaces_complaint_id: "uuid", is_active: "bool", created_at: "ts" },
   },
   doctor_profile: {
     roles: ["doctor"],
@@ -237,6 +242,7 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
   }
   if (op.table === "lab_test" || op.table === "lab_panel") await checkLabCatalogue(tx, session.tenantId, op, data, before);
   if (op.table === "custom_medicine") checkCustomMedicine(session.userId, data, before);
+  if (op.table === "doctor_complaint") await checkDoctorComplaint(tx, session.userId, data, before);
   if (op.table === "lab_profile") {
     if (typeof data.logo_data_url === "string" && data.logo_data_url.length > 400_000) throw new Rejection("logo image too large (max 300 KB)");
     const signatories = typeof data.signatories === "string" ? data.signatories : JSON.stringify(data.signatories ?? []);
@@ -263,7 +269,7 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
       insertCols.push(sql`created_by`);
       insertVals.push(sql`${session.userId}::uuid`);
     }
-    if (op.table === "custom_medicine") {
+    if (op.table === "custom_medicine" || op.table === "doctor_complaint") {
       insertCols.push(sql`owner_user_id`);
       insertVals.push(sql`${session.userId}::uuid`);
     }
@@ -277,6 +283,14 @@ async function applyOp(tx: Tx, session: Session & { tenantId: string }, op: Crud
   // Post-write server logic.
   if (op.table === "patient" && !before) await assignPatientCode(tx, session.tenantId, op.id);
   if (op.table === "lab_report") await assignLabNo(tx, session.tenantId, op.id);
+  if (op.table === "doctor_complaint" && before && before.status !== "pending") {
+    // New text on a reviewed line is a fresh request for the admin (the device writes the same status locally).
+    const changed = (k: "name" | "name_bn") => k in data && (data[k] || null) !== (before[k] || null);
+    if (changed("name") || changed("name_bn")) {
+      await tx.execute(sql`update doctor_complaint set status = 'pending', review_note = null, reviewed_by = null, reviewed_at = null
+        where id = ${op.id}::uuid`);
+    }
+  }
   if (op.table === "prescription") {
     const [row] = await tx.select().from(s.prescription).where(eq(s.prescription.id, op.id));
     if (row && row.status === "final" && before?.status !== "final") await finalize(tx, session, row);
@@ -329,6 +343,24 @@ async function checkLabCatalogue(tx: Tx, tenantId: string, op: CrudOp, data: Rec
     const other = (await tx.execute(sql`select 1 from ${sql.identifier(table)} where tenant_id = ${tenantId}::uuid and ${sql.identifier(id)} = ${String(data[id])} and id <> ${op.id}::uuid`)) as unknown as unknown[];
     if (other.length) throw new Rejection(`this clinic already has a row for ${String(data[id])}`);
   }
+}
+
+/**
+ * A doctor edits only their own C/C lines, and an edit of a shared line stays tied to that line. Unlike medicines a
+ * reviewed line stays editable (it is the doctor's own preset); changing its text makes it a fresh request.
+ */
+async function checkDoctorComplaint(tx: Tx, userId: string, data: Record<string, unknown>, before: Record<string, unknown> | undefined) {
+  if (before && before.owner_user_id !== userId) throw new Rejection("not your complaint");
+  const replaces = (v: unknown) => (v === undefined || v === null || v === "" ? null : String(v));
+  if (before && "replaces_complaint_id" in data && replaces(data.replaces_complaint_id) !== replaces(before.replaces_complaint_id)) {
+    throw new Rejection("an edited line stays tied to the shared complaint it replaces");
+  }
+  if (!before && replaces(data.replaces_complaint_id)) {
+    const found = (await tx.execute(sql`select 1 from complaint where id = ${replaces(data.replaces_complaint_id)}::uuid and is_active`)) as unknown as unknown[];
+    if (!found.length) throw new Rejection("that shared complaint no longer exists");
+  }
+  const problem = doctorComplaintProblem({ ...before, ...data });
+  if (problem) throw new Rejection(problem);
 }
 
 /** A doctor edits only the medicines they added, and only until the platform admin has reviewed them. */

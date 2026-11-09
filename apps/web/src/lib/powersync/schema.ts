@@ -236,6 +236,23 @@ const custom_medicine = new Table(
   { indexes: { brand: ["brand_name"] } },
 );
 
+/** This doctor's own C/C lines; `replaces_complaint_id` is set when the line is their edit of a shared complaint. */
+const doctor_complaint = new Table(
+  {
+    tenant_id: column.text,
+    owner_user_id: column.text,
+    name: column.text,
+    name_bn: column.text,
+    replaces_complaint_id: column.text,
+    is_active: column.integer,
+    status: column.text,
+    review_note: column.text,
+    approved_complaint_id: column.text,
+    ...timestamps,
+  },
+  { indexes: { replaces: ["replaces_complaint_id"] } },
+);
+
 const appointment = new Table(
   {
     tenant_id: column.text,
@@ -284,6 +301,7 @@ export const AppSchema = new Schema({
   rx_template,
   doctor_favorite,
   custom_medicine,
+  doctor_complaint,
   // Device-only queue of lab report photos/PDFs (lab-files.ts); never synced.
   attachments: new AttachmentTable(),
 });
@@ -295,4 +313,4 @@ export type PrescriptionRow = Database["prescription"];
 export type LabReportRow = Database["lab_report"];
 
 /** Tables the client is allowed to write; everything else is read-only on the server side. */
-export const WRITABLE_TABLES = ["appointment", "patient", "encounter", "prescription", "lab_report", "lab_test", "lab_panel", "lab_profile", "chamber", "rx_template", "doctor_favorite", "doctor_profile", "custom_medicine"] as const;
+export const WRITABLE_TABLES = ["appointment", "patient", "encounter", "prescription", "lab_report", "lab_test", "lab_panel", "lab_profile", "chamber", "rx_template", "doctor_favorite", "doctor_profile", "custom_medicine", "doctor_complaint"] as const;

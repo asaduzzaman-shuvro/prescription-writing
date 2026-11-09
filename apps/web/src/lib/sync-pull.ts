@@ -206,6 +206,15 @@ function clinicParts(tenantId: string, userId: string): Part[] {
           FROM custom_medicine WHERE tenant_id = ${tenant} AND owner_user_id = ${user}`,
       rev: revUpdated("custom_medicine", sql`tenant_id = ${tenant} AND owner_user_id = ${user}`),
     },
+    {
+      // A doctor's own C/C lines: only the doctor who added or edited one sees it. Shared ones arrive as `complaint`.
+      table: "doctor_complaint",
+      query: sql`SELECT id::text AS id, tenant_id::text AS tenant_id, owner_user_id::text AS owner_user_id, name, name_bn,
+            replaces_complaint_id::text AS replaces_complaint_id, is_active::int AS is_active, status::text AS status, review_note,
+            approved_complaint_id::text AS approved_complaint_id, ${sql.raw(ts("created_at"))}, ${sql.raw(ts("updated_at"))}
+          FROM doctor_complaint WHERE tenant_id = ${tenant} AND owner_user_id = ${user}`,
+      rev: revUpdated("doctor_complaint", sql`tenant_id = ${tenant} AND owner_user_id = ${user}`),
+    },
   ];
 }
 
