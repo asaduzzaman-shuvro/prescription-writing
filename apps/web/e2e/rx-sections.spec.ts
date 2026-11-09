@@ -29,7 +29,7 @@ test("Ref By from registration (screen only), O/E findings, plan, note and follo
   const frame = page.frameLocator("[data-testid=print-frame]");
   await expect(frame.locator(".visit-no")).toHaveText("Visit No: 1");
   await expect(frame.locator(".patient")).not.toContainText("Ref By");
-  await expect(frame.locator(".oe")).toContainText("Pulse: Normal");
+  await expect(frame.locator(".patient")).toContainText("Pulse: Normal"); // O/E values print after the patient ID
   await expect(frame.locator(".left")).toContainText("Refd to Vascular Surgery Dept., BSMMU — Dr. Tarek");
   await expect(frame.locator(".left")).toContainText("H/O DM");
   await expect(frame.locator(".rx-note")).toContainText("Referred back to Dr. Imran.");

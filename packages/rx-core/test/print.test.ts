@@ -121,7 +121,8 @@ describe("renderPrescriptionHtml", () => {
     // Ref By is for the screen only.
     expect(html).not.toContain("Ref By");
     expect(html).not.toContain("Dr. Imran");
-    expect(html).toContain(`<span>Pulse: Normal</span>, <span>Skin condition: color change</span>`);
+    expect(html).toContain(`<span class="oe"><b>Pulse:</b> Normal</span>`);
+    expect(html).toContain(`<span class="oe"><b>Skin condition:</b> color change</span>`);
     expect(html).not.toContain("ignored");
     expect(html).toContain("<h3>Plan</h3><ul><li>Refd to Paediatric ophthalmology Dept., BSMMU — Dr. Tarek Reza Ali (01766683417)</li></ul>");
     expect(html).toContain("<h3>Note</h3><ul><li>Birth wt 1.7 kg</li></ul>");
@@ -466,19 +467,27 @@ describe("O/E", () => {
       settings, fonts: { bengali: "", latin: "" },
     });
 
-  it("prints the bold heading and the vitals and findings as one comma-separated line", () => {
+  const strip = (html: string) => /<div class="patient">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? "";
+  const cells = (html: string) => [...strip(html).matchAll(/<span[^>]*>([\s\S]*?)<\/span>/g)].map((m) => m[1]!.replace(/<\/?b>/g, ""));
+
+  it("prints the vitals and findings in the patient strip, right after the ID", () => {
     const html = render({ oeFindings: [{ label: "Throat", value: "congested" }] });
-    expect(html).toContain(
-      `<section><p class="oe"><b>O/E:</b> <span class="v">BP: 120/80 mmHg</span>, <span class="v">Pulse: 78 b/m</span>, <span class="v">Temp: 99.2 °F</span>, ` +
-        `<span class="v">Wt: 68 kg</span>, <span class="v">Ht: 170 cm</span>, <span class="v">BMI: 23.5</span>, <span>Throat: congested</span></p>`,
-    );
+    const c = cells(html);
+    const id = c.findIndex((x) => x.startsWith("ID:"));
+    expect(id).toBeGreaterThan(-1);
+    expect(c.slice(id + 1)).toEqual(["BP: 120/80 mmHg", "Pulse: 78 b/m", "Temp: 99.2 °F", "Wt: 68 kg", "Ht: 170 cm", "BMI: 23.5", "Throat: congested"]);
+    expect(strip(html)).toContain(`<span class="oe"><b>BP:</b> 120/80 mmHg</span>`);
     expect(html).not.toContain("<h3>O/E</h3>");
+    expect(html).not.toContain(`<p class="oe">`);
   });
 
-  it("uses a renamed heading, puts the heading before a lone examination note, and can be hidden", () => {
-    const renamed = render({}, { ...DEFAULT_PRINT_SETTINGS, sectionLabels: { oe: "On exam:" } });
-    expect(renamed).toContain(`<p class="oe"><b>On exam:</b> <span class="v">BP:`);
-    expect(render({ vitals: {}, oeFindings: [], examination: "Throat congested" })).toContain(`<p class="pre"><b>O/E:</b> Throat congested</p>`);
-    expect(render({}, { ...DEFAULT_PRINT_SETTINGS, hiddenSections: ["oe"] })).not.toContain("BP: 120/80");
+  it("keeps the free-text examination in the body under its (renamable) heading, and can be hidden", () => {
+    expect(render({ examination: "Throat congested" })).toContain(`<section><p class="pre"><b>O/E:</b> Throat congested</p></section>`);
+    const renamed = render({ examination: "Throat congested" }, { ...DEFAULT_PRINT_SETTINGS, sectionLabels: { oe: "On exam:" } });
+    expect(renamed).toContain(`<p class="pre"><b>On exam:</b> Throat congested</p>`);
+    expect(strip(render({ vitals: {}, oeFindings: [] }))).not.toContain(`class="oe"`);
+    const hidden = render({ examination: "Throat congested" }, { ...DEFAULT_PRINT_SETTINGS, hiddenSections: ["oe"] });
+    expect(hidden).not.toContain("BP:");
+    expect(hidden).not.toContain("Throat congested");
   });
 });

@@ -194,31 +194,28 @@ export function historyLines(doc: Pick<PrescriptionDoc, "history" | "histories">
   return [...(doc.history ?? "").split("\n"), ...(doc.histories ?? [])].map((s) => s.trim()).filter(Boolean);
 }
 
-/** O/E as one run under its heading: "<b>O/E:</b> BP: …, Pulse: …", then any free-text examination. */
-function oeBlock(doc: PrescriptionDoc, title: string): string {
+/** The O/E values, printed in the patient strip after the ID: the vitals, then the doctor's own "label: value" rows. */
+function oeValues(doc: PrescriptionDoc): { label: string; value: string }[] {
   const v = doc.vitals;
-  const rows: string[] = [];
-  if (v.bpSystolic && v.bpDiastolic) rows.push(`BP: ${v.bpSystolic}/${v.bpDiastolic} mmHg`);
-  if (v.pulse) rows.push(`Pulse: ${v.pulse} b/m`);
-  if (v.tempF) rows.push(`Temp: ${v.tempF} °F`);
-  if (v.spo2) rows.push(`SpO₂: ${v.spo2}%`);
-  if (v.respRate) rows.push(`RR: ${v.respRate}/min`);
-  if (v.weightKg) rows.push(`Wt: ${v.weightKg} kg`);
-  if (v.heightCm) rows.push(`Ht: ${v.heightCm} cm`);
+  const rows: { label: string; value: string }[] = [];
+  if (v.bpSystolic && v.bpDiastolic) rows.push({ label: "BP", value: `${v.bpSystolic}/${v.bpDiastolic} mmHg` });
+  if (v.pulse) rows.push({ label: "Pulse", value: `${v.pulse} b/m` });
+  if (v.tempF) rows.push({ label: "Temp", value: `${v.tempF} °F` });
+  if (v.spo2) rows.push({ label: "SpO₂", value: `${v.spo2}%` });
+  if (v.respRate) rows.push({ label: "RR", value: `${v.respRate}/min` });
+  if (v.weightKg) rows.push({ label: "Wt", value: `${v.weightKg} kg` });
+  if (v.heightCm) rows.push({ label: "Ht", value: `${v.heightCm} cm` });
   const b = bmi(v.weightKg, v.heightCm);
-  if (b) rows.push(`BMI: ${b}`);
-  const kv = (doc.oeFindings ?? []).filter((l) => l.label.trim() && l.value.trim());
-  // One comma-separated run that wraps between items; a vital never splits across lines.
-  const items = [
-    ...rows.map((r) => `<span class="v">${esc(r)}</span>`),
-    ...kv.map((l) => `<span>${esc(l.label)}: ${esc(l.value)}</span>`),
-  ];
+  if (b) rows.push({ label: "BMI", value: String(b) });
+  for (const l of doc.oeFindings ?? []) if (l.label.trim() && l.value.trim()) rows.push({ label: l.label.trim(), value: l.value.trim() });
+  return rows;
+}
+
+/** The free-text examination under its heading ("<b>O/E:</b> Throat congested"); the O/E values print with the patient. */
+function oeBlock(doc: PrescriptionDoc, title: string): string {
   const exam = doc.examination?.trim();
-  if (!items.length && !exam) return "";
-  const head = `<b>${esc(title.trim().replace(/:$/, ""))}:</b>`;
-  const line = items.length ? `<p class="oe">${head} ${items.join(", ")}</p>` : "";
-  const text = exam ? `<p class="pre">${items.length ? "" : `${head} `}${esc(exam)}</p>` : "";
-  return `<section>${line}${text}</section>`;
+  if (!exam) return "";
+  return `<section><p class="pre"><b>${esc(title.trim().replace(/:$/, ""))}:</b> ${esc(exam)}</p></section>`;
 }
 
 /** "১ মাস পর আসবেন। (তারিখঃ ১১-০৭-২০২৬)": the relative period plus the date it falls on. */
@@ -328,6 +325,7 @@ export function renderPrescriptionHtml(input: RenderInput): string {
       <span><b>Date:</b> ${esc(formatDateDmy(input.date, "en", "/"))}</span>
       ${doc.visitNo ? `<span class="visit-no"><b>Visit No:</b> ${doc.visitNo}</span>` : ""}
       ${patient.patientCode ? `<span><b>ID:</b> ${esc(patient.patientCode)}</span>` : ""}
+      ${hidden.has("oe") ? "" : oeValues(doc).map((o) => `<span class="oe"><b>${esc(o.label)}:</b> ${esc(o.value)}</span>`).join("\n      ")}
     </div>`;
 
   // Older prescriptions have no `kind`; their drums are titled "Right TM" / "Left TM".
@@ -501,8 +499,7 @@ ul { margin: 0; padding-left: 4mm; }
 ol.rx { list-style: none; padding: 0; margin: 0 0 3mm; }
 .rx-item { margin-bottom: 2.5mm; break-inside: avoid; display: grid; grid-template-columns: 1fr auto; column-gap: 4mm; }
 .rx-item .dur { align-self: center; white-space: nowrap; }
-.oe { margin: 0; }
-.oe .v { white-space: nowrap; }
+.patient .oe { white-space: nowrap; }
 .rx-note { margin: 0 0 3mm; }
 .rx-item .num { display: inline-block; min-width: 5mm; }
 .rx-item .gen { font-size: 0.85em; }
