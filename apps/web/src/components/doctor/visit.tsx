@@ -40,8 +40,11 @@ import {
   bmi,
   chamberWorkdays,
   classifyDosageForm,
+  HISTORY_PICKS,
+  historyHas,
   inFreeReportWindow,
   parseShortcut,
+  toggleHistoryPick,
   type ChamberSlot,
   type PrescriptionDoc,
   type RxItem,
@@ -878,9 +881,28 @@ function RxEditor({
             saveLabel="my C/C list"
             durations
             onSaveCustom={session.tenantRole === "doctor" ? async (t) => void (await saveDoctorComplaint(db, session.tenantId, session.userId, { name: t })) : undefined} />
-          <section>
+          <section className="space-y-1">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</h3>
-            <textarea className="input" rows={2} disabled={readOnly} value={doc.history ?? ""} onChange={(e) => update((d) => ({ ...d, history: e.target.value || undefined }))} placeholder="P/H, D/H, F/H…" />
+            {/* Quick picks fill the box with commas; the doctor can still write anything there. */}
+            <div className="flex flex-wrap gap-1" data-testid="history-picks">
+              {HISTORY_PICKS.map((p) => {
+                const on = historyHas(doc.history ?? "", p.code);
+                return (
+                  <button
+                    key={p.code}
+                    type="button"
+                    disabled={readOnly}
+                    aria-pressed={on}
+                    title={p.name}
+                    className={`rounded-full border px-2 py-0.5 text-xs transition ${on ? "border-brand-500 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-brand-400 hover:bg-brand-50"}`}
+                    onClick={() => update((d) => ({ ...d, history: toggleHistoryPick(d.history ?? "", p.code) || undefined }))}
+                  >
+                    {p.code}
+                  </button>
+                );
+              })}
+            </div>
+            <textarea className="input" rows={2} disabled={readOnly} value={doc.history ?? ""} onChange={(e) => update((d) => ({ ...d, history: e.target.value || undefined }))} placeholder="P/H, D/H, F/H…" data-testid="history-text" />
           </section>
           <SpecialtyExam
             encounterId={encounterId}
