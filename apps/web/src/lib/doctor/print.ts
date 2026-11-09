@@ -38,8 +38,11 @@ export interface PrintBundle {
 export async function buildPrintHtml(
   db: AbstractPowerSyncDatabase,
   prescriptionId: string,
-  /** `pages`: how many pages the last render measured at (see `PrintView`); 2+ numbers them and pins the footer. */
-  opts: { publicBaseUrl: string; settingsOverride?: PrintSettings; pages?: number },
+  /**
+   * `pages`: how many pages the last render measured at (see `PrintView`); 2+ numbers them and pins the footer.
+   * `fit`: the fit-to-one-page level the search is at (`FIT_LEVELS`).
+   */
+  opts: { publicBaseUrl: string; settingsOverride?: PrintSettings; pages?: number; fit?: number },
 ): Promise<PrintBundle | null> {
   const rx = await db.getOptional<{
     doc: string; status: string; verify_token: string | null; finalized_at: string | null; created_at: string;
@@ -103,6 +106,7 @@ export async function buildPrintHtml(
     fonts: { bengali: `${origin}/fonts/NotoSansBengali.ttf`, latin: `${origin}/fonts/NotoSans.ttf` },
     footerNote: !verifyUrl && rx.status !== "final" ? "DRAFT — not valid" : undefined,
     pages: opts.pages,
+    fit: opts.fit,
   });
   return { html, settings, chamberId: rx.chamber_id, status: rx.status, verifyUrl };
 }

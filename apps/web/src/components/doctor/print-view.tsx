@@ -1,6 +1,6 @@
 "use client";
 
-import { paperDimensions, prescriptionFileName, printPagesFor } from "@rx/core";
+import { FIT_LEVELS, nextFit, paperDimensions, prescriptionFileName, printPagesFor, startFit, type FitState } from "@rx/core";
 import { usePowerSync, useQuery } from "@powersync/react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useSession } from "@/lib/doctor/context";
@@ -20,6 +20,7 @@ function PreviewFrame({
   widthMm,
   heightMm,
   onContentHeight,
+  renderToken,
 }: {
   frame: RefObject<HTMLIFrameElement | null>;
   html: string;
@@ -27,6 +28,8 @@ function PreviewFrame({
   heightMm: number;
   /** The prescription's own height in mm, once laid out with its fonts (the preview runs no scripts, so we measure). */
   onContentHeight: (mm: number) => void;
+  /** Changes with every render to measure, even one whose HTML is the same as the last (the frame does not reload). */
+  renderToken: unknown;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -62,6 +65,13 @@ function PreviewFrame({
     onContentHeight(h / MM);
   }
 
+  /** The HTML the frame has finished loading: a new render with the same HTML is measured straight away. */
+  const loaded = useRef<string | null>(null);
+  useEffect(() => {
+    if (loaded.current === html) void measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per render to measure
+  }, [renderToken]);
+
   return (
     <div ref={wrap} className="overflow-auto rounded bg-slate-200 p-2">
       <div className="mx-auto" style={{ width, height }}>
@@ -71,7 +81,10 @@ function PreviewFrame({
           srcDoc={html}
           // No scripts in the preview; same-origin so we can await fonts and call print().
           sandbox="allow-same-origin allow-modals"
-          onLoad={() => void measure()}
+          onLoad={() => {
+            loaded.current = html;
+            void measure();
+          }}
           className="block origin-top-left bg-white shadow"
           style={{ width: `${widthMm}mm`, height: `${heightMm}mm`, border: 0, transform: `scale(${scale})` }}
           data-testid="print-frame"
@@ -84,9 +97,8 @@ function PreviewFrame({
 export function PrintView({ prescriptionId }: { prescriptionId: string }) {
   const db = usePowerSync();
   const session = useSession();
-  const [bundle, setBundle] = useState<PrintBundle | null>(null);
-  /** Pages the prescription runs to, measured in the preview; 2+ re-renders it numbered with the footer on the last. */
-  const [pages, setPages] = useState(1);
+  /** The rendered prescription, with the watch key and fit step it was rendered for. */
+  const [bundle, setBundle] = useState<(PrintBundle & { key: string; fit: number; pages: number }) | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   // Re-render when the prescription, chamber settings or profile change (e.g. patient code arrives after sync).
   const { data: watch } = useQuery<{ k: string }>(
@@ -95,6 +107,14 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
        FROM prescription rx JOIN patient p ON p.id = rx.patient_id LEFT JOIN chamber c ON c.id = rx.chamber_id WHERE rx.id = ?`,
     [prescriptionId],
   );
+  const key = watch[0]?.k ?? "";
+  /**
+   * Fitting it to one page: each render is measured in the preview and `nextFit` picks the next (a tighter, smaller
+   * body, or numbered pages at the natural size when even 80% overflows). Any change to the prescription or the
+   * print settings starts again from the natural layout.
+   */
+  const [fitBox, setFitBox] = useState<{ key: string; st: FitState }>(() => ({ key, st: startFit() }));
+  const fit = fitBox.key === key ? fitBox.st : startFit();
   const { data: meta } = useQuery<{
     encounter_id: string;
     patient_id: string;
@@ -113,8 +133,23 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
   );
 
   useEffect(() => {
-    buildPrintHtml(db, prescriptionId, { publicBaseUrl: session.publicBaseUrl, pages }).then(setBundle);
-  }, [db, prescriptionId, session.publicBaseUrl, watch[0]?.k, pages]);
+    let live = true;
+    void buildPrintHtml(db, prescriptionId, { publicBaseUrl: session.publicBaseUrl, pages: fit.pages, fit: fit.level }).then((b) => {
+      if (live) setBundle(b && { ...b, key, fit: fit.level, pages: fit.pages });
+    });
+    return () => {
+      live = false;
+    };
+  }, [db, prescriptionId, session.publicBaseUrl, key, fit.level, fit.pages]);
+
+  /** A render's measured height moves the search on, if it is the render the search is waiting for. */
+  function onMeasured(b: NonNullable<typeof bundle>, mm: number) {
+    setFitBox((cur) => {
+      const st = cur.key === b.key ? cur.st : startFit();
+      if (st.done || st.level !== b.fit || st.pages !== b.pages) return cur;
+      return { key: b.key, st: nextFit(st, b.settings, printPagesFor(mm, b.settings)) };
+    });
+  }
 
   /** After printing a finalised prescription, offer to go back to Today for the next patient. */
   async function askDone() {
@@ -235,6 +270,9 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
   }
 
   if (!bundle) return <PrescriptionLoading label="Preparing prescription" />;
+  /** Print waits for the fit search, so it never prints a step on the way. */
+  const ready = fit.done && bundle.key === key && bundle.fit === fit.level && bundle.pages === fit.pages;
+  const fitLevel = ready && fit.level > 0 ? FIT_LEVELS[fit.level] : undefined;
   const { widthMm, heightMm } = paperDimensions(bundle.settings.paper);
   const frameMm = { w: widthMm + 16, h: heightMm + 20 };
   return (
@@ -242,7 +280,7 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         {/* A printed prescription is never changed: going back opens the next version, ready to edit. */}
         {meta[0] && <Link to={`/visit/${meta[0].encounter_id}${bundle.status === "final" ? "?edit=1" : ""}`} className="btn-ghost">← Back to visit</Link>}
-        <button className="btn-primary" onClick={print} data-testid="print">Print</button>
+        <button className="btn-primary" onClick={print} disabled={!ready} data-testid="print">{ready ? "Print" : "Fitting…"}</button>
         <button className="btn-secondary" type="button" disabled={pdfBusy} onClick={() => void downloadPdf()} data-testid="download-pdf">
           {pdfBusy ? "Preparing…" : "Download PDF (online)"}
         </button>
@@ -255,6 +293,9 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
         <span className="text-xs text-slate-500">
           {bundle.settings.mode === "pad" ? "Pre-printed pad" : "Full letterhead"} · {typeof bundle.settings.paper === "string" ? bundle.settings.paper : `${widthMm}×${heightMm} mm`}
           {bundle.status !== "final" && " · DRAFT"}
+          {fitLevel && (
+            <span data-testid="fit-note"> · Fitted to one page {fitLevel.scale < 1 ? `(${Math.round(fitLevel.scale * 100)}%)` : "(tighter spacing)"}</span>
+          )}
         </span>
         <Link to="/settings" className="ml-auto text-xs text-brand-700 underline">Print settings & pad calibration</Link>
       </div>
@@ -263,7 +304,8 @@ export function PrintView({ prescriptionId }: { prescriptionId: string }) {
         html={bundle.html}
         widthMm={frameMm.w}
         heightMm={frameMm.h}
-        onContentHeight={(mm) => setPages(printPagesFor(mm, bundle.settings))}
+        onContentHeight={(mm) => onMeasured(bundle, mm)}
+        renderToken={bundle}
       />
     </div>
   );
