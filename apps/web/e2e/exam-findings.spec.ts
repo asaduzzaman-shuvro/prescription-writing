@@ -25,3 +25,34 @@ test("an ENT doctor can just write the findings of a section, and they print und
   await expect(earSection.locator("li").first().locator("br")).toHaveCount(1);
   await expect(frame.locator("section").filter({ has: frame.locator("h3", { hasText: /^Throat$/ }) })).toContainText("Findings: Tonsils grade 2, congested");
 });
+
+test("one-tap findings beside the throat, larynx and neck pictures mark them like a tap on the area", async ({ page }) => {
+  await login(page, "doctor@rx.local", "doctor123");
+  await waitSynced(page);
+  await registerPatient(page, { name: `ENT Quick ${uniq()}`, age: "30", sex: "Female", mobile: mobile() });
+  const exam = page.getByTestId("specialty-exam");
+
+  await exam.getByRole("button", { name: /^Throat/ }).click();
+  const oro = page.getByTestId("sketch-quick-oropharynx");
+  await expect(oro.getByRole("button")).toHaveText(["Soft palate congested", "Posterior pharyngeal wall congested", "Tongue congested", "R tonsil congested", "L tonsil congested"]);
+  const rTonsil = oro.getByRole("button", { name: "R tonsil congested" });
+  await rTonsil.click();
+  await expect(rTonsil).toHaveAttribute("aria-pressed", "true");
+  await oro.getByRole("button", { name: "Soft palate congested" }).click();
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toContainText("R tonsil congested");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).toContainText(/soft palate congested/i);
+  await rTonsil.click(); // again: cleared
+  await expect(rTonsil).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByTestId("sketch-summary-oropharynx")).not.toContainText("R tonsil");
+
+  const larynx = page.getByTestId("sketch-quick-larynx");
+  await expect(larynx.getByRole("button")).toHaveText(["R vocal cord congested", "L vocal cord congested"]);
+  await larynx.getByRole("button", { name: "L vocal cord congested" }).click();
+  await expect(page.getByTestId("sketch-summary-larynx")).toContainText("L vocal cord congested");
+
+  await exam.getByRole("button", { name: /^Neck/ }).click();
+  const neck = page.getByTestId("sketch-quick-neck");
+  await expect(neck.getByRole("button")).toHaveText(["Thyroid enlarged", "R level II enlarged", "L level II enlarged"]);
+  await neck.getByRole("button", { name: "Thyroid enlarged" }).click();
+  await expect(page.getByTestId("sketch-summary-neck")).toContainText(/thyroid enlarged/i);
+});

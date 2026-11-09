@@ -7,6 +7,7 @@ import {
   normalizeSketch,
   SKETCHES,
   sketchOverlaySvg,
+  sketchQuickLabel,
   sketchText,
   sketchZoneFill,
   sketchZonePath,
@@ -62,6 +63,13 @@ export function SketchField({ sketch, value, onChange, disabled }: { sketch: Ske
   }
 
   const btn = (on: boolean) => `rounded px-2 py-0.5 ${on ? "bg-slate-800 text-white" : "bg-slate-100"}`;
+  /** A quick pick sets its zone to its state, or clears it when it is already that (same as tapping the area). */
+  const toggleQuick = (q: { zone: string; state: string }) => {
+    const zones = { ...v.zones };
+    if (zones[q.zone] === q.state) delete zones[q.zone];
+    else zones[q.zone] = q.state;
+    commit({ ...v, zones });
+  };
   const summary = sketchText(sketch, v);
   return (
     <div>
@@ -86,6 +94,7 @@ export function SketchField({ sketch, value, onChange, disabled }: { sketch: Ske
           </span>
         </div>
       )}
+      <div className="flex flex-wrap items-start gap-2">
       <svg viewBox={`0 0 ${def.viewBox[0]} ${def.viewBox[1]}`} className="h-56 w-auto max-w-full select-none" data-testid={`sketch-${sketch}`}
         style={{ touchAction: disabled ? undefined : "none" }}
         onPointerDown={onDown} onPointerMove={(e) => surface.move(e)} onPointerUp={onUp} onPointerCancel={surface.cancel}>
@@ -105,6 +114,21 @@ export function SketchField({ sketch, value, onChange, disabled }: { sketch: Ske
           )}
         </g>
       </svg>
+      {/* Common findings in one tap, beside the picture (like the key beside the ear drums). */}
+      {def.quick?.length ? (
+        <div className="flex flex-col items-start gap-1 text-xs" data-testid={`sketch-quick-${sketch}`}>
+          {def.quick.map((q) => {
+            const on = v.zones[q.zone] === q.state;
+            return (
+              <button key={`${q.zone}:${q.state}`} type="button" disabled={disabled} aria-pressed={on} onClick={() => toggleQuick(q)}
+                className={`rounded-full border px-2 py-0.5 text-left ${on ? "border-brand-500 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-brand-400 hover:bg-brand-50"}`}>
+                {sketchQuickLabel(sketch, q)}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      </div>
       {summary && <p className="text-xs text-slate-600" data-testid={`sketch-summary-${sketch}`}>{summary}</p>}
     </div>
   );

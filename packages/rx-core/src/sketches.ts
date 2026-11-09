@@ -32,6 +32,8 @@ export interface SketchDef {
   zones: { id: string; label: string; path: string; sizes?: { label: string; path: string }[] }[];
   states: { id: string; label: string; fill: string }[];
   marks: { kind: string; label: string; shape: Shape }[];
+  /** One-tap findings shown beside the picture in the editor ("R tonsil congested"): each sets one zone to one state. */
+  quick?: { zone: string; state: string }[];
 }
 
 export interface SketchValue {
@@ -105,6 +107,13 @@ const OROPHARYNX: SketchDef = {
     { kind: "bulge", label: "Bulge (quinsy)", shape: "bulge" },
     { kind: "pnd", label: "Post-nasal drip", shape: "drip" },
   ],
+  quick: [
+    { zone: "palate", state: "congested" },
+    { zone: "ppw", state: "congested" },
+    { zone: "tongue", state: "congested" },
+    { zone: "r_tonsil", state: "congested" },
+    { zone: "l_tonsil", state: "congested" },
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -144,6 +153,10 @@ const LARYNX: SketchDef = {
     { kind: "leukoplakia", label: "Leukoplakia", shape: "leukoplakia" },
     { kind: "growth", label: "Growth", shape: "growth" },
     { kind: "ulcer", label: "Ulcer", shape: "ulcer" },
+  ],
+  quick: [
+    { zone: "r_cord", state: "congested" },
+    { zone: "l_cord", state: "congested" },
   ],
 };
 
@@ -192,6 +205,11 @@ const NECK: SketchDef = {
     { kind: "mass", label: "Swelling / mass", shape: "mass" },
     { kind: "scar", label: "Scar", shape: "scar" },
     { kind: "sinus", label: "Sinus", shape: "sinus" },
+  ],
+  quick: [
+    { zone: "thyroid", state: "enlarged" },
+    { zone: "r_ii", state: "enlarged" },
+    { zone: "l_ii", state: "enlarged" },
   ],
 };
 
@@ -258,6 +276,14 @@ const NOSE: SketchDef = {
 };
 
 export const SKETCHES: Record<SketchId, SketchDef> = { nose: NOSE, oropharynx: OROPHARYNX, larynx: LARYNX, neck: NECK };
+
+/** A quick pick's button text: the zone, then the state ("R tonsil congested"). */
+export function sketchQuickLabel(sketch: SketchId, q: { zone: string; state: string }): string {
+  const def = SKETCHES[sketch];
+  const zone = def.zones.find((z) => z.id === q.zone)?.label ?? q.zone;
+  const state = def.states.find((st) => st.id === q.state)?.label ?? q.state;
+  return `${zone} ${state.toLowerCase()}`;
+}
 
 export function isSketchId(id: unknown): id is SketchId {
   return typeof id === "string" && (SKETCH_IDS as readonly string[]).includes(id);

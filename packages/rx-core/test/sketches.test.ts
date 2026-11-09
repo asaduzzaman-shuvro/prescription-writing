@@ -16,6 +16,7 @@ import {
   SKETCHES,
   sketchLegendSvg,
   sketchMarkSvg,
+  sketchQuickLabel,
   sketchSvg,
   sketchText,
   validateTemplateSchema,
@@ -33,6 +34,28 @@ function everything(id: SketchId) {
     strokes: ["10,10 20,20 30,15"],
   };
 }
+
+describe("quick picks beside the picture", () => {
+  it.each(SKETCH_IDS)("%s quick picks name a real zone and state", (id) => {
+    const def = SKETCHES[id];
+    for (const q of def.quick ?? []) {
+      expect(def.zones.map((z) => z.id)).toContain(q.zone);
+      expect(def.states.map((s) => s.id)).toContain(q.state);
+    }
+  });
+
+  it("offers congestion of the throat areas and of each vocal cord", () => {
+    const labels = (id: SketchId) => (SKETCHES[id].quick ?? []).map((q) => sketchQuickLabel(id, q));
+    expect(labels("oropharynx")).toEqual(["Soft palate congested", "Posterior pharyngeal wall congested", "Tongue congested", "R tonsil congested", "L tonsil congested"]);
+    expect(labels("larynx")).toEqual(["R vocal cord congested", "L vocal cord congested"]);
+    expect(labels("neck")).toEqual(["Thyroid enlarged", "R level II enlarged", "L level II enlarged"]);
+  });
+
+  it("a quick pick reads like the same tap on the picture", () => {
+    expect(sketchText("oropharynx", { zones: { r_tonsil: "congested", tongue: "congested" } })).toContain("R tonsil congested");
+    expect(sketchText("larynx", { zones: { l_cord: "congested" } })).toContain("L vocal cord congested");
+  });
+});
 
 describe("sketch definitions", () => {
   it.each(SKETCH_IDS)("%s has unique zones, states and symbols", (id) => {
