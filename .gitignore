@@ -15,6 +15,10 @@ test-results/
 out/
 *.tsbuildinfo
 
+# build archives (dist.zip, "dist (2).zip", rxpad-cpanel.zip, ...)
+/*.zip
+/*.tar.gz
+
 .env*
 !.env.example
 
