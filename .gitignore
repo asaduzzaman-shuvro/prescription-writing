@@ -14,6 +14,8 @@ playwright-report/
 test-results/
 out/
 *.tsbuildinfo
+# rewritten by every `next dev` / `next build`
+next-env.d.ts
 
 # build archives (dist.zip, "dist (2).zip", rxpad-cpanel.zip, ...)
 /*.zip
