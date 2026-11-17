@@ -21,8 +21,13 @@ export interface SketchDef {
   title: string;
   /** ENT template section it prints under (used for the blank "always print" copy). */
   section: string;
-  /** Where the print puts the picture: `beside` its section's findings (with its key). Otherwise under them. */
-  printAt?: "beside";
+  /**
+   * Where the print puts the picture: `beside` its section's findings (with its key), or in one `row` with the other
+   * row pictures after the exam sections (Throat · Vocal cords · Neck). Otherwise under its section's findings.
+   */
+  printAt?: "beside" | "row";
+  /** Caption on the print, when it differs from `title` (the editor's name for the picture). */
+  printTitle?: string;
   /** Drawing size; marks and strokes are stored in these units. */
   viewBox: [number, number];
   /** Static outline and labels (drawn above the zones, never tappable). */
@@ -80,6 +85,8 @@ const OROPHARYNX: SketchDef = {
   id: "oropharynx",
   section: "throat",
   title: "Oropharynx",
+  printAt: "row",
+  printTitle: "Throat",
   viewBox: [100, 108],
   zones: [
     { id: "palate", label: "Soft palate", path: "M5.93,40 A46,42 0 0 1 94.07,40 L78.08,39.92 C71.5,29.19 61.4,24 50,24 C38.6,24 28.5,29.19 21.92,39.92 Z" },
@@ -129,6 +136,8 @@ const LARYNX: SketchDef = {
   id: "larynx",
   section: "throat",
   title: "Larynx (IDL)",
+  printAt: "row",
+  printTitle: "Vocal cords",
   viewBox: [100, 108],
   zones: [
     { id: "epiglottis", label: "Epiglottis", path: "M22,30 C26,12 74,12 78,30 C70,23 30,23 22,30 Z" },
@@ -178,6 +187,7 @@ const NECK: SketchDef = {
   id: "neck",
   section: "neck",
   title: "Neck",
+  printAt: "row",
   viewBox: [100, 112],
   zones: [
     { id: "vi", label: "Level VI", path: poly("31.4,45 68.6,45 64.4,72 60,100 40,100 35.6,72") },

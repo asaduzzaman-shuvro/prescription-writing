@@ -92,12 +92,14 @@ test("ENT doctor records structured exam, eardrum map and audiogram; they print 
   await expect(frame.getByText(/R 47.5 dB \(Moderate, A-B gap 30 dB\)/)).toBeVisible();
   // 2 drums + key, oropharynx + key, neck (a drawing alone has no key), audiogram
   await expect(frame.locator(".diagram svg")).toHaveCount(7);
-  // Each picture prints under its own findings, not in one block at the end.
+  // As on the pad: the drums under the Ear findings; the throat and neck pictures side by side after the Neck findings.
   const examSection = (title: RegExp) => frame.locator("section", { has: frame.locator("h3", { hasText: title }) });
   await expect(examSection(/^Ear$/).locator("figure.diagram.tm")).toHaveCount(2);
   await expect(frame.locator("figcaption", { hasText: /TM$/ })).toHaveCount(0);
-  await expect(examSection(/^Throat$/).locator("figcaption", { hasText: /^(Oropharynx|Neck)$/ })).toHaveCount(1);
-  await expect(examSection(/^Neck$/).locator("figcaption", { hasText: /^Neck$/ })).toHaveCount(1);
+  await expect(examSection(/^(Throat|Neck)$/).locator("figure")).toHaveCount(0);
+  await expect(frame.locator(".pic-row figcaption")).toHaveText(["Throat", "Neck"]);
+  const below = async (a: string, b: string) => (await frame.locator(a).first().boundingBox())!.y < (await frame.locator(b).first().boundingBox())!.y;
+  expect(await below("section:has(h3:text-is('Neck'))", ".pic-row")).toBe(true);
   // Audiology prints inside Ix, with its audiogram; it has no heading of its own.
   await expect(examSection(/^Ix$/).locator("figure.diagram")).toHaveCount(1);
   await expect(examSection(/^Ix$/)).toContainText("R 47.5 dB (Moderate, A-B gap 30 dB)");
@@ -371,7 +373,7 @@ test("ENT doctor can always print blank TM maps and throat/neck pictures, to mar
     const frame = page.frameLocator("[data-testid=print-frame]");
     await expect(frame.locator("figure.diagram.tm")).toHaveCount(2); // drums carry no caption: R / L is in the picture
     await expect(frame.locator("figcaption", { hasText: /TM$/ })).toHaveCount(0);
-    await expect(frame.locator("figcaption", { hasText: /^(Oropharynx|Larynx \(IDL\)|Neck)$/ })).toHaveCount(3);
+    await expect(frame.locator(".pic-row figcaption")).toHaveText(["Throat", "Vocal cords", "Neck"]);
     await expect(frame.locator("figure.diagram.legend")).toHaveCount(0);
   } finally {
     // Print settings live on the shared demo chamber: don't leak into the other tests.

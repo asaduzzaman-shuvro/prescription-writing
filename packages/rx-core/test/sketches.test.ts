@@ -188,14 +188,15 @@ describe("always-print sketches", () => {
 
   it("prints the chosen pictures blank, on letterhead and on a pad", () => {
     expect(captions(render({ diagrams: [] }, []))).toEqual([]);
-    expect(captions(render({ diagrams: [] }, ["oropharynx", "neck"]))).toEqual(["Oropharynx", "Neck"]);
-    expect(captions(render({ diagrams: [] }, ["larynx"], "pad"))).toEqual(["Larynx (IDL)"]);
+    // Printed in the row under their pad names.
+    expect(captions(render({ diagrams: [] }, ["oropharynx", "neck"]))).toEqual(["Throat", "Neck"]);
+    expect(captions(render({ diagrams: [] }, ["larynx"], "pad"))).toEqual(["Vocal cords"]);
     expect(render({ diagrams: [] }, ["neck"])).toContain(`<figure class="diagram neck">`);
   });
 
   it("doesn't add a blank copy of a picture that was marked", () => {
     const doc = { diagrams: [{ title: "Oropharynx", svg: sketchSvg("oropharynx", { zones: { uvula: "swollen" } }), kind: "sketch" as const, ref: "oropharynx" }] };
-    expect(captions(render(doc, ["oropharynx", "larynx"]))).toEqual(["Oropharynx", "Larynx (IDL)"]);
+    expect(captions(render(doc, ["oropharynx", "larynx"]))).toEqual(["Throat", "Vocal cords"]);
   });
 
   it("ignores unknown ids in stored settings", () => {

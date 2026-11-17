@@ -5,7 +5,7 @@ import { followUpDate, formatDateDmy } from "./dates";
 import { bmi, formatDuration, formatInstructionParts, type Lang } from "./dose";
 import { r1 } from "./drawing";
 import { safeImageDataUrl, sanitizeSvg } from "./sanitize";
-import { isSketchId, SKETCHES, sketchSvg, type SketchId } from "./sketches";
+import { isSketchId, SKETCH_IDS, SKETCHES, sketchSvg, type SketchId } from "./sketches";
 import { eardrumSvg } from "./specialty";
 import type { ChamberHeader, DoctorHeader, ExamFindingLine, PatientInfo, PrescriptionDoc, RxItem } from "./types";
 
@@ -221,6 +221,10 @@ function fitCss(level: number, s: PrintSettings): string {
 :where(.body) .ear-row .diagram.tm { flex: 0 1 ${b(20)}; min-width: ${b(14)}; }
 :where(.body) .diagram.neck .svg svg { width: ${b(30)}; }
 :where(.body) .exam-beside > .text { flex-basis: ${b(30)}; }
+:where(.body) .exam-pics { margin-bottom: ${b(1.5)}; }
+:where(.body) .pic-row { gap: ${b(2)}; }
+:where(.body) .pic-row .diagram { flex-basis: ${b(28)}; }
+:where(.body) .pic-row .diagram.neck { flex-basis: ${b(30)}; }
 .barcode { font-size: ${r1(0.8 * s.fontSizePt)}pt; }
 .sign { margin-top: 15mm; font-size: ${s.fontSizePt}pt; line-height: 1.35; }
 `;
@@ -445,9 +449,9 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   // Diagrams come from the client-writable prescription doc: sanitise before embedding.
   // A picture's caption goes under it; a key's heading ("Key") goes above its rows. A drum has none: it is marked R / L
   // inside its own picture, so "Right TM" / "Left TM" would only repeat that.
-  const figure = (d: (typeof allDiagrams)[number], style = "") => {
+  const figure = (d: (typeof allDiagrams)[number], style = "", title = d.title) => {
     const legend = d.kind === "tm-legend" || d.kind === "legend";
-    const svg = `<div class="svg">${sanitizeSvg(d.svg)}</div>`, caption = wordless(d) ? "" : `<figcaption>${esc(d.title)}</figcaption>`;
+    const svg = `<div class="svg">${sanitizeSvg(d.svg)}</div>`, caption = wordless(d) ? "" : `<figcaption>${esc(title)}</figcaption>`;
     return `<figure class="diagram${legend ? " legend" : ""}${isTm(d) ? " tm" : ""}${d.kind === "sketch" && d.ref === "neck" ? " neck" : ""}"${style}>${legend ? caption + svg : svg + caption}</figure>`;
   };
   const figures = (ds: typeof allDiagrams) => {
@@ -478,9 +482,23 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     const id = sketchOf(d);
     return id ? SKETCHES[id].printAt : undefined;
   };
+  // Row pictures (Throat · Vocal cords · Neck) leave their sections and print side by side after them, matched by
+  // picture rather than section, so exams saved before Larynx had its own section print the same way.
+  const rowOrder = SKETCH_IDS.filter((id) => SKETCHES[id].printAt === "row");
+  const byRow = (a: (typeof allDiagrams)[number], b: (typeof allDiagrams)[number]) => rowOrder.indexOf(sketchOf(a)!) - rowOrder.indexOf(sketchOf(b)!);
+  const rowDiagrams = allDiagrams.filter((d) => printAt(d) === "row");
+  const rowPics = rowDiagrams.filter((d) => d.kind === "sketch").sort(byRow);
+  const rowKeys = rowDiagrams.filter((d) => d.kind === "legend").sort(byRow);
+  // One key under the row for all its pictures; a row two pictures share ("Congested") prints once.
+  const keyRows = [...new Set(rowKeys.map((d) => sanitizeSvg(d.svg)))];
+  const pictureRow = rowPics.length
+    ? `<div class="exam-pics"><div class="pic-row">${rowPics.map((d) => figure(d, "", SKETCHES[sketchOf(d)!].printTitle ?? d.title)).join("")}</div>${
+        keyRows.length ? `<div class="pic-keys"><figure class="diagram legend"><figcaption>Key</figcaption>${keyRows.map((svg) => `<div class="svg">${svg}</div>`).join("")}</figure></div>` : ""
+      }</div>`
+    : "";
   /** A section's findings and pictures; with `title`, the whole section under its heading. */
   const groupBody = (g: (typeof groups)[number], title?: string) => {
-    const own = g.id ? allDiagrams.filter((d) => d.section === g.id) : [];
+    const own = g.id ? allDiagrams.filter((d) => d.section === g.id && printAt(d) !== "row") : [];
     // A "beside" picture (the nose) sits to the right of its section's findings, with its key.
     const beside = own.filter((d) => printAt(d) === "beside");
     const pics = figures(own.filter((d) => printAt(d) !== "beside"));
@@ -505,9 +523,13 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   // own heading. If the doctor hides Ix, it keeps its heading with the examination, so the results still print.
   const underIx = (g: (typeof groups)[number]) => g.placement === "ix" && !hidden.has("ix");
   const shownGroups = groups.filter((g) => !underIx(g));
-  const specialty = shownGroups.map((g) => groupBody(g, g.title)).join("");
+  // The picture row follows the last section that has one of its pictures (Neck, as drawn on the pad); blank
+  // "always print" pictures with no section of their own follow the exam sections.
+  const lastWithRow = shownGroups.reduce((at, g, i) => (rowDiagrams.some((d) => d.section === g.id) ? i : at), shownGroups.length - 1);
+  const specialty = shownGroups.map((g, i) => groupBody(g, g.title) + (i === lastWithRow ? pictureRow : "")).join("") +
+    (shownGroups.length ? "" : pictureRow);
   const ixResults = groups.filter(underIx).map((g) => groupBody(g)).join("");
-  const diagrams = figures(allDiagrams.filter((d) => !placed(d)));
+  const diagrams = figures(allDiagrams.filter((d) => !placed(d) && printAt(d) !== "row"));
 
   // Letterhead: centred in the footer. Pad: the pad prints its own footer, so the QR stays in the body.
   const qr = s.showQr && input.qrSvg ? `<div class="qr">${sanitizeSvg(input.qrSvg)}</div>` : "";
@@ -648,6 +670,13 @@ ul + .diagrams { margin-top: 1.5mm; }
 .exam-beside > .text { flex: 1 1 30mm; min-width: 0; }
 .exam-beside > .pics { flex: 0 1 auto; display: flex; align-items: flex-start; gap: 1mm; }
 .exam-beside > .pics .diagram { margin: 0; }
+.exam-pics { margin-bottom: 2.5mm; break-inside: avoid; }
+.pic-row { display: flex; align-items: flex-end; gap: 2mm; }
+.pic-row .diagram { flex: 0 1 28mm; min-width: 0; margin: 0; }
+.pic-row .diagram.neck { flex-basis: 30mm; }
+.pic-row .diagram .svg svg { width: 100%; }
+.pic-keys { display: flex; flex-wrap: wrap; gap: 0 3mm; margin-top: 1mm; }
+.pic-keys .diagram { margin: 0; }
 .qr { padding-top: 2mm; break-inside: avoid; }
 .qr svg { width: 18mm; height: 18mm; }
 .sign { text-align: center; min-width: 45mm; width: fit-content; margin: calc(15mm + 40px) 0 0 auto; break-inside: avoid; }

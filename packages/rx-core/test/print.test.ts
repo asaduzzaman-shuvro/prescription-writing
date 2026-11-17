@@ -429,16 +429,16 @@ describe("exam pictures print under their own section", () => {
     expect(html).toContain(".exam-beside { display: flex; flex-wrap: wrap; align-items: center;");
     // Other pictures keep their words and caption.
     expect(html).toContain("<b>Oropharynx map:</b>");
-    expect(html).toContain("Oropharynx</figcaption>");
+    expect(html).toContain("Throat</figcaption>");
     // Older exams (lines without `picture`) are matched by label; without the picture the words are all there is.
     const old = exam.groups.map((g) => ({ ...g, lines: g.lines.map(({ label, value }) => ({ label, value })) }));
     expect(render({ specialtyFindings: old, diagrams: exam.diagrams })).not.toContain("Nose &amp; sinus map");
     expect(render({ specialtyFindings: exam.groups, diagrams: [] })).toContain("<b>Nose &amp; sinus map:</b>");
   });
 
-  it("puts Ear, Nose and Throat pictures right after their findings, and the audiogram inside Ix", () => {
+  it("puts Ear and Nose pictures with their findings, the throat picture in the row after them, and the audiogram inside Ix", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
-    const order = ["<h3>Ear</h3>", `<figure class="diagram tm">`, "<h3>Nose &amp; PNS</h3>", ">Max</text>", "<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Ix</h3>", "Audiogram"];
+    const order = ["<h3>Ear</h3>", `<figure class="diagram tm">`, "<h3>Nose &amp; PNS</h3>", ">Max</text>", "<h3>Throat</h3>", `<div class="pic-row">`, "Throat</figcaption>", `<div class="pic-keys">`, "<h3>Ix</h3>", "Audiogram"];
     const idx = order.map((s) => at(html, s));
     expect(idx).toEqual([...idx].sort((a, b) => a - b));
     expect(html).not.toContain(`<section class="diagrams">`);
@@ -456,8 +456,9 @@ describe("exam pictures print under their own section", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams.filter((d) => d.section !== "ear") }, {}, settings);
     expect(at(html, "<h3>Ear</h3>")).toBeLessThan(at(html, `<figure class="diagram tm">`));
     expect(at(html, `<figure class="diagram tm">`)).toBeLessThan(at(html, "<h3>Nose &amp; PNS</h3>"));
-    expect(at(html, "<h3>Throat</h3>")).toBeLessThan(at(html, "Larynx (IDL)</figcaption>"));
-    expect(at(html, "Larynx (IDL)</figcaption>")).toBeLessThan(at(html, "<h3>Ix</h3>"));
+    expect(at(html, "<h3>Throat</h3>")).toBeLessThan(at(html, "Vocal cords</figcaption>"));
+    expect(at(html, "Throat</figcaption>")).toBeLessThan(at(html, "Vocal cords</figcaption>")); // in the row, in pad order
+    expect(at(html, "Vocal cords</figcaption>")).toBeLessThan(at(html, "<h3>Ix</h3>"));
     const noEar = render({ specialtyFindings: exam.groups.filter((g) => g.id !== "ear"), diagrams: [] }, {}, settings);
     expect(at(noEar, `<section class="diagrams">`)).toBeLessThan(at(noEar, `<figure class="diagram tm">`));
   });
@@ -505,9 +506,9 @@ describe("exam pictures print under their own section", () => {
       expect(neckPics.every((d) => d.section === "neck")).toBe(true);
     });
 
-    it("prints Throat then Neck, each with its own picture", () => {
+    it("prints the Throat and Neck findings, then their pictures side by side", () => {
       const html = render({ specialtyFindings: withNeck.groups, diagrams: withNeck.diagrams });
-      const order = ["<h3>Throat</h3>", "Oropharynx</figcaption>", "<h3>Neck</h3>", "<b>Neck:</b> Thyroid swelling", "Neck</figcaption>"];
+      const order = ["<h3>Throat</h3>", "<h3>Neck</h3>", "<b>Neck:</b> Thyroid swelling", `<div class="pic-row">`, "Throat</figcaption>", "Neck</figcaption>"];
       const idx = order.map((s) => at(html, s));
       expect(idx).toEqual([...idx].sort((a, b) => a - b));
       expect(html).not.toContain(`<section class="diagrams">`);
@@ -519,9 +520,50 @@ describe("exam pictures print under their own section", () => {
       const html = render(linesOnly, {}, settings);
       expect(at(html, "<h3>Neck</h3>")).toBeLessThan(at(html, "Neck</figcaption>"));
       expect(html).not.toContain(`<section class="diagrams">`);
+      // No Neck answers: the blank neck joins the row after Throat.
       const throatOnly = render({ ...linesOnly, specialtyFindings: withNeck.groups.filter((g) => g.id !== "neck") }, {}, settings);
-      expect(at(throatOnly, `<section class="diagrams">`)).toBeLessThan(at(throatOnly, "Neck</figcaption>"));
+      expect(throatOnly).not.toContain(`<section class="diagrams">`);
+      expect(at(throatOnly, `<div class="pic-row">`)).toBeLessThan(at(throatOnly, "Throat</figcaption>"));
+      expect(at(throatOnly, "Throat</figcaption>")).toBeLessThan(at(throatOnly, "Neck</figcaption>"));
     });
+  });
+});
+
+describe("ENT left column as drawn on the pad", () => {
+  const exam = flattenFindings(ENT_TEMPLATE, {
+    ear_tm: { right: "Perforated" },
+    nose_septum: "DNS to left",
+    nose_map: { zones: { r_it: "hypertrophied" } },
+    thr_notes: "Tonsils grade 2",
+    thr_oro_map: { zones: { r_tonsil: "congested" } },
+    thr_cords: "Nodule",
+    thr_larynx_map: { zones: { r_cord: "congested" } },
+    neck_notes: "No lymphadenopathy",
+    thr_neck_map: { zones: { thyroid: "enlarged" } },
+  });
+  const at = (html: string, s: string) => {
+    const i = html.indexOf(s);
+    expect(i, s).toBeGreaterThan(-1);
+    return i;
+  };
+
+  it("keeps the pictures on one line, shrinking them, and scales them with fit to one page", () => {
+    const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
+    expect(html).toContain(".pic-row { display: flex; align-items: flex-end; gap: 2mm; }");
+    expect(html).toContain(".pic-row .diagram { flex: 0 1 28mm; min-width: 0; margin: 0; }");
+    const fitted = renderPrescriptionHtml({
+      doc: { ...SAMPLE_DOC, specialtyFindings: exam.groups, diagrams: exam.diagrams }, patient: SAMPLE_PATIENT, doctor: SAMPLE_DOCTOR,
+      chamber: SAMPLE_CHAMBER, date: "2026-06-11", settings: DEFAULT_PRINT_SETTINGS, fonts: { bengali: "", latin: "" }, fit: 5,
+    });
+    expect(fitted).toContain(":where(.body) .pic-row .diagram { flex-basis: 22.4mm; }");
+    expect(fitted).toContain(":where(.body) .pic-row .diagram.neck { flex-basis: 24mm; }");
+  });
+
+  it("ignores a doctored picture id: it prints where it was saved, never in the row", () => {
+    const fake = [{ title: "Foot", svg: "<svg></svg>", kind: "sketch" as const, ref: "foot", section: "throat" }];
+    const html = render({ specialtyFindings: exam.groups, diagrams: fake as never });
+    expect(html).not.toContain(`<div class="pic-row">`);
+    expect(at(html, "<h3>Throat</h3>")).toBeLessThan(at(html, "Foot</figcaption>"));
   });
 });
 
