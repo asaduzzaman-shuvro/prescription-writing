@@ -34,8 +34,13 @@ for pkg in "$OUT"/node_modules/.pnpm/*/node_modules/* "$OUT"/node_modules/.pnpm/
 done
 # The app itself, minus its node_modules (only a link to next, now at the root). -L turns the links Next makes for
 # serverExternalPackages (.next/node_modules/postgres-<hash>) into copies; their deps resolve from the root.
+# cp rather than rsync: Git Bash on Windows has no rsync.
 mkdir -p "$APP/$WEB"
-rsync -aL --exclude=/node_modules "$OUT/$WEB/" "$APP/$WEB/"
+for item in "$OUT/$WEB"/* "$OUT/$WEB"/.[!.]*; do
+  [ -e "$item" ] || continue
+  [ "$(basename "$item")" = node_modules ] && continue
+  cp -RL "$item" "$APP/$WEB/"
+done
 # server.js serves these itself, but the standalone output doesn't copy them (Next "output" docs).
 cp -R "$WEB/public/." "$APP/$WEB/public/"
 cp -R "$WEB/.next/static" "$APP/$WEB/.next/static"
@@ -83,6 +88,15 @@ ZIP=$PWD/dist/rxpad-cpanel.zip
 mkdir -p dist
 # zip adds to an archive that already exists, which would keep files the new build no longer has.
 rm -f "$ZIP"
-# -X leaves out macOS file attributes; .DS_Store files stay out too.
-(cd "$STAGE" && zip -qrX "$ZIP" rxpad -x '*.DS_Store')
+if command -v zip >/dev/null 2>&1; then
+  # -X leaves out macOS file attributes; .DS_Store files stay out too.
+  (cd "$STAGE" && zip -qrX "$ZIP" rxpad -x '*.DS_Store')
+elif command -v cygpath >/dev/null 2>&1 && [ -x "$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32/tar.exe" ]; then
+  # Git Bash on Windows has no zip, and its own tar can't write one. Windows' tar.exe (bsdtar) can: -a picks the
+  # format from the .zip name. It wants Windows paths.
+  "$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32/tar.exe" -a -cf "$(cygpath -w "$ZIP")" -C "$(cygpath -w "$STAGE")" rxpad
+else
+  echo "error: no zip command found (install zip, or on Windows use Git Bash on Windows 10 or newer)" >&2
+  exit 1
+fi
 echo "dist/rxpad-cpanel.zip ($(du -h "$ZIP" | cut -f1)): extract in your home folder -> ~/rxpad, startup file index.js"
