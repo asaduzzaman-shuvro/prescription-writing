@@ -21,6 +21,8 @@ export interface SketchDef {
   title: string;
   /** ENT template section it prints under (used for the blank "always print" copy). */
   section: string;
+  /** Where the print puts the picture: `beside` its section's findings (with its key). Otherwise under them. */
+  printAt?: "beside";
   /** Drawing size; marks and strokes are stored in these units. */
   viewBox: [number, number];
   /** Static outline and labels (drawn above the zones, never tappable). */
@@ -229,6 +231,7 @@ const NOSE: SketchDef = {
   id: "nose",
   section: "nose",
   title: "Nose & sinuses",
+  printAt: "beside",
   viewBox: [100, 108],
   zones: [
     ...(["frontal", "ethmoid", "maxillary", "cavity"] as const).flatMap((k) => {

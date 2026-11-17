@@ -423,6 +423,10 @@ describe("exam pictures print under their own section", () => {
     expect(nose).not.toContain("Nose &amp; sinuses</figcaption>");
     expect(nose).toContain(">Max</text>"); // the picture
     expect(nose).toContain("<figcaption>Key</figcaption>");
+    // The heading and findings on the left, the picture and its key beside them.
+    expect(html).toContain(`<section><div class="exam-beside"><div class="text"><h3>Nose &amp; PNS</h3><ul><li><b>Septum:</b> DNS to left</li></ul></div><div class="pics"><figure class="diagram">`);
+    // The heading and findings together are centred on the picture.
+    expect(html).toContain(".exam-beside { display: flex; flex-wrap: wrap; align-items: center;");
     // Other pictures keep their words and caption.
     expect(html).toContain("<b>Oropharynx map:</b>");
     expect(html).toContain("Oropharynx</figcaption>");

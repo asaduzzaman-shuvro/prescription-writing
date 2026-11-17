@@ -220,6 +220,7 @@ function fitCss(level: number, s: PrintSettings): string {
 :where(.body) .ear-row { gap: ${b(2)}; margin-bottom: ${b(2)}; }
 :where(.body) .ear-row .diagram.tm { flex: 0 1 ${b(20)}; min-width: ${b(14)}; }
 :where(.body) .diagram.neck .svg svg { width: ${b(30)}; }
+:where(.body) .exam-beside > .text { flex-basis: ${b(30)}; }
 .barcode { font-size: ${r1(0.8 * s.fontSizePt)}pt; }
 .sign { margin-top: 15mm; font-size: ${s.fontSizePt}pt; line-height: 1.35; }
 `;
@@ -470,9 +471,19 @@ export function renderPrescriptionHtml(input: RenderInput): string {
   const tmPrinted = allDiagrams.some(isTm);
   const sketchesPrinted = new Set(allDiagrams.map(sketchRef).filter((r): r is string => !!r));
   const placed = (d: (typeof allDiagrams)[number]) => typeof d.section === "string" && groups.some((g) => g.id === d.section);
-  const groupBody = (g: (typeof groups)[number]) => {
+  /** The sketch a picture or its key shows (validated: the doc is client-writable). */
+  const sketchOf = (d: (typeof allDiagrams)[number]): SketchId | null =>
+    (d.kind === "sketch" || d.kind === "legend") && "ref" in d && isSketchId(d.ref) ? d.ref : null;
+  const printAt = (d: (typeof allDiagrams)[number]) => {
+    const id = sketchOf(d);
+    return id ? SKETCHES[id].printAt : undefined;
+  };
+  /** A section's findings and pictures; with `title`, the whole section under its heading. */
+  const groupBody = (g: (typeof groups)[number], title?: string) => {
     const own = g.id ? allDiagrams.filter((d) => d.section === g.id) : [];
-    const pics = figures(own);
+    // A "beside" picture (the nose) sits to the right of its section's findings, with its key.
+    const beside = own.filter((d) => printAt(d) === "beside");
+    const pics = figures(own.filter((d) => printAt(d) !== "beside"));
     // The drums show the TM map, so its words ("R: central perforation (large) · L: …") don't print when they do.
     // Exams saved before the abovePictures flag existed are matched by their "TM map" label.
     const tmWords = (l: ExamFindingLine) => l.abovePictures || l.label === "TM map";
@@ -483,14 +494,19 @@ export function renderPrescriptionHtml(input: RenderInput): string {
     };
     const shown = g.lines.filter((l) => !(tmPrinted && tmWords(l)) && !sketchWords(l));
     const lines = shown.length ? `<ul>${shown.map((l) => `<li><b>${esc(l.label)}:</b> ${esc(l.value.trim()).replace(/\n/g, "<br>")}</li>`).join("")}</ul>` : "";
-    return lines + (pics ? `<div class="diagrams">${pics}</div>` : "");
+    const body = lines + (pics ? `<div class="diagrams">${pics}</div>` : "");
+    if (!beside.length) return title === undefined ? body : section(title, body);
+    // The heading goes in the text column, so the heading and findings together are centred on the picture.
+    const heading = title === undefined ? "" : `<h3>${esc(title)}</h3>`;
+    const row = `<div class="exam-beside"><div class="text">${heading}${body}</div><div class="pics">${figures(beside)}</div></div>`;
+    return title === undefined ? row : `<section>${row}</section>`;
   };
   // A section placed under Investigations (audiology results) prints inside Ix, after the advised tests, without its
   // own heading. If the doctor hides Ix, it keeps its heading with the examination, so the results still print.
   const underIx = (g: (typeof groups)[number]) => g.placement === "ix" && !hidden.has("ix");
   const shownGroups = groups.filter((g) => !underIx(g));
-  const specialty = shownGroups.map((g) => section(g.title, groupBody(g))).join("");
-  const ixResults = groups.filter(underIx).map(groupBody).join("");
+  const specialty = shownGroups.map((g) => groupBody(g, g.title)).join("");
+  const ixResults = groups.filter(underIx).map((g) => groupBody(g)).join("");
   const diagrams = figures(allDiagrams.filter((d) => !placed(d)));
 
   // Letterhead: centred in the footer. Pad: the pad prints its own footer, so the QR stays in the body.
@@ -628,6 +644,10 @@ ul + .diagrams { margin-top: 1.5mm; }
 .ear-row .diagram.tm .svg svg, .ear-row .diagram.legend .svg svg { width: 100%; }
 .ear-row .diagram.legend { flex: 0 0 auto; }
 .diagram.neck .svg svg { width: 30mm; }
+.exam-beside { display: flex; flex-wrap: wrap; align-items: center; gap: 0 2mm; }
+.exam-beside > .text { flex: 1 1 30mm; min-width: 0; }
+.exam-beside > .pics { flex: 0 1 auto; display: flex; align-items: flex-start; gap: 1mm; }
+.exam-beside > .pics .diagram { margin: 0; }
 .qr { padding-top: 2mm; break-inside: avoid; }
 .qr svg { width: 18mm; height: 18mm; }
 .sign { text-align: center; min-width: 45mm; width: fit-content; margin: calc(15mm + 40px) 0 0 auto; break-inside: avoid; }
