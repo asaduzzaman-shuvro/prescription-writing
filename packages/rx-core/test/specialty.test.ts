@@ -190,9 +190,15 @@ describe("flattenFindings", () => {
     const bad = { sections: [{ id: "x", title: "X", placement: "rx", fields: [{ id: "f", label: "F", type: "text" }] }] };
     expect(validateTemplateSchema(bad)).toEqual(['section x: placement must be "ix" when given']);
   });
-  it("prints the laryngoscopy text as FOL or I/L findings", () => {
-    const throat = flattenFindings(ENT_TEMPLATE, { thr_idl: "Bilateral vocal cords mobile" }).groups.find((g) => g.id === "throat");
-    expect(throat?.lines).toEqual([{ label: "FOL or I/L findings", value: "Bilateral vocal cords mobile" }]);
+  it("prints the laryngoscopy text as FOL or I/L findings, under its own Larynx heading", () => {
+    const out = flattenFindings(ENT_TEMPLATE, { thr_idl: "Bilateral vocal cords mobile", thr_notes: "Tonsils grade 2" });
+    expect(out.groups.map((g) => g.title)).toEqual(["Throat", "Larynx"]);
+    expect(out.groups[1]!.lines).toEqual([{ label: "FOL or I/L findings", value: "Bilateral vocal cords mobile" }]);
+  });
+  it("orders the ENT sections Ear, Nose & PNS, Throat, Larynx, Neck", () => {
+    expect(ENT_TEMPLATE.sections.map((s) => s.id).slice(0, 5)).toEqual(["ear", "nose", "throat", "larynx", "neck"]);
+    const larynx = ENT_TEMPLATE.sections.find((s) => s.id === "larynx")!;
+    expect(larynx.fields.map((f) => f.id)).toEqual(["thr_idl", "thr_cords", "thr_larynx_map"]); // ids kept: saved findings are keyed by them
   });
   it("prints Mass and Growth descriptions after their options, in tick order", () => {
     const line = (f: Record<string, unknown>) => flattenFindings(ENT_TEMPLATE, f).groups.find((g) => g.id === "throat")?.lines.find((l) => l.label === "Oral cavity");

@@ -547,6 +547,37 @@ describe("ENT left column as drawn on the pad", () => {
     return i;
   };
 
+  it("prints Throat, Larynx and Neck findings, then Throat · Vocal cords · Neck side by side, keys under them", () => {
+    const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
+    const order = [
+      "<h3>Ear</h3>", `<div class="exam-beside">`, "<h3>Nose &amp; PNS</h3>", "<h3>Throat</h3>", "<h3>Larynx</h3>", "<b>Vocal cords:</b> Nodule",
+      "<h3>Neck</h3>", `<div class="exam-pics"><div class="pic-row">`, "Throat</figcaption>", "Vocal cords</figcaption>", "Neck</figcaption>", `<div class="pic-keys">`, "<h3>Ix</h3>",
+    ];
+    const idx = order.map((s) => at(html, s));
+    expect(idx).toEqual([...idx].sort((a, b) => a - b));
+    const row = html.slice(at(html, `<div class="pic-row">`), at(html, `<div class="pic-keys">`));
+    expect(row.match(/<figure /g)).toHaveLength(3);
+    expect(row).not.toContain("Key</figcaption>");
+    expect(html.match(/<div class="exam-pics">/g)).toHaveLength(1);
+    // One key for the row; "Congested" (throat and vocal cords) once, "Enlarged" (neck) once.
+    const keys = html.slice(at(html, `<div class="pic-keys">`), at(html, "<h3>Ix</h3>"));
+    expect(keys.match(/Key<\/figcaption>/g)).toHaveLength(1);
+    expect(keys.match(/>Congested<\/text>/g)).toHaveLength(1);
+    expect(keys.match(/>Enlarged<\/text>/g)).toHaveLength(1);
+  });
+
+  it("prints prescriptions saved before Larynx had its own section the same way", () => {
+    // Then the larynx answers and picture belonged to Throat.
+    const old = exam.diagrams.map((d) => (d.section === "larynx" ? { ...d, section: "throat" } : d));
+    const groups = exam.groups.filter((g) => g.id !== "larynx").map((g) =>
+      g.id === "throat" ? { ...g, lines: [...g.lines, ...exam.groups.find((x) => x.id === "larynx")!.lines] } : g);
+    const html = render({ specialtyFindings: groups, diagrams: [...old].reverse() });
+    const row = html.slice(at(html, `<div class="pic-row">`));
+    expect(at(row, "Throat</figcaption>")).toBeLessThan(at(row, "Vocal cords</figcaption>"));
+    expect(at(row, "Vocal cords</figcaption>")).toBeLessThan(at(row, "Neck</figcaption>"));
+    expect(at(html, "<h3>Neck</h3>")).toBeLessThan(at(html, `<div class="pic-row">`));
+  });
+
   it("keeps the pictures on one line, shrinking them, and scales them with fit to one page", () => {
     const html = render({ specialtyFindings: exam.groups, diagrams: exam.diagrams });
     expect(html).toContain(".pic-row { display: flex; align-items: flex-end; gap: 2mm; }");

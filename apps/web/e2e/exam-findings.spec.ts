@@ -45,6 +45,7 @@ test("one-tap findings beside the throat, larynx and neck pictures mark them lik
   await expect(rTonsil).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByTestId("sketch-summary-oropharynx")).not.toContainText("R tonsil");
 
+  await exam.getByRole("button", { name: /^Larynx/ }).click();
   const larynx = page.getByTestId("sketch-quick-larynx");
   await expect(larynx.getByRole("button")).toHaveText(["R vocal cord congested", "L vocal cord congested"]);
   await larynx.getByRole("button", { name: "L vocal cord congested" }).click();

@@ -63,6 +63,13 @@ export const ENT_TEMPLATE: SpecialtyTemplateSchema = {
         { id: "thr_uvula_cleft", label: "Cleft palate details", type: "text", parent: { field: "thr_uvula", option: "Cleft palate" } },
         { id: "thr_uvula_lesion", label: "Ulcer/Growth/Mass details", type: "text", parent: { field: "thr_uvula", option: "Ulcer/Growth/Mass" } },
         { id: "thr_oro_map", label: "Oropharynx map", type: "sketch", sketch: "oropharynx" },
+      ],
+    },
+    {
+      // Field ids keep their "thr_" prefix: saved findings are keyed by them (the larynx used to sit under Throat).
+      id: "larynx",
+      title: "Larynx",
+      fields: [
         { id: "thr_idl", label: "FOL or I/L findings", type: "text" },
         { id: "thr_cords", label: "Vocal cords", type: "select", options: ["Mobile, normal", "Nodule", "Polyp (right)", "Polyp (left)", "Congested", "Right cord palsy", "Left cord palsy", "Growth (right)", "Growth (left)", "Ulcer (right)", "Ulcer (left)"] },
         { id: "thr_larynx_map", label: "Larynx map", type: "sketch", sketch: "larynx" },

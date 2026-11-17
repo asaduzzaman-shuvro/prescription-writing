@@ -134,7 +134,7 @@ const R_CORD = "M49.5,36 L37,74 L43.5,74 L50,39 Z";
 const R_ARYT = "M34,80 A6,6 0 1 0 46,80 A6,6 0 1 0 34,80 Z";
 const LARYNX: SketchDef = {
   id: "larynx",
-  section: "throat",
+  section: "larynx",
   title: "Larynx (IDL)",
   printAt: "row",
   printTitle: "Vocal cords",
