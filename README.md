@@ -81,7 +81,7 @@ Shared cPanel can't run Docker, and Docker only ever hosted PowerSync. cPanel ru
   print is the path to use.
 
 ```bash
-./scripts/build-cpanel.sh      # → dist/rxpad-cpanel.tar.gz (Next standalone, flat node_modules, no symlinks)
+./scripts/build-cpanel.sh      # → dist/rxpad-cpanel.zip (Next standalone, flat node_modules, no symlinks)
 ```
 
 1. Database, once: run the role part of `infra/powersync/setup.sql` (strong passwords; PowerSync Cloud has its own

@@ -22,7 +22,7 @@ pnpm test                   # turbo: vitest in rx-core, db and web (db tests hit
 pnpm db:migrate             # apply packages/db/migrations as the owner role
 pnpm db:seed:dev            # idempotent; needs ./scripts/fetch-dev-seed.sh first
 pnpm db:seed:labs           # curated lab catalogue (rx-core/src/lab-catalogue); safe for production
-./scripts/build-cpanel.sh   # production bundle → dist/rxpad-cpanel.tar.gz; see README "Deploy (shared cPanel)"
+./scripts/build-cpanel.sh   # production bundle → dist/rxpad-cpanel.zip; see README "Deploy (shared cPanel)"
 
 pnpm --filter @rx/core test test/dose.test.ts          # one test file
 pnpm --filter @rx/core exec vitest run -t "shortcut"   # by test name

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the web app as a self-contained bundle for shared cPanel ("Setup Node.js App" / Passenger), which has no
-# Docker and no pnpm. See README "Deploy (shared cPanel)". Output: dist/rxpad-cpanel.tar.gz
+# Docker and no pnpm. See README "Deploy (shared cPanel)". Output: dist/rxpad-cpanel.zip
 #   Upload it to your home folder (NOT public_html) and extract: that creates ~/rxpad. Application root rxpad,
 #   startup file index.js. Don't run "NPM install".
 # No env vars are baked in at build time; set them all in the cPanel Node.js app screen.
@@ -78,7 +78,11 @@ if [ -n "$(find "$STAGE" -type l)" ]; then
   exit 1
 fi
 
+# A zip, not a tar.gz: Windows and cPanel's File Manager both open it without extra tools.
+ZIP=$PWD/dist/rxpad-cpanel.zip
 mkdir -p dist
-# COPYFILE_DISABLE keeps macOS ._ metadata files out of the archive.
-COPYFILE_DISABLE=1 tar -C "$STAGE" -czf dist/rxpad-cpanel.tar.gz rxpad
-echo "dist/rxpad-cpanel.tar.gz ($(du -h dist/rxpad-cpanel.tar.gz | cut -f1)): extract in your home folder -> ~/rxpad, startup file index.js"
+# zip adds to an archive that already exists, which would keep files the new build no longer has.
+rm -f "$ZIP"
+# -X leaves out macOS file attributes; .DS_Store files stay out too.
+(cd "$STAGE" && zip -qrX "$ZIP" rxpad -x '*.DS_Store')
+echo "dist/rxpad-cpanel.zip ($(du -h "$ZIP" | cut -f1)): extract in your home folder -> ~/rxpad, startup file index.js"
