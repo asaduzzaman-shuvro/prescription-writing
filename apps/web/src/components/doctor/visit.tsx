@@ -3,8 +3,11 @@
 import { useSession } from "@/lib/doctor/context";
 import {
   applyTemplate,
+  classifyTemplatePayload,
   clearTemplate,
   COMPLAINT_SUGGESTIONS_QUERY,
+  EMPTY_CLINICAL_TEMPLATE,
+  EMPTY_MEDICINE_TEMPLATE,
   emptyDoc,
   ensureDraft,
   finalizePrescription,
@@ -14,13 +17,18 @@ import {
   newVersion,
   saveDoctorComplaint,
   saveDraftDoc,
+  saveExamFindings,
   saveFee,
   saveTemplate,
   saveVisitType,
   saveVitals,
+  templateKindLabel,
+  templatePayloadEmpty,
+  templatePayloadFromDoc,
   toggleFavorite,
   type MedicineHit,
   type TemplatePayload,
+  type TemplateSaveKind,
   type VisitType,
 } from "@/lib/doctor/data";
 import { useMyProfile } from "@/lib/doctor/hooks";
@@ -439,6 +447,14 @@ function RxEditor({
   const [ixSlot, setIxSlot] = useState<HTMLDivElement | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  /** Name dialog before saving Add medicine / clinical / both. */
+  const [tplSave, setTplSave] = useState<{
+    kind: TemplateSaveKind;
+    payload: TemplatePayload;
+    title: string;
+  } | null>(null);
+  const [tplSaveName, setTplSaveName] = useState("");
+  const [tplSaveError, setTplSaveError] = useState<string>();
   const finalizingRef = useRef(false);
   /** Draft writes run one after another so a slow save cannot overlap the next one. */
   const draftSave = useRef<Promise<void>>(Promise.resolve());
@@ -448,8 +464,12 @@ function RxEditor({
     blockers: [],
   });
   const [error, setError] = useState<string>();
-  /** Selected Apply-template value; `__none__` = clear template fields. */
+  /** Selected Apply-template values; `__none__` = clear that section's template fields. */
   const [templateId, setTemplateId] = useState("");
+  const [clinicalTemplateId, setClinicalTemplateId] = useState("");
+  const [medicineTemplateId, setMedicineTemplateId] = useState("");
+  /** Bumps when a template rewrites exam_findings so SpecialtyExam remounts. */
+  const [examKey, setExamKey] = useState(0);
   const loadedFor = useRef<string | null>(null);
   /** Ref By shows only when the prescription opened with one; it stays put if cleared while editing. */
   const [showRefBy, setShowRefBy] = useState(false);
@@ -461,6 +481,8 @@ function RxEditor({
     if (rx && loadedFor.current !== rx.id) {
       loadedFor.current = rx.id;
       setTemplateId("");
+      setClinicalTemplateId("");
+      setMedicineTemplateId("");
       const loaded = { ...emptyDoc(), ...parseJson<PrescriptionDoc>(rx.doc, emptyDoc()) };
       setShowRefBy(!!loaded.referredBy?.trim());
       setDoc(loaded);
@@ -562,6 +584,7 @@ function RxEditor({
 
   const finalizeRef = useRef<() => void>(() => {});
   const editVersionRef = useRef<() => void>(() => {});
+  const saveTemplateRef = useRef<(kind: TemplateSaveKind) => void>(() => {});
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
@@ -587,8 +610,10 @@ function RxEditor({
       version: rx.version,
       blocked: safety.blockers.length > 0,
       saving: finalizing,
+      savingTemplate,
       finalize: () => finalizeRef.current(),
       editVersion: () => editVersionRef.current(),
+      saveTemplate: (kind) => saveTemplateRef.current(kind),
     });
     return () => onActionsChange(null);
   }, [
@@ -597,6 +622,7 @@ function RxEditor({
     rx?.version,
     safety.blockers.length,
     finalizing,
+    savingTemplate,
     prescriptionId,
     onActionsChange,
   ]);
@@ -665,39 +691,183 @@ function RxEditor({
     const last = await lastFinalDoc(db, patient.id, encounterId);
     if (!last) return alert("No previous prescription for this patient");
     setTemplateId("");
+    setClinicalTemplateId("");
+    setMedicineTemplateId("");
     update((d) => applyTemplate(d, last));
+  }
+
+  const templatesWithKind = templates.map((t) => {
+    const payload = parseJson<TemplatePayload>(t.payload, {});
+    return { ...t, payload, kind: classifyTemplatePayload(payload) };
+  });
+  const clinicalTemplates = templatesWithKind.filter((t) => t.kind === "clinical" || t.kind === "both");
+  const medicineTemplates = templatesWithKind.filter((t) => t.kind === "medicine" || t.kind === "both");
+
+  function templateOptionLabel(t: { tenant_id: string | null; name: string; kind: ReturnType<typeof classifyTemplatePayload> }) {
+    const kind = templateKindLabel(t.kind);
+    return `${t.tenant_id ? "" : "★ "}${t.name}${kind ? ` (${kind})` : ""}`;
+  }
+
+  async function applyExamFindingsFromTemplate(payload: TemplatePayload) {
+    if (payload.examFindings === undefined) return;
+    const tplRow = await db.getOptional<{ id: string }>(
+      "SELECT id FROM specialty_template WHERE specialty_code = ? ORDER BY version DESC LIMIT 1",
+      [specialtyCode],
+    );
+    await saveExamFindings(db, encounterId, payload.examFindings, tplRow?.id ?? null);
+    setExamKey((k) => k + 1);
+  }
+
+  function clinicalSlice(payload: TemplatePayload): TemplatePayload {
+    return {
+      chiefComplaints: payload.chiefComplaints ?? [],
+      investigations: payload.investigations ?? [],
+      diagnoses: payload.diagnoses ?? [],
+      history: payload.history ?? "",
+      oeFindings: payload.oeFindings ?? [],
+      specialtyFindings: payload.specialtyFindings ?? [],
+      diagrams: payload.diagrams ?? [],
+      plan: payload.plan ?? [],
+      notes: payload.notes ?? [],
+      examFindings: payload.examFindings ?? {},
+    };
+  }
+
+  function medicineSlice(payload: TemplatePayload): TemplatePayload {
+    return {
+      items: payload.items ?? [],
+      advice: payload.advice ?? [],
+      followUp: payload.followUp ?? { kind: "none" },
+    };
   }
 
   function onPickTemplate(id: string) {
     setTemplateId(id);
+    setClinicalTemplateId("");
+    setMedicineTemplateId("");
     if (id === "__none__") {
       update((d) => clearTemplate(d));
+      void applyExamFindingsFromTemplate(EMPTY_CLINICAL_TEMPLATE);
       return;
     }
     if (!id) return;
-    const t = templates.find((x) => x.id === id);
-    if (t)
-      update((d) =>
-        applyTemplate(d, parseJson<TemplatePayload>(t.payload, {})),
-      );
+    const t = templatesWithKind.find((x) => x.id === id);
+    if (!t) return;
+    update((d) => applyTemplate(d, t.payload));
+    void applyExamFindingsFromTemplate(t.payload);
   }
 
-  async function saveAsTemplate() {
-    if (!doc || savingTemplate) return;
-    const name = prompt(
-      "Template name (e.g. Acute tonsillitis — adult)",
-      doc.diagnoses[0] ?? "",
+  /**
+   * Clinical dropdown: clinical-only templates fill Clinical; Medicine & clinical
+   * templates fill both panes (medicines + advice + follow-up too).
+   */
+  function onPickClinicalTemplate(id: string) {
+    setTemplateId("");
+    if (id === "__none__") {
+      setClinicalTemplateId(id);
+      update((d) => applyTemplate(d, EMPTY_CLINICAL_TEMPLATE));
+      void applyExamFindingsFromTemplate(EMPTY_CLINICAL_TEMPLATE);
+      return;
+    }
+    if (!id) {
+      setClinicalTemplateId(id);
+      return;
+    }
+    const t = clinicalTemplates.find((x) => x.id === id);
+    if (!t) return;
+    setClinicalTemplateId(id);
+    if (t.kind === "both") {
+      setMedicineTemplateId(id);
+      update((d) => applyTemplate(d, t.payload));
+      void applyExamFindingsFromTemplate(t.payload);
+      return;
+    }
+    setMedicineTemplateId("");
+    const slice = clinicalSlice(t.payload);
+    update((d) => applyTemplate(d, slice));
+    void applyExamFindingsFromTemplate(slice);
+  }
+
+  /**
+   * Medicines dropdown: medicine-only fills ℞; Medicine & clinical fills both panes.
+   */
+  function onPickMedicineTemplate(id: string) {
+    setTemplateId("");
+    if (id === "__none__") {
+      setMedicineTemplateId(id);
+      update((d) => applyTemplate(d, EMPTY_MEDICINE_TEMPLATE));
+      return;
+    }
+    if (!id) {
+      setMedicineTemplateId(id);
+      return;
+    }
+    const t = medicineTemplates.find((x) => x.id === id);
+    if (!t) return;
+    setMedicineTemplateId(id);
+    if (t.kind === "both") {
+      setClinicalTemplateId(id);
+      update((d) => applyTemplate(d, t.payload));
+      void applyExamFindingsFromTemplate(t.payload);
+      return;
+    }
+    setClinicalTemplateId("");
+    update((d) => applyTemplate(d, medicineSlice(t.payload)));
+  }
+
+  async function openSaveTemplateModal(kind: TemplateSaveKind = "both") {
+    if (!doc || savingTemplate || tplSave) return;
+    const enc = await db.getOptional<{ exam_findings: string | null }>(
+      "SELECT exam_findings FROM encounter WHERE id = ?",
+      [encounterId],
     );
-    if (!name) return;
-    const payload: TemplatePayload = {
-      chiefComplaints: doc.chiefComplaints,
-      investigations: doc.investigations,
-      diagnoses: doc.diagnoses,
-      items: doc.items,
-      advice: doc.advice,
-      followUp: doc.followUp,
-    };
+    const examFindings = parseJson<Record<string, unknown>>(enc?.exam_findings, {});
+    const payload = templatePayloadFromDoc(doc, kind, examFindings);
+    if (templatePayloadEmpty(payload)) {
+      setTplSaveError(
+        kind === "medicine"
+          ? "Add at least one medicine (or advice / follow-up) before saving."
+          : kind === "clinical"
+            ? "Add something in Clinical (C/C, history, exam, Ix, Dx, plan, or notes) before saving."
+            : "Add clinical findings or medicines before saving a template.",
+      );
+      setTplSave({
+        kind,
+        payload,
+        title:
+          kind === "medicine"
+            ? "Save medicine template"
+            : kind === "clinical"
+              ? "Save clinical template"
+              : "Save template",
+      });
+      setTplSaveName("");
+      return;
+    }
+    setTplSaveError(undefined);
+    setTplSaveName(doc.diagnoses[0] ?? doc.chiefComplaints[0] ?? "");
+    setTplSave({
+      kind,
+      payload,
+      title:
+        kind === "medicine"
+          ? "Save medicine template"
+          : kind === "clinical"
+            ? "Save clinical template"
+            : "Save template",
+    });
+  }
+
+  async function confirmSaveTemplate() {
+    if (!tplSave || savingTemplate) return;
+    if (templatePayloadEmpty(tplSave.payload)) return;
+    const name = tplSaveName.trim();
+    if (!name) {
+      setTplSaveError("Give the template a name.");
+      return;
+    }
     setSavingTemplate(true);
+    setTplSaveError(undefined);
     try {
       await saveTemplate(
         db,
@@ -705,13 +875,20 @@ function RxEditor({
         session.userId,
         name,
         specialtyCode,
-        payload,
+        tplSave.payload,
       );
-      alert("Template saved");
+      setTplSave(null);
+      setTplSaveName("");
+    } catch {
+      setTplSaveError("Could not save the template.");
     } finally {
       setSavingTemplate(false);
     }
   }
+
+  saveTemplateRef.current = (kind) => {
+    void openSaveTemplateModal(kind);
+  };
 
   const items = doc.items;
   const setItems = (fn: (items: RxItem[]) => RxItem[]) =>
@@ -757,10 +934,9 @@ function RxEditor({
             >
               <option value="">Apply template…</option>
               <option value="__none__">No template</option>
-              {templates.map((t) => (
+              {templatesWithKind.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.tenant_id ? "" : "★ "}
-                  {t.name}
+                  {templateOptionLabel(t)}
                 </option>
               ))}
             </select>
@@ -775,7 +951,7 @@ function RxEditor({
               type="button"
               className="btn-secondary h-7 shrink-0 whitespace-nowrap px-2 py-0 text-xs"
               saving={savingTemplate}
-              onClick={saveAsTemplate}
+              onClick={() => void openSaveTemplateModal("both")}
             >
               Save as template
             </SaveButton>
@@ -848,6 +1024,25 @@ function RxEditor({
               ? [doc.chiefComplaints.length && `${doc.chiefComplaints.length} C/C`, doc.diagnoses.length && `${doc.diagnoses.length} Dx`].filter(Boolean).join(" · ")
               : null
           }
+          actions={
+            !readOnly ? (
+              <select
+                className="input h-7 max-w-[11rem] min-w-0 flex-1 py-0.5 text-[11px] sm:max-w-[14rem]"
+                value={clinicalTemplateId}
+                aria-label="Apply clinical template"
+                data-testid="apply-clinical-template"
+                onChange={(e) => onPickClinicalTemplate(e.target.value)}
+              >
+                <option value="">Clinical template…</option>
+                <option value="__none__">Clear clinical</option>
+                {clinicalTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {templateOptionLabel(t)}
+                  </option>
+                ))}
+              </select>
+            ) : undefined
+          }
         >
           <div className="space-y-2.5" data-testid="rx-clinical-pane">
           {showRefBy && (
@@ -905,6 +1100,7 @@ function RxEditor({
             <textarea className="input" rows={2} disabled={readOnly} value={doc.history ?? ""} onChange={(e) => update((d) => ({ ...d, history: e.target.value || undefined }))} placeholder="P/H, D/H, F/H…" data-testid="history-text" />
           </section>
           <SpecialtyExam
+            key={examKey}
             encounterId={encounterId}
             specialtyCode={specialtyCode}
             readOnly={readOnly}
@@ -970,6 +1166,25 @@ function RxEditor({
           title="℞ Medicines"
           className="xl:h-full xl:min-h-0 xl:row-start-2"
           badge={items.length || null}
+          actions={
+            !readOnly ? (
+              <select
+                className="input h-7 max-w-[11rem] min-w-0 flex-1 py-0.5 text-[11px] sm:max-w-[14rem]"
+                value={medicineTemplateId}
+                aria-label="Apply medicine template"
+                data-testid="apply-medicine-template"
+                onChange={(e) => onPickMedicineTemplate(e.target.value)}
+              >
+                <option value="">Medicine template…</option>
+                <option value="__none__">Clear medicines</option>
+                {medicineTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {templateOptionLabel(t)}
+                  </option>
+                ))}
+              </select>
+            ) : undefined
+          }
         >
           <div className="space-y-2" data-testid="rx-meds-pane">
           {!readOnly && (
@@ -1171,6 +1386,33 @@ function RxEditor({
             </>
           ) : (
             <>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={savingTemplate}
+                data-testid="save-tpl-medicine-mobile"
+                onClick={() => void openSaveTemplateModal("medicine")}
+              >
+                Add medicine
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={savingTemplate}
+                data-testid="save-tpl-clinical-mobile"
+                onClick={() => void openSaveTemplateModal("clinical")}
+              >
+                Add clinical
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={savingTemplate}
+                data-testid="save-tpl-both-mobile"
+                onClick={() => void openSaveTemplateModal("both")}
+              >
+                Medicine and clinical
+              </button>
               <Link
                 to={`/rx/${prescriptionId}/print`}
                 className="btn-secondary"
@@ -1199,6 +1441,103 @@ function RxEditor({
           )}
         </div>
       </div>
+
+      {tplSave && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tpl-save-title"
+          data-testid="tpl-save-dialog"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]"
+            aria-label="Close"
+            disabled={savingTemplate}
+            onClick={() => {
+              if (savingTemplate) return;
+              setTplSave(null);
+              setTplSaveName("");
+              setTplSaveError(undefined);
+            }}
+          />
+          <div className="relative w-full max-w-md space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl ring-1 ring-slate-900/5">
+            <div>
+              <h2 id="tpl-save-title" className="text-base font-semibold text-slate-900">
+                {tplSave.title}
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {tplSave.kind === "medicine"
+                  ? "Saves medicines, advice and follow-up to Templates."
+                  : tplSave.kind === "clinical"
+                    ? "Saves the Clinical pane to Templates."
+                    : "Saves Clinical + medicines to Templates."}
+              </p>
+            </div>
+            {templatePayloadEmpty(tplSave.payload) ? (
+              <p className="alert-danger text-sm" role="alert">
+                {tplSaveError}
+              </p>
+            ) : (
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Template name
+                </span>
+                <input
+                  className="input font-medium"
+                  value={tplSaveName}
+                  onChange={(e) => {
+                    setTplSaveName(e.target.value);
+                    if (tplSaveError) setTplSaveError(undefined);
+                  }}
+                  placeholder="e.g. Acute tonsillitis — adult"
+                  data-testid="tpl-save-name"
+                  autoFocus
+                  disabled={savingTemplate}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void confirmSaveTemplate();
+                    }
+                  }}
+                />
+              </label>
+            )}
+            {tplSaveError && !templatePayloadEmpty(tplSave.payload) && (
+              <p className="alert-danger text-sm" role="alert">
+                {tplSaveError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={savingTemplate}
+                data-testid="tpl-save-cancel"
+                onClick={() => {
+                  setTplSave(null);
+                  setTplSaveName("");
+                  setTplSaveError(undefined);
+                }}
+              >
+                Cancel
+              </button>
+              {!templatePayloadEmpty(tplSave.payload) && (
+                <SaveButton
+                  type="button"
+                  className="btn-primary"
+                  saving={savingTemplate}
+                  data-testid="tpl-save-confirm"
+                  onClick={() => void confirmSaveTemplate()}
+                >
+                  Save template
+                </SaveButton>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </VisitPaneProvider>
   );

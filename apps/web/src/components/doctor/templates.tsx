@@ -1,17 +1,115 @@
 "use client";
 
 import { usePowerSync, useQuery } from "@powersync/react";
-import { classifyDosageForm, formatInstruction, parseShortcut, type RxItem } from "@rx/core";
+import {
+  classifyDosageForm,
+  formatInstruction,
+  HISTORY_PICKS,
+  historyHas,
+  parseShortcut,
+  toggleHistoryPick,
+  type Diagram,
+  type ExamFindingLine,
+  type Findings,
+  type PrescriptionDoc,
+  type RxItem,
+} from "@rx/core";
 import { ArrowLeft, FileText, Plus } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { deleteTemplate, hiddenTemplateIds, hideTemplate, saveTemplate, toggleFavorite, updateTemplate, type MedicineHit, type TemplatePayload } from "@/lib/doctor/data";
+import {
+  classifyTemplatePayload,
+  COMPLAINT_SUGGESTIONS_QUERY,
+  deleteTemplate,
+  hiddenTemplateIds,
+  hideTemplate,
+  saveTemplate,
+  templateKindLabel,
+  templatePayloadEmpty,
+  templatePayloadFromParts,
+  toggleFavorite,
+  updateTemplate,
+  type MedicineHit,
+  type TemplatePayload,
+  type TemplateSaveKind,
+} from "@/lib/doctor/data";
 import { useSession } from "@/lib/doctor/context";
 import { useMyProfile } from "@/lib/doctor/hooks";
 import { parseJson, uuid } from "@/lib/doctor/util";
 import { SaveButton } from "@/components/save-button";
 import { ChipList } from "./chips";
+import { KeyValueList } from "./kv-list";
 import { MedicineSearch } from "./med-search";
 import { RxItemRow } from "./rx-item";
+import { SpecialtyExam } from "./specialty-exam";
+
+const OE_LABELS = [
+  "Pulse",
+  "BP",
+  "Anaemia",
+  "Jaundice",
+  "Oedema",
+  "Cyanosis",
+  "Heart",
+  "Lungs",
+  "Abdomen",
+  "Skin condition",
+  "Fundus",
+  "Throat",
+  "Lymph nodes",
+];
+
+/** Same referral helper as the visit Clinical pane. */
+function ReferralForm({ onAdd }: { onAdd: (line: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ to: "", doctor: "", phone: "" });
+  if (!open) {
+    return (
+      <button type="button" className="btn-ghost text-xs" onClick={() => setOpen(true)} data-testid="tpl-add-referral">
+        + Referral
+      </button>
+    );
+  }
+  const add = () => {
+    const where = f.to.trim() ? `Refd to ${f.to.trim()}` : "Refd to";
+    const who = [f.doctor.trim(), f.phone.trim() && `(${f.phone.trim()})`].filter(Boolean).join(" ");
+    if (f.to.trim() || who) onAdd([where, who].filter(Boolean).join(" — "));
+    setF({ to: "", doctor: "", phone: "" });
+    setOpen(false);
+  };
+  return (
+    <div className="space-y-1 rounded border border-slate-200 p-2">
+      <input
+        className="input"
+        placeholder="Department / institution / address"
+        value={f.to}
+        onChange={(e) => setF({ ...f, to: e.target.value })}
+      />
+      <div className="flex gap-1">
+        <input
+          className="input flex-1"
+          placeholder="Doctor (optional)"
+          value={f.doctor}
+          onChange={(e) => setF({ ...f, doctor: e.target.value })}
+        />
+        <input
+          className="input w-36"
+          placeholder="Phone (optional)"
+          inputMode="tel"
+          value={f.phone}
+          onChange={(e) => setF({ ...f, phone: e.target.value })}
+        />
+      </div>
+      <div className="flex gap-1">
+        <button type="button" className="btn-secondary text-xs" onClick={add}>
+          Add to plan
+        </button>
+        <button type="button" className="btn-ghost text-xs" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface TemplateRow {
   id: string;
@@ -22,19 +120,40 @@ interface TemplateRow {
   specialty_code: string | null;
 }
 
-function linesOf(text: string): string[] {
-  return text.split("\n").map((s) => s.trim()).filter(Boolean);
-}
-
-function FormSection({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+/** Same chrome as the visit Clinical / Medicines panes; body scrolls vertically. */
+function TemplatePane({
+  title,
+  badge,
+  actions,
+  children,
+  testId,
+  className = "",
+}: {
+  title: string;
+  badge?: string | number | null;
+  actions?: ReactNode;
+  children: ReactNode;
+  testId?: string;
+  className?: string;
+}) {
   return (
-    <section className="rounded-md border border-slate-200/80 bg-white p-2">
-      <div className="mb-1">
-        <h3 className="text-[11px] font-semibold text-slate-700">{title}</h3>
-        {hint ? <p className="text-[10px] leading-snug text-slate-500">{hint}</p> : null}
+    <div
+      className={`flex min-h-0 flex-col overflow-hidden rounded-md border border-slate-200 bg-white ${className}`}
+      data-testid={testId}
+    >
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-2.5 py-1.5">
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-700">{title}</span>
+        {badge != null && badge !== "" && badge !== 0 && (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-slate-600">
+            {badge}
+          </span>
+        )}
+        {actions}
       </div>
-      {children}
-    </section>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2.5 py-2">
+        <div className="space-y-2.5">{children}</div>
+      </div>
+    </div>
   );
 }
 
@@ -84,29 +203,55 @@ function shortcutForFavorite(it: RxItem): string {
   return parts.join(" ");
 }
 
+const KIND_OPTIONS: { id: TemplateSaveKind; label: string; hint: string }[] = [
+  { id: "clinical", label: "Clinical", hint: "Full Clinical pane" },
+  { id: "medicine", label: "Medicines", hint: "℞ · advice · follow-up" },
+  { id: "both", label: "Both", hint: "Clinical + medicines" },
+];
+
 function TemplateForm({ existing, mine, onClose }: { existing?: TemplateRow; mine: boolean; onClose: () => void }) {
   const db = usePowerSync();
   const session = useSession();
   const profile = useMyProfile();
   const initial = existing ? parseJson<TemplatePayload>(existing.payload, {}) : {};
   const copying = !!existing && !mine;
+  const inferred = classifyTemplatePayload(initial);
+  const [kind, setKind] = useState<TemplateSaveKind>(inferred === "empty" ? "both" : inferred);
   const [name, setName] = useState(existing?.name ?? "");
-  const [diagnoses, setDiagnoses] = useState((initial.diagnoses ?? []).join("\n"));
-  const [complaints, setComplaints] = useState((initial.chiefComplaints ?? []).join("\n"));
-  const [investigations, setInvestigations] = useState((initial.investigations ?? []).join("\n"));
+  const [diagnoses, setDiagnoses] = useState<string[]>(initial.diagnoses ?? []);
+  const [complaints, setComplaints] = useState<string[]>(initial.chiefComplaints ?? []);
+  const [investigations, setInvestigations] = useState<string[]>(initial.investigations ?? []);
+  const [history, setHistory] = useState(initial.history ?? "");
+  const [oeFindings, setOeFindings] = useState<ExamFindingLine[]>(initial.oeFindings ?? []);
+  const [specialtyFindings, setSpecialtyFindings] = useState<NonNullable<PrescriptionDoc["specialtyFindings"]>>(
+    initial.specialtyFindings ?? [],
+  );
+  const [diagrams, setDiagrams] = useState<Diagram[]>(initial.diagrams ?? []);
+  const [examFindings, setExamFindings] = useState<Findings>(
+    (initial.examFindings as Findings | undefined) ?? {},
+  );
+  const [plan, setPlan] = useState<string[]>(initial.plan ?? []);
+  const [notes, setNotes] = useState<string[]>(initial.notes ?? []);
   const [advice, setAdvice] = useState<string[]>(initial.advice ?? []);
   const [items, setItems] = useState<RxItem[]>(initial.items ?? []);
+  const [followUp, setFollowUp] = useState<NonNullable<TemplatePayload["followUp"]>>(
+    initial.followUp ?? { kind: "none" },
+  );
+  const [ixSlot, setIxSlot] = useState<HTMLDivElement | null>(null);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const specialty = profile?.specialty_code ?? existing?.specialty_code ?? "";
+  const spec = [specialty];
   const { data: favs } = useQuery<{ product_id: string }>("SELECT product_id FROM doctor_favorite WHERE user_id = ?", [session.userId]);
   const favSet = new Set(favs.map((f) => f.product_id));
   const { data: snippets } = useQuery<{ t: string }>(
     "SELECT text_bn AS t FROM instruction_snippet WHERE specialty_code IS NULL OR specialty_code = ? ORDER BY sort_order",
     [specialty],
   );
-  const adviceQuery = `SELECT text_bn AS label, text_bn AS value, text_en AS hint FROM advice_snippet
-      WHERE (specialty_code IS NULL OR specialty_code = ?) AND (text_bn LIKE ? OR text_en LIKE ?2)
+
+  const libQuery = (table: string, label: string, value = label, hint?: string) =>
+    `SELECT ${label} AS label, ${value} AS value${hint ? `, ${hint} AS hint` : ""} FROM ${table}
+      WHERE (specialty_code IS NULL OR specialty_code = ?) AND (${label} LIKE ?${hint ? ` OR ${hint} LIKE ?2` : ""})
       ORDER BY specialty_code IS NULL, sort_order LIMIT 12`;
 
   async function save() {
@@ -115,16 +260,29 @@ function TemplateForm({ existing, mine, onClose }: { existing?: TemplateRow; min
       setError("Give the template a name.");
       return;
     }
-    const payload: TemplatePayload = {
-      chiefComplaints: linesOf(complaints),
-      diagnoses: linesOf(diagnoses),
-      investigations: linesOf(investigations),
+    const payload = templatePayloadFromParts(kind, {
+      chiefComplaints: complaints,
+      diagnoses,
+      investigations,
+      history,
+      oeFindings,
+      specialtyFindings,
+      diagrams,
+      plan,
+      notes,
+      examFindings,
       advice,
       items,
-      ...(initial.followUp ? { followUp: initial.followUp } : {}),
-    };
-    if (!payload.chiefComplaints?.length && !payload.diagnoses?.length && !payload.investigations?.length && !payload.advice?.length && !payload.items?.length) {
-      setError("Add a diagnosis, a medicine, or some advice.");
+      followUp,
+    });
+    if (templatePayloadEmpty(payload)) {
+      setError(
+        kind === "medicine"
+          ? "Add at least one medicine, advice, or follow-up."
+          : kind === "clinical"
+            ? "Add something in the Clinical pane (C/C, history, exam, Ix, Dx, plan, or notes)."
+            : "Add clinical findings or medicines.",
+      );
       return;
     }
     setSaving(true);
@@ -142,122 +300,363 @@ function TemplateForm({ existing, mine, onClose }: { existing?: TemplateRow; min
     }
   }
 
-  const dxN = linesOf(diagnoses).length;
+  const dxN = diagnoses.length;
   const medN = items.length;
-  const adviceN = advice.length;
+  const ccN = complaints.length;
+  const clinicalBadge =
+    ccN || dxN
+      ? [ccN && `${ccN} C/C`, dxN && `${dxN} Dx`].filter(Boolean).join(" · ")
+      : null;
+  const includeClinical = kind === "clinical" || kind === "both";
+  const includeMedicine = kind === "medicine" || kind === "both";
 
   return (
     <form
-      className="flex flex-col gap-1 pb-0.5"
+      className="flex min-h-0 flex-1 flex-col gap-1.5 xl:h-full xl:overflow-hidden"
       data-testid="new-template"
+      data-visit-fill
       onSubmit={(e) => {
         e.preventDefault();
         void save();
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-1">
-        <button type="button" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline" onClick={onClose}>
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-white p-1">
+        <button
+          type="button"
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-800"
+          onClick={onClose}
+        >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           Back
         </button>
-        <span className="text-xs font-semibold text-slate-800">{existing ? "Edit template" : "New template"}</span>
-        <div className="flex flex-wrap items-center gap-1 text-[10px] tabular-nums text-slate-500">
-          {dxN > 0 && <span className="rounded bg-slate-100 px-1 py-0.5">{dxN} Dx</span>}
-          {medN > 0 && <span className="rounded bg-brand-50 px-1 py-0.5 text-brand-800">{medN} ℞</span>}
-          {adviceN > 0 && <span className="rounded bg-slate-100 px-1 py-0.5">{adviceN} adv</span>}
+        <span className="text-xs font-semibold text-slate-800">
+          {existing ? "Edit template" : "New template"}
+        </span>
+        <input
+          id="tpl-name"
+          className="input h-7 min-w-0 flex-1 basis-[12rem] py-0.5 text-sm font-medium xl:max-w-md"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Acute tonsillitis — adult"
+          data-testid="tpl-name"
+          autoFocus
+        />
+        <div
+          className="flex shrink-0 gap-0.5 rounded-md bg-slate-100 p-0.5"
+          role="radiogroup"
+          aria-label="Template kind"
+          data-testid="tpl-kind"
+        >
+          {KIND_OPTIONS.map((opt) => {
+            const on = kind === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                title={opt.hint}
+                data-testid={`tpl-kind-${opt.id}`}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium whitespace-nowrap transition ${
+                  on
+                    ? "bg-white text-brand-700 shadow-sm"
+                    : "text-slate-600 hover:bg-white/60 hover:text-slate-900"
+                }`}
+                onClick={() => setKind(opt.id)}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="space-y-1 [&_.input]:h-8 [&_.input]:py-0.5 [&_.input]:text-sm [&_.label]:mb-0 [&_.label]:text-[10px]">
-        {copying && (
-          <p className="rounded border border-amber-200 bg-amber-50/80 px-1.5 py-0.5 text-[11px] text-amber-900">
-            Shared — save to make your copy.
-          </p>
-        )}
+      {copying && (
+        <p className="rounded border border-amber-200 bg-amber-50/80 px-2 py-1 text-[11px] text-amber-900">
+          Shared — save to make your copy.
+        </p>
+      )}
 
-        <FormSection title="Name">
-          <input
-            id="tpl-name"
-            className="input max-w-xl font-medium"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Acute tonsillitis — adult"
-            data-testid="tpl-name"
-            autoFocus
-          />
-        </FormSection>
-
-        <FormSection title="Clinical" hint="One line each · need Dx, ℞, or advice">
-          <div className="grid grid-cols-12 gap-1.5">
-            <div className="col-span-12 lg:col-span-4 min-w-0">
-              <label className="label" htmlFor="tpl-cc">C/C</label>
-              <textarea id="tpl-cc" className="input !h-auto min-h-[3.25rem] resize-y py-1" rows={2} value={complaints} onChange={(e) => setComplaints(e.target.value)} placeholder={"Fever 3 days\nSore throat"} />
-            </div>
-            <div className="col-span-12 lg:col-span-4 min-w-0">
-              <label className="label" htmlFor="tpl-dx">Diagnosis</label>
-              <textarea id="tpl-dx" className="input !h-auto min-h-[3.25rem] resize-y py-1" rows={2} value={diagnoses} onChange={(e) => setDiagnoses(e.target.value)} placeholder="Acute pharyngitis" data-testid="tpl-dx" />
-            </div>
-            <div className="col-span-12 lg:col-span-4 min-w-0">
-              <label className="label" htmlFor="tpl-ix">Investigations</label>
-              <textarea id="tpl-ix" className="input !h-auto min-h-[3.25rem] resize-y py-1" rows={2} value={investigations} onChange={(e) => setInvestigations(e.target.value)} placeholder={"CBC\nCRP"} />
-            </div>
-          </div>
-        </FormSection>
-
-        <FormSection title="Medicines" hint="1+0+1 · tds · af/bf · 7d">
-          <div className="mb-1 rounded border border-slate-200 bg-slate-50/50 p-1">
-            <MedicineSearch onPick={(m) => setItems((list) => [...list, itemFromMedicine(m)])} />
-          </div>
-          <ol className="space-y-1">
-            {items.map((it, i) => (
-              <RxItemRow
-                key={it.id}
-                item={it}
-                index={i}
-                count={items.length}
-                isFavorite={!!it.productId && favSet.has(it.productId)}
-                onFavorite={it.productId ? () => { void toggleFavorite(db, session.tenantId, session.userId, it.productId!, shortcutForFavorite(it)); } : undefined}
-                onChange={(n) => setItems((list) => list.map((x) => (x.id === it.id ? n : x)))}
-                onRemove={() => setItems((list) => list.filter((x) => x.id !== it.id))}
-                onMove={(dir) => setItems((list) => {
-                  const n = [...list];
-                  const j = i + dir;
-                  const a = n[i];
-                  const b = n[j];
-                  if (!a || !b) return list;
-                  n[i] = b;
-                  n[j] = a;
-                  return n;
+      {/* Same two-pane layout as the visit; each pane scrolls inside a viewport-bounded height. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] lg:grid-rows-1 xl:overflow-hidden">
+        <TemplatePane
+          title="Clinical"
+          badge={clinicalBadge}
+          testId="tpl-clinical"
+          className="max-h-[calc(100dvh-11rem)] min-h-[18rem] xl:h-full xl:max-h-none"
+          actions={
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                includeClinical ? "bg-brand-50 text-brand-800" : "bg-slate-100 text-slate-400"
+              }`}
+            >
+              {includeClinical ? "Saving" : "Skipped"}
+            </span>
+          }
+        >
+          <div className={includeClinical ? "space-y-2.5" : "pointer-events-none space-y-2.5 opacity-40"}>
+            <ChipList
+              title="C/C — Chief complaints"
+              values={complaints}
+              onChange={setComplaints}
+              query={COMPLAINT_SUGGESTIONS_QUERY}
+              params={spec}
+              placeholder="Fever - 3 days"
+              testId="tpl-cc"
+              multiline
+              voice
+              durations
+            />
+            <section className="space-y-1">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</h3>
+              <div className="flex flex-wrap gap-1" data-testid="tpl-history-picks">
+                {HISTORY_PICKS.map((p) => {
+                  const on = historyHas(history, p.code);
+                  return (
+                    <button
+                      key={p.code}
+                      type="button"
+                      aria-pressed={on}
+                      title={p.name}
+                      className={`rounded-full border px-2 py-0.5 text-xs transition ${
+                        on
+                          ? "border-brand-500 bg-brand-600 text-white"
+                          : "border-slate-300 bg-white text-slate-700 hover:border-brand-400 hover:bg-brand-50"
+                      }`}
+                      onClick={() => setHistory(toggleHistoryPick(history, p.code))}
+                    >
+                      {p.code}
+                    </button>
+                  );
                 })}
-                instructionSnippets={snippets.map((s) => s.t)}
+              </div>
+              <textarea
+                className="input"
+                rows={2}
+                value={history}
+                onChange={(e) => setHistory(e.target.value)}
+                placeholder="P/H, D/H, F/H…"
+                data-testid="tpl-history-text"
               />
-            ))}
-            {!items.length && (
-              <li className="rounded border border-dashed border-slate-200 py-2 text-center text-[11px] text-slate-500">
-                No medicines — search above
-              </li>
+            </section>
+            {specialty ? (
+              <SpecialtyExam
+                specialtyCode={specialty}
+                readOnly={false}
+                initialFindings={examFindings}
+                onFindingsChange={setExamFindings}
+                onFlatten={(groups, nextDiagrams) => {
+                  setSpecialtyFindings(groups);
+                  setDiagrams(nextDiagrams);
+                }}
+                ixSlot={ixSlot}
+                after={{
+                  section: "neck",
+                  node: (
+                    <KeyValueList
+                      title="Other Findings"
+                      values={oeFindings}
+                      suggestions={OE_LABELS}
+                      onChange={setOeFindings}
+                      testId="tpl-oe"
+                    />
+                  ),
+                }}
+              />
+            ) : (
+              <KeyValueList
+                title="Other Findings"
+                values={oeFindings}
+                suggestions={OE_LABELS}
+                onChange={setOeFindings}
+                testId="tpl-oe"
+              />
             )}
-          </ol>
-        </FormSection>
+            <ChipList
+              title="Ix — Investigations"
+              values={investigations}
+              onChange={setInvestigations}
+              query={libQuery("investigation", "name", "name", "category")}
+              params={spec}
+              testId="tpl-ix"
+            />
+            <div ref={setIxSlot} className="empty:hidden" />
+            <ChipList
+              title="Dx — Diagnosis"
+              values={diagnoses}
+              onChange={setDiagnoses}
+              query={libQuery("diagnosis", "name", "name", "icd10")}
+              params={spec}
+              testId="tpl-dx"
+            />
+            <div className="space-y-1">
+              <ChipList
+                title="Plan — incl. referrals"
+                values={plan}
+                onChange={setPlan}
+                placeholder="Refd to … / Review with reports"
+                testId="tpl-plan"
+                multiline
+              />
+              <ReferralForm onAdd={(line) => setPlan((p) => [...p, line])} />
+            </div>
+            <ChipList
+              title="Note"
+              values={notes}
+              onChange={setNotes}
+              placeholder="Birth wt 1.7 kg / H/O PNA"
+              testId="tpl-notes"
+              multiline
+            />
+          </div>
+        </TemplatePane>
 
-        <FormSection title="Advice (উপদেশ)">
-          <ChipList
-            title=""
-            values={advice}
-            onChange={setAdvice}
-            query={adviceQuery}
-            params={[specialty]}
-            testId="tpl-advice"
-            multiline
-            voice
-          />
-        </FormSection>
+        <TemplatePane
+          title="℞ Medicines"
+          badge={medN || null}
+          testId="tpl-medicines"
+          className="max-h-[calc(100dvh-11rem)] min-h-[18rem] xl:h-full xl:max-h-none"
+          actions={
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                includeMedicine ? "bg-brand-50 text-brand-800" : "bg-slate-100 text-slate-400"
+              }`}
+            >
+              {includeMedicine ? "Saving" : "Skipped"}
+            </span>
+          }
+        >
+          <div className={includeMedicine ? "space-y-2" : "pointer-events-none space-y-2 opacity-40"}>
+            <p className="text-xs text-slate-400">
+              Shortcuts: 1+0+1 · tds · af/bf/es/hs · 7d/2w/1m/cont · 2 drop re/le/be
+            </p>
+            <MedicineSearch onPick={(m) => setItems((list) => [...list, itemFromMedicine(m)])} />
+            <ol className="space-y-1.5" data-testid="tpl-meds">
+              {items.map((it, i) => (
+                <RxItemRow
+                  key={it.id}
+                  item={it}
+                  index={i}
+                  count={items.length}
+                  isFavorite={!!it.productId && favSet.has(it.productId)}
+                  onFavorite={
+                    it.productId
+                      ? () => {
+                          void toggleFavorite(
+                            db,
+                            session.tenantId,
+                            session.userId,
+                            it.productId!,
+                            shortcutForFavorite(it),
+                          );
+                        }
+                      : undefined
+                  }
+                  onChange={(n) => setItems((list) => list.map((x) => (x.id === it.id ? n : x)))}
+                  onRemove={() => setItems((list) => list.filter((x) => x.id !== it.id))}
+                  onMove={(dir) =>
+                    setItems((list) => {
+                      const n = [...list];
+                      const j = i + dir;
+                      const a = n[i];
+                      const b = n[j];
+                      if (!a || !b) return list;
+                      n[i] = b;
+                      n[j] = a;
+                      return n;
+                    })
+                  }
+                  instructionSnippets={snippets.map((s) => s.t)}
+                />
+              ))}
+              {!items.length && (
+                <li className="rounded border border-dashed border-slate-300 p-2.5 text-center text-sm text-slate-400">
+                  No medicines yet
+                </li>
+              )}
+            </ol>
+            <ChipList
+              title="উপদেশ — Advice"
+              values={advice}
+              onChange={setAdvice}
+              query={libQuery("advice_snippet", "text_bn", "text_bn", "text_en")}
+              params={spec}
+              testId="tpl-advice"
+              multiline
+              voice
+            />
+            <section className="flex flex-wrap items-center gap-2" data-testid="tpl-follow-up">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                পুনরায় সাক্ষাৎ — Follow-up
+              </h3>
+              <select
+                className="input w-auto"
+                value={followUp.kind}
+                aria-label="Follow-up"
+                onChange={(e) =>
+                  setFollowUp(
+                    e.target.value === "after"
+                      ? { kind: "after", value: 7, unit: "day" }
+                      : e.target.value === "date"
+                        ? { kind: "date", date: "" }
+                        : { kind: "none" },
+                  )
+                }
+              >
+                <option value="none">None</option>
+                <option value="after">After…</option>
+                <option value="date">On date</option>
+              </select>
+              {followUp.kind === "after" && (
+                <>
+                  <input
+                    className="input w-16"
+                    inputMode="numeric"
+                    value={followUp.value}
+                    aria-label="Follow-up after"
+                    onChange={(e) =>
+                      setFollowUp({
+                        ...followUp,
+                        value: Number(e.target.value.replace(/\D/g, "")) || 1,
+                      })
+                    }
+                  />
+                  <select
+                    className="input w-auto"
+                    value={followUp.unit}
+                    onChange={(e) =>
+                      setFollowUp({ ...followUp, unit: e.target.value as "day" | "week" | "month" })
+                    }
+                  >
+                    <option value="day">দিন</option>
+                    <option value="week">সপ্তাহ</option>
+                    <option value="month">মাস</option>
+                  </select>
+                </>
+              )}
+              {followUp.kind === "date" && (
+                <input
+                  type="date"
+                  className="input w-auto"
+                  value={followUp.date}
+                  onChange={(e) => setFollowUp({ kind: "date", date: e.target.value })}
+                />
+              )}
+            </section>
+          </div>
+        </TemplatePane>
       </div>
 
-      {error && <p className="alert-danger">{error}</p>}
+      {error && (
+        <p className="alert-danger" role="alert">
+          {error}
+        </p>
+      )}
 
-      <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-1.5 border-t border-slate-200 bg-white/95 py-1 backdrop-blur-sm">
-        <button type="button" className="btn-ghost h-7 px-2 text-xs order-last sm:order-first" onClick={onClose}>Cancel</button>
+      <div className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-t border-slate-200 bg-white/95 py-1.5 backdrop-blur-sm">
+        <button type="button" className="btn-ghost h-7 px-2 text-xs order-last sm:order-first" onClick={onClose}>
+          Cancel
+        </button>
         <SaveButton type="submit" className="btn-primary h-7 px-3 text-xs" saving={saving} data-testid="tpl-save">
           {copying ? "Save my copy" : "Save template"}
         </SaveButton>
@@ -300,7 +699,7 @@ export function TemplatesScreen() {
   const formOpen = creating || editing;
 
   return (
-    <div className="space-y-2">
+    <div className={formOpen ? "flex min-h-0 flex-1 flex-col xl:h-full" : "space-y-2"}>
       {!formOpen && (
         <header className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 items-start gap-2">
@@ -310,7 +709,7 @@ export function TemplatesScreen() {
             <div className="min-w-0">
               <h1 className="text-base font-semibold text-slate-900">Templates</h1>
               <p className="text-xs text-slate-500">
-                Apply from the prescription screen ·{" "}
+                Apply from Clinical / Medicines on a visit ·{" "}
                 <span className="tabular-nums font-medium text-slate-700">{visible.length}</span> visible
                 {shared > 0 && (
                   <>
@@ -352,6 +751,8 @@ export function TemplatesScreen() {
           const p = parseJson<TemplatePayload>(t.payload, {});
           const isShared = !t.tenant_id;
           const medCount = (p.items ?? []).length;
+          const kind = classifyTemplatePayload(p);
+          const kindLabel = templateKindLabel(kind);
           return (
             <article key={t.id} className="rounded-lg border border-slate-200 bg-white p-2.5 text-sm shadow-sm">
               <div className="flex items-start justify-between gap-2">
@@ -361,10 +762,17 @@ export function TemplatesScreen() {
                     {isShared && (
                       <span className="rounded bg-amber-50 px-1 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-100">★ Shared</span>
                     )}
+                    {kindLabel && (
+                      <span className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-600">{kindLabel}</span>
+                    )}
                   </div>
                   {p.diagnoses?.length ? (
                     <p className="mt-0.5 text-xs text-slate-500">
                       <span className="font-medium text-slate-600">Dx:</span> {p.diagnoses.join(", ")}
+                    </p>
+                  ) : p.chiefComplaints?.length ? (
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      <span className="font-medium text-slate-600">C/C:</span> {p.chiefComplaints.join(", ")}
                     </p>
                   ) : null}
                 </div>
@@ -387,7 +795,7 @@ export function TemplatesScreen() {
               {p.advice?.length ? (
                 <p className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">{p.advice.join(" · ")}</p>
               ) : null}
-              {!medCount && !p.diagnoses?.length && !p.advice?.length && (
+              {kind === "empty" && (
                 <p className="mt-2 text-xs text-slate-400">Empty template</p>
               )}
             </article>

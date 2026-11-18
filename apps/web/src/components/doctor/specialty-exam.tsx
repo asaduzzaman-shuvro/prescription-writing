@@ -585,8 +585,13 @@ export function SpecialtyExam({
   onFlatten,
   ixSlot,
   after,
+  /** Seed answers when not bound to a visit (Templates editor). Ignored when `encounterId` is set. */
+  initialFindings,
+  /** Called with raw answers in local mode (no encounter write). */
+  onFindingsChange,
 }: {
-  encounterId: string;
+  /** Visit encounter to load/save. Omit for Templates — answers stay in memory via `initialFindings` / `onFindingsChange`. */
+  encounterId?: string;
   specialtyCode: string;
   readOnly: boolean;
   onFlatten: Flatten;
@@ -600,15 +605,18 @@ export function SpecialtyExam({
    * or without an exam, it shows after the exam.
    */
   after?: { section: string; node: ReactNode };
+  initialFindings?: Findings;
+  onFindingsChange?: (findings: Findings) => void;
 }) {
   const db = usePowerSync();
+  const local = !encounterId;
   const { data: tpls } = useQuery<{ id: string; name: string; schema: string }>(
     "SELECT id, name, schema FROM specialty_template WHERE specialty_code = ? ORDER BY version DESC LIMIT 1",
     [specialtyCode],
   );
   const { data: encs } = useQuery<{ exam_findings: string | null }>(
-    "SELECT exam_findings FROM encounter WHERE id = ?",
-    [encounterId],
+    local ? "SELECT NULL AS exam_findings WHERE 0" : "SELECT exam_findings FROM encounter WHERE id = ?",
+    local ? [] : [encounterId],
   );
   const tpl = tpls[0];
   const schema = tpl
@@ -629,17 +637,22 @@ export function SpecialtyExam({
   useEffect(
     () => () => {
       clearTimeout(timer.current);
-      if (pending.current)
+      if (!local && encounterId && pending.current)
         void saveExamFindings(db, encounterId, pending.current, tplId);
     },
-    [db, encounterId, tplId],
+    [db, encounterId, local, tplId],
   );
 
   useEffect(() => {
     // An answer saved before its field became a sub-option (an old Polyp grade) shows under its parent option.
-    if (findings === null && encs[0] && schema)
+    if (findings !== null || !schema) return;
+    if (local) {
+      setFindings(withSubFieldParents(schema, initialFindings ?? {}));
+      return;
+    }
+    if (encs[0])
       setFindings(withSubFieldParents(schema, parseJson<Findings>(encs[0].exam_findings, {})));
-  }, [encs, findings, tpl?.schema]);
+  }, [encs, findings, initialFindings, local, schema, tpl?.schema]);
 
   if (!schema || findings === null) return after ? <>{after.node}</> : null;
 
@@ -669,7 +682,8 @@ export function SpecialtyExam({
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       pending.current = null;
-      void saveExamFindings(db, encounterId, next, tpl!.id);
+      if (!local && encounterId) void saveExamFindings(db, encounterId, next, tpl!.id);
+      else onFindingsChange?.(next);
       const flat = flattenFindings(schema!, next);
       const key = JSON.stringify(flat);
       if (key !== lastFlat.current) {

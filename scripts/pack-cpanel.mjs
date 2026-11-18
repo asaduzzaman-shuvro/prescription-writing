@@ -88,7 +88,8 @@ const webSrc = path.join(standalone, "apps/web");
 const webDest = path.join(dist, "apps/web");
 mkdirSync(webDest, { recursive: true });
 for (const child of readdirSync(webSrc)) {
-  if (child === "node_modules") continue;
+  // Ship only .env.production. Local .env / .env.local would override or pollute cPanel.
+  if (child === "node_modules" || child === ".env" || child === ".env.local" || child === ".env.development") continue;
   cpSync(path.join(webSrc, child), path.join(webDest, child), { recursive: true, dereference: true });
 }
 cpSync(path.join(root, "apps/web/public"), path.join(webDest, "public"), { recursive: true, dereference: true });

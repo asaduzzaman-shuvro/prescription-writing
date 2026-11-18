@@ -782,7 +782,174 @@ async function bumpFavoriteUse(db: Db, item: RxItem) {
   await db.execute(`UPDATE doctor_favorite SET use_count = use_count + 1, updated_at = ? WHERE product_id = ?`, [nowIso(), item.productId]);
 }
 
-export type TemplatePayload = Partial<Pick<PrescriptionDoc, "chiefComplaints" | "investigations" | "diagnoses" | "items" | "advice" | "followUp">>;
+export type TemplatePayload = Partial<
+  Pick<
+    PrescriptionDoc,
+    | "chiefComplaints"
+    | "investigations"
+    | "diagnoses"
+    | "items"
+    | "advice"
+    | "followUp"
+    | "history"
+    | "oeFindings"
+    | "specialtyFindings"
+    | "diagrams"
+    | "plan"
+    | "notes"
+  >
+> & {
+  /** Raw specialty-exam answers so ENT/eye widgets reload when the template is applied. */
+  examFindings?: Record<string, unknown>;
+};
+
+/** What to capture when saving from the prescription screen / Templates form. */
+export type TemplateSaveKind = "medicine" | "clinical" | "both";
+
+const EMPTY_TEMPLATE: TemplatePayload = {
+  chiefComplaints: [],
+  investigations: [],
+  diagnoses: [],
+  history: "",
+  oeFindings: [],
+  specialtyFindings: [],
+  diagrams: [],
+  plan: [],
+  notes: [],
+  examFindings: {},
+  items: [],
+  advice: [],
+  followUp: { kind: "none" },
+};
+
+export function templateHasClinical(p: TemplatePayload): boolean {
+  return (
+    (p.chiefComplaints?.length ?? 0) > 0 ||
+    (p.investigations?.length ?? 0) > 0 ||
+    (p.diagnoses?.length ?? 0) > 0 ||
+    !!(p.history && p.history.trim()) ||
+    (p.oeFindings?.length ?? 0) > 0 ||
+    (p.specialtyFindings?.length ?? 0) > 0 ||
+    (p.diagrams?.length ?? 0) > 0 ||
+    (p.plan?.length ?? 0) > 0 ||
+    (p.notes?.length ?? 0) > 0 ||
+    Object.keys(p.examFindings ?? {}).length > 0
+  );
+}
+
+export function templateHasMedicine(p: TemplatePayload): boolean {
+  return (
+    (p.items?.length ?? 0) > 0 ||
+    (p.advice?.length ?? 0) > 0 ||
+    (p.followUp != null && p.followUp.kind !== "none")
+  );
+}
+
+/** Infer which sections a stored template covers (for badges and Apply filters). */
+export function classifyTemplatePayload(p: TemplatePayload): TemplateSaveKind | "empty" {
+  const clinical = templateHasClinical(p);
+  const medicine = templateHasMedicine(p);
+  if (clinical && medicine) return "both";
+  if (clinical) return "clinical";
+  if (medicine) return "medicine";
+  return "empty";
+}
+
+export function templateKindLabel(kind: TemplateSaveKind | "empty"): string | null {
+  if (kind === "both") return "Medicine & clinical";
+  if (kind === "medicine") return "Medicine";
+  if (kind === "clinical") return "Clinical";
+  return null;
+}
+
+/** Clinical keys captured from a visit / Templates form (everything in the Clinical pane). */
+export type TemplateClinicalParts = {
+  chiefComplaints: string[];
+  investigations: string[];
+  diagnoses: string[];
+  history: string;
+  oeFindings: NonNullable<PrescriptionDoc["oeFindings"]>;
+  specialtyFindings: NonNullable<PrescriptionDoc["specialtyFindings"]>;
+  diagrams: NonNullable<PrescriptionDoc["diagrams"]>;
+  plan: string[];
+  notes: string[];
+  examFindings: Record<string, unknown>;
+};
+
+export type TemplateMedicineParts = {
+  items: PrescriptionDoc["items"];
+  advice: string[];
+  followUp: NonNullable<PrescriptionDoc["followUp"]>;
+};
+
+function clinicalPayloadFromParts(parts: TemplateClinicalParts): TemplatePayload {
+  return {
+    chiefComplaints: [...parts.chiefComplaints],
+    investigations: [...parts.investigations],
+    diagnoses: [...parts.diagnoses],
+    history: parts.history,
+    oeFindings: parts.oeFindings.map((x) => ({ ...x })),
+    specialtyFindings: parts.specialtyFindings.map((g) => ({
+      ...g,
+      lines: g.lines.map((l) => ({ ...l })),
+    })),
+    diagrams: parts.diagrams.map((d) => ({ ...d })),
+    plan: [...parts.plan],
+    notes: [...parts.notes],
+    examFindings: { ...parts.examFindings },
+  };
+}
+
+/** Build a template payload from the current Rx. Undefined fields are left alone when applying. */
+export function templatePayloadFromDoc(
+  doc: PrescriptionDoc,
+  kind: TemplateSaveKind,
+  examFindings: Record<string, unknown> = {},
+): TemplatePayload {
+  const clinical = clinicalPayloadFromParts({
+    chiefComplaints: doc.chiefComplaints,
+    investigations: doc.investigations,
+    diagnoses: doc.diagnoses,
+    history: doc.history ?? "",
+    oeFindings: doc.oeFindings ?? [],
+    specialtyFindings: doc.specialtyFindings ?? [],
+    diagrams: doc.diagrams ?? [],
+    plan: doc.plan ?? [],
+    notes: doc.notes ?? [],
+    examFindings,
+  });
+  const medicine: TemplatePayload = {
+    items: doc.items.map((i) => ({ ...i })),
+    advice: [...doc.advice],
+    followUp: doc.followUp ?? { kind: "none" },
+  };
+  if (kind === "clinical") return clinical;
+  if (kind === "medicine") return medicine;
+  return { ...clinical, ...medicine };
+}
+
+/**
+ * Build a payload from the Templates editor. Only the chosen kind's keys are written, so a
+ * clinical-only save never clears medicines when applied later (and the reverse).
+ */
+export function templatePayloadFromParts(
+  kind: TemplateSaveKind,
+  parts: TemplateClinicalParts & TemplateMedicineParts,
+): TemplatePayload {
+  const clinical = clinicalPayloadFromParts(parts);
+  const medicine: TemplatePayload = {
+    items: parts.items.map((i) => ({ ...i })),
+    advice: [...parts.advice],
+    followUp: parts.followUp,
+  };
+  if (kind === "clinical") return clinical;
+  if (kind === "medicine") return medicine;
+  return { ...clinical, ...medicine };
+}
+
+export function templatePayloadEmpty(payload: TemplatePayload): boolean {
+  return classifyTemplatePayload(payload) === "empty";
+}
 
 export async function saveTemplate(db: Db, tenantId: string, userId: string, name: string, specialtyCode: string | null, payload: TemplatePayload) {
   const now = nowIso();
@@ -823,25 +990,59 @@ export function hideTemplate(userId: string, id: string) {
 }
 
 /**
- * Replace the template-owned sections of a prescription (complaints, Ix, Dx, Rx, advice, follow-up).
- * Leaves referral, history, O/E, specialty exam, notes and plan untouched.
- * Pass an empty payload (or use clearTemplate) for “No template”.
+ * Apply template fields onto a prescription. Only keys present on `t` are overwritten, so a
+ * medicines-only template leaves clinical alone (and the reverse). Ref By is never touched.
+ * Raw `examFindings` are applied separately to the encounter (see visit apply handlers).
  */
 export function applyTemplate(doc: PrescriptionDoc, t: TemplatePayload): PrescriptionDoc {
   return {
     ...doc,
-    chiefComplaints: [...(t.chiefComplaints ?? [])],
-    investigations: [...(t.investigations ?? [])],
-    diagnoses: [...(t.diagnoses ?? [])],
-    advice: [...(t.advice ?? [])],
-    items: (t.items ?? []).map((i) => ({ ...i, id: uuid() })),
-    followUp: t.followUp ?? { kind: "none" },
+    ...(t.chiefComplaints !== undefined ? { chiefComplaints: [...t.chiefComplaints] } : {}),
+    ...(t.investigations !== undefined ? { investigations: [...t.investigations] } : {}),
+    ...(t.diagnoses !== undefined ? { diagnoses: [...t.diagnoses] } : {}),
+    ...(t.history !== undefined ? { history: t.history || undefined } : {}),
+    ...(t.oeFindings !== undefined ? { oeFindings: t.oeFindings.map((x) => ({ ...x })) } : {}),
+    ...(t.specialtyFindings !== undefined
+      ? {
+          specialtyFindings: t.specialtyFindings.map((g) => ({
+            ...g,
+            lines: g.lines.map((l) => ({ ...l })),
+          })),
+        }
+      : {}),
+    ...(t.diagrams !== undefined ? { diagrams: t.diagrams.map((d) => ({ ...d })) } : {}),
+    ...(t.plan !== undefined ? { plan: [...t.plan] } : {}),
+    ...(t.notes !== undefined ? { notes: [...t.notes] } : {}),
+    ...(t.advice !== undefined ? { advice: [...t.advice] } : {}),
+    ...(t.items !== undefined ? { items: t.items.map((i) => ({ ...i, id: uuid() })) } : {}),
+    ...(t.followUp !== undefined ? { followUp: t.followUp } : {}),
   };
 }
 
-/** Clear complaints / Ix / Dx / medicines / advice / follow-up (keeps exam notes and referral). */
+/** Clinical-only clear payload (C/C · history · exam · Ix · Dx · plan · notes). */
+export const EMPTY_CLINICAL_TEMPLATE: TemplatePayload = {
+  chiefComplaints: [],
+  investigations: [],
+  diagnoses: [],
+  history: "",
+  oeFindings: [],
+  specialtyFindings: [],
+  diagrams: [],
+  plan: [],
+  notes: [],
+  examFindings: {},
+};
+
+/** Medicine-only clear payload. */
+export const EMPTY_MEDICINE_TEMPLATE: TemplatePayload = {
+  items: [],
+  advice: [],
+  followUp: { kind: "none" },
+};
+
+/** Clear template-owned clinical + medicine fields (keeps Ref By). */
 export function clearTemplate(doc: PrescriptionDoc): PrescriptionDoc {
-  return applyTemplate(doc, {});
+  return applyTemplate(doc, EMPTY_TEMPLATE);
 }
 
 // ---------------------------------------------------------------------------

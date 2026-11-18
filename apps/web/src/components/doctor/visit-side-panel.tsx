@@ -3,6 +3,7 @@
 import type { PrescriptionDoc } from "@rx/core";
 import { useQuery } from "@powersync/react";
 import type { ReactNode } from "react";
+import type { TemplateSaveKind } from "@/lib/doctor/data";
 import { Link } from "@/lib/doctor/router";
 import { parseJson } from "@/lib/doctor/util";
 import { LabReportSummary, useLabReports } from "./lab-reports";
@@ -14,8 +15,12 @@ export type VisitRxActions = {
   blocked: boolean;
   /** True while the prescription write is in flight. */
   saving: boolean;
+  /** True while a template save from the side actions is in flight. */
+  savingTemplate?: boolean;
   finalize: () => void;
   editVersion: () => void;
+  /** Save current Rx sections as a reusable template (prompts for a title). */
+  saveTemplate?: (kind: TemplateSaveKind) => void;
 };
 
 /** Right rail on the visit screen: patient, alerts, past visits, recent labs + print actions. */
@@ -138,6 +143,40 @@ export function VisitSidePanel({
         </div>
       ) : (
         <div className="flex flex-col gap-1">
+          {actions.saveTemplate && (
+            <div className="grid grid-cols-1 gap-1" data-testid={`save-template-kinds${testIdSuffix}`}>
+              <button
+                type="button"
+                className="btn-secondary w-full py-1.5 text-xs"
+                disabled={actions.savingTemplate}
+                aria-busy={actions.savingTemplate}
+                data-testid={`save-tpl-medicine${testIdSuffix}`}
+                onClick={() => actions.saveTemplate?.("medicine")}
+              >
+                Add medicine
+              </button>
+              <button
+                type="button"
+                className="btn-secondary w-full py-1.5 text-xs"
+                disabled={actions.savingTemplate}
+                aria-busy={actions.savingTemplate}
+                data-testid={`save-tpl-clinical${testIdSuffix}`}
+                onClick={() => actions.saveTemplate?.("clinical")}
+              >
+                Add clinical
+              </button>
+              <button
+                type="button"
+                className="btn-secondary w-full py-1.5 text-xs"
+                disabled={actions.savingTemplate}
+                aria-busy={actions.savingTemplate}
+                data-testid={`save-tpl-both${testIdSuffix}`}
+                onClick={() => actions.saveTemplate?.("both")}
+              >
+                Medicine and clinical
+              </button>
+            </div>
+          )}
           <Link to={`/rx/${actions.prescriptionId}/print`} className="btn-secondary w-full py-1.5 text-center" title="Ctrl+P">
             Preview
           </Link>
